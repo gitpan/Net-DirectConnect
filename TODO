@@ -1,0 +1,12 @@
+# $Id: TODO 370 2008-12-20 00:57:40Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/TODO $
+
+
+better nick-port-ip-lists
+udp UPSR
+relisten
+
+tests
+
+DC++ replaces all occurrences of "|" in <message> with "&#124;" and all occurrences of "$" with "&#36;". When displaying <message> the inverse replacement should be done.
+
+check socket->send ret

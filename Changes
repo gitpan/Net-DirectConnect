@@ -1,0 +1,24 @@
+# $Id: Changes 370 2008-12-20 00:57:40Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/Changes $
+
+
+0.00 long time ago
+
+auto reconnects
+
+search
+
+listen port auto select
+
+nickname rand if denide
+
+flood bot improved
+
+new wait functions
+
+perltidy -b -i=2 -ce -l=128 *.pm *.pl *.cgi
+
+min_chat_delay min_cmd_delay
+
+private messages: $dc->cmd('To', 'pro', 'zz');
+
+lock2key

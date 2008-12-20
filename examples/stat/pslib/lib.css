@@ -1,0 +1,24 @@
+
+.form-adjust-win,.help-popup	{border:1px solid;}
+
+.form-adjust-win	{border-color:#999;background:#BBB;
+color:#000;
+}
+.help-popup	{background:#FFFFE0;color:#006;}
+.form-adjust-win 	{position:absolute;left:50%;/*top:5%;
+min-width:20%;*/padding:5px;text-align:center;}
+.form-adjust-win {
+ text-align:left;
+}
+
+/*.view-select {display:inline;  background:red;}*/
+.pre-search-form, .view-select , .lang-select , .cp-select , .mode-select , .style-select {
+padding-left:1cm;
+display:inline; 
+/*background:red;*/
+}
+/*
+.header {
+display:inline; 
+}
+*/

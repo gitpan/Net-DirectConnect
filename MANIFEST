@@ -1,0 +1,30 @@
+Changes
+examples/countub.pl
+examples/ddltest.pl
+examples/demo.pl
+examples/flood.pl
+examples/flooddef.pl
+examples/hub.pl
+examples/stat/pslib/lib.css
+examples/stat/pslib/lib.js
+examples/stat/pslib/player.js
+examples/stat/pslib/psconn.pm
+examples/stat/pslib/psmisc.pm
+examples/stat/pslib/pssql.pm
+examples/stat/pslib/psweb.pm
+examples/stat/pslib/search1.js
+examples/stat/stat.cgi
+examples/stat/stat.pl
+examples/watch.pl
+lib/Net/DirectConnect.pm
+lib/Net/DirectConnect/clicli.pm
+lib/Net/DirectConnect/clihub.pm
+lib/Net/DirectConnect/hub.pm
+lib/Net/DirectConnect/hubcli.pm
+lib/Net/DirectConnect/hubhub.pm
+Makefile.PL
+MANIFEST			This list of files
+README
+t/Net-DirectConnect.t
+TODO
+META.yml                                 Module meta-data (added by MakeMaker)
