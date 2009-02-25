@@ -1,24 +1,11 @@
 #!/usr/bin/perl
-# $Id: stat.cgi 377 2008-12-20 22:03:35Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.cgi $
-
-=todo
-
-users-share per hub -per hour
-chat stats
-
-main page: only by 10 res , make pages for every req by 100
-
-stats:
-fast slow slowbytime
-
-
-=cut
-
+# $Id: stat.cgi 457 2009-01-18 04:21:35Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.cgi $
+package statcgi;
 use strict;
 eval { use Time::HiRes qw(time sleep); };
 use Data::Dumper;    #dev only
 $Data::Dumper::Sortkeys = 1;
-our ( %config, $db );
+our ( %config, $param, $db, );
 our $root_path;
 
 BEGIN {
@@ -26,278 +13,107 @@ BEGIN {
   $root_path = $1 . '/' if $1;
   $root_path =~ s|\\|/|g;
   eval "use lib '$root_path'" if $root_path;
-  eval "use lib '$root_path./pslib'; use psmisc; use pssql; use psweb;";
+  eval "use lib '$root_path./pslib'; use psmisc; use pssql;";    # use psweb;
   print( "Content-type: text/html\n\n", " lib load error rp=$root_path o=$0 sf=$ENV{'SCRIPT_FILENAME'}; ", $@ ), exit if $@;
 }
-#use lib qw(./pslib ./../pslib ./../../pslib);
-#use pssql;
-#use psmisc;
-#use psweb;
-my $param = get_params();
-print "Content-type: text/html; charset=utf-8\n\n" if $ENV{'SERVER_PORT'};
-print '<html><head><title>RU DC stat</title><style>
-.tth {font-family:monospace, "Courier New";font-size:4px;} 
-.magnet-darr {font: bolder larger; text-decoration:none; color:green;}
-</style></head><body><script type="text/javascript" src="pslib/lib.js"></script>';
-#print "[$root_path]";
-#psmisc::config();
-#$config{'log_all'} = 0;
-do $root_path . 'stat.pl';
-#print 'hi';
-$config{'log_all'} = '0' unless $param->{'debug'};
+$param = get_params();
+use statlib;
+print "Content-type: text/xml; charset=utf-8\n\n" if $ENV{'SERVER_PORT'};
+print '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" 
+      xmlns:svg="http://www.w3.org/2000/svg"
+      xmlns:xlink="http://www.w3.org/1999/xlink"><head><title>RU DC stat</title>
+<link href="style.css" rel="stylesheet" type="text/css"/>
+<style></style></head><body><script type="text/javascript" src="pslib/lib.js"></script>';
+#print '    <svg:svg version="1.1" baseProfile="full" width="300px" height="200px">      <svg:circle cx="150px" cy="100px" r="50px" fill="#ff0000" stroke="#000000" stroke-width="5px"/>    </svg:svg>';
+$config{'log_all'}     = '0' unless $param->{'debug'};
 $config{'log_default'} = '#';
-#$config{'log_trace'} = $config{'log_dmpbef'} = 0;
-$config{'log_dmp'} = $config{'log_dbg'} = 1, $db->{'explain'} = 1,
+$config{'log_dmp'}     = $config{'log_dbg'} = 1,
+  #$db->{'explain'} = 1,
   if $param->{'debug'};
 $config{'view'} = 'html';
+$config{'lang'} = 'ru';
 $db->retry_off();
 $db->set_names();
-$config{'query_default'} = { 'LIMIT' => psmisc::check_int( $param->{'on_page'}, 10, 100, 10 ), };
-my %queries;
-my $order;
-$queries{'queries top string'} = {
-  #  %{ $queries{'queries top tth'} },
-  'main'   => 1,
-  'show'   => [qw(cnt string)],                                                                  #time
-  'desc'   => 'Most searched',
-  'SELECT' => 'string, cnt',
-  'FROM'   => 'queries' . ( $config{'periods'}{ $param->{'time'} } ? $param->{'time'} : 'd' ),
-  #  'GROUP BY' => 'string',
-  'WHERE'    => ['string != ""'],
-  'ORDER BY' => 'cnt DESC',
-  'order'    => ++$order,
-};
-$queries{'results top raw'} = {
-  #  %{ $queries{'queries top tth raw'} },
-  #  'main'     => 1,
-  'show'     => [qw(cnt string filename size tth)],                                              #time
-  'desc'     => 'Most stored',
-  'SELECT'   => '*, COUNT(*) as cnt',
-  'FROM'     => 'results',
-  'WHERE'    => ['tth != ""'],
-  'GROUP BY' => 'tth',
-  #!  'HAVING'   => 'cnt > 1',
-  'ORDER BY' => 'cnt DESC',
-  'order'    => ++$order,
-};
-$queries{'results top'} = {
-  #  %{ $queries{'queries top tth raw'} },
-  'main'   => 1,
-  'show'   => [qw(cnt string filename size tth)],    #time
-  'desc'   => 'Most stored',
-  'SELECT' => '*',
-  'FROM'   => 'resultsf',
-  'WHERE'  => ['tth != ""'],
-  #  'GROUP BY' => 'tth',
-  #!  'HAVING'   => 'cnt > 1',
-  'ORDER BY' => 'cnt DESC',
-  'order'    => ++$order,
-};
-$queries{'queries top tth raw'} = {
-  #  'main'     => 1,
-  'desc'     => 'Most downloaded',
-  'show'     => [qw(cnt tth)],          #time
-                                        #'query' => 'SELECT *, COUNT(*) as cnt FROM queries $where GROUP BY tth HAVING cnt > 1',
-  'SELECT'   => 'tth, COUNT(*) as cnt',
-  'FROM'     => 'queries',
-  'WHERE'    => ['tth != ""'],
-  'GROUP BY' => 'tth',
-  #!  'HAVING'   => 'cnt > 1',
-  'ORDER BY' => 'cnt DESC',
-  'order'    => ++$order,
-};
-$queries{'queries top string raw'} = {
-  %{ $queries{'queries top tth raw'} },
-  'show'     => [qw(cnt string)],            #time
-  'desc'     => 'Most searched',
-  'SELECT'   => 'string, COUNT(*) as cnt',
-  'GROUP BY' => 'string',
-  'WHERE'    => ['string != ""'],
-  'order'    => ++$order,
-};
-my $queriesfast = 'queries' . ( $config{'periods'}{ $param->{'time'} } ? $param->{'time'} : 'd' );
-$queries{'queries top tth'} = {
-  'main' => 1,
-  'desc' => 'Most downloaded',
-  'show' => [qw(cnt string filename size tth )],    #time
-       #'query' => 'SELECT *, COUNT(*) as cnt FROM queries $where GROUP BY tth HAVING cnt > 1',
-  'SELECT'    => '*',                               #cnt,filename,size,tth
-  'FROM'      => $queriesfast,
-  'LEFT JOIN' => 'results USING (tth)',
-  'WHERE'     => [ $queriesfast . '.tth != ""' ],
-  'GROUP BY'  => $queriesfast . '.tth',
-  #!  'HAVING'   => 'cnt > 1',
-  'ORDER BY' => 'cnt DESC',
-  'order'    => ++$order,
-};
-#
-$queries{'queries string last'} = {
-  'main' => 1,
-  'desc' => 'last searches',
-  #  'show'     => [qw(time hub nick string filename size tth)],          #time
-  #  'SELECT'   => 'results.*,queries.*',
-  'FROM' => 'queries',
-  'show' => [qw(time hub nick string filename size tth)],    #time
-                                                             #'SELECT'   => 'queries.*, results.*',
-  #    'SELECT'   => 'results.*,queries.*',
-  'SELECT' => '*',
-  #    'SELECT'   => '*, (SELECT filename FROM results WHERE queries.string=results.string LIMIT 1) AS filename',
-  #no  'FROM'     => 'queries INNER JOIN results ON queries.string=results.string',
-  #  'FROM'     => 'queries NATURAL LEFT JOIN results ', #ON queries.string=results.string
-  #  'FROM'     => 'queries LEFT OUTER JOIN results ON queries.string=results.string', #ON queries.string=results.string
-  #  'LEFT JOIN' => 'results USING (string)',
-  'WHERE' => ['queries.string != ""'],
-  #  'GROUP BY' => 'queries.string',
-  'ORDER BY' => 'queries.time DESC',
-  'order'    => ++$order,
-};
-$queries{'queries tth last'} = {
-  %{ $queries{'queries string last'} },
-  'desc' => 'last downloads',
-#  'LEFT JOIN' => 'results USING (tth)',
-#    'SELECT'   => '*, (SELECT string FROM results WHERE queries.tth=results.tth LIMIT 1) AS string',
-#    'SELECT'   => '*, (SELECT * FROM results WHERE queries.tth=results.tth LIMIT 1) AS r',
-#    'SELECT'   => ' (SELECT * FROM results WHERE queries.tth=results.tth LIMIT 1) AS r, *',
-#    'SELECT'   => ' (SELECT string,size FROM results WHERE queries.tth=results.tth LIMIT 1) AS r, queries.*',
-#    'SELECT'   => 'queries.* ,(SELECT string,size FROM results WHERE queries.tth=results.tth LIMIT 1) as r  ', # Operand should contain 1 column(s)
-#works but ugly
-  'SELECT' =>
-'*, (SELECT string FROM results WHERE queries.tth=results.tth LIMIT 1) AS string, (SELECT filename FROM results WHERE queries.tth=results.tth LIMIT 1) AS filename, (SELECT size FROM results WHERE queries.tth=results.tth LIMIT 1) AS size',
-  'WHERE'    => ['tth != ""'],
-  'ORDER BY' => 'queries.time DESC',
-#select q.*, r.* from queries as q join (select tth, string, filename, size from results limit 1) as r where q.tth = r.tth limit 10
-#  'SELECT'   => 'q.*, r.*',
-#  'FROM'     => 'queries as q',
-#  'LEFT JOIN' => '(select tth, string, filename, size from results limit 1) as r ON (r.tth=q.tth)',
-#  'WHERE'    => ['q.tth = r.tth','q.tth != ""'],
-#  'ORDER BY' => 'q.time DESC',
-#SELECT q.*, r.* FROM queries AS q, (SELECT string, filename, size FROM results LIMIT 1) AS r LIMIT 10
-#  'SELECT'   => 'q.*, r.*',
-#  'FROM'     => 'queries as q , (SELECT string, filename, size FROM results WHERE tth=queries.tth LIMIT 1) AS r',
-#  'WHERE'    => ['q.tth != ""'], #'q.tth = r.tth',
-#  'ORDER BY' => 'q.time DESC',
-#too slow
-#  'SELECT'   => 'q.*, r.*',
-#  'FROM'     => 'queries as q  LEFT JOIN (SELECT tth, string, filename, size FROM results WHERE queries.tth=results.tth) AS r ON (q.tth = r.tth) ', #GROUP BY tth, string, filename, size
-#  'WHERE'    => ['q.tth != ""'], #'q.tth = r.tth',
-#  'ORDER BY' => 'q.time DESC',
-#  'SELECT'   => 'queries.*, r.*',
-#  'FROM'     => 'queries LEFT JOIN (SELECT tth, string, filename, size FROM results WHERE queries.tth=results.tth) AS r ON (queries.tth = r.tth) ', #GROUP BY tth, string, filename, size
-#  'WHERE'    => ['queries.tth != ""'], #'q.tth = r.tth',
-#  'ORDER BY' => 'queries.time DESC',
-#  'ORDER BY' => 'queries.time DESC',
-  'order' => ++$order,
-};
-$queries{'results ext'} = {
-  #  %{ $queries{'queries top tth raw'} },
-  'main'     => 1,
-  'show'     => [qw(cnt ext )],         #time
-  'desc'     => 'by extention',
-  'SELECT'   => '*, COUNT(*) as cnt',
-  'FROM'     => 'results',
-  'WHERE'    => ['ext != ""'],
-  'GROUP BY' => 'ext',
-  #!  'HAVING'   => 'cnt > 1',
-  'ORDER BY' => 'cnt DESC',
-  'LIMIT'    => 10,
-  'order'    => ++$order,
-};
-#$queries{'results top string'} = {
-#  %{ $queries{'queries top string'} },
-#  'show' => [qw(cnt string tth filename size )],    #time
-#  'FROM' => 'results',
-#};
-$queries{'string'} = {
-  'show' => [qw(cnt string  filename size tth)],    #time
-       #'query' => 'SELECT *, COUNT(*) as cnt FROM queries $where GROUP BY tth HAVING cnt > 1',
-  'SELECT' => '*, COUNT(*) as cnt',
-  #  'FROM'     => 'queries',
-  'WHERE'    => ['tth != ""'],
-  'GROUP BY' => 'tth',
-  #  'HAVING'   => 'cnt > 1',
-  'ORDER BY' => 'cnt DESC',
-  #  %{ $queries{'queries top string'} },
-  #  'show' => [qw(cnt string filename size )],    #time
-  'FROM' => 'results',
-};
-$queries{'tth'} = {
-  %{ $queries{'string'} },
-  'desc'     => 'various filenames',
-  'show'     => [qw(cnt string filename size tth)],    #time
-                                                       #'WHERE'    => ['tth != ""'],
-  'GROUP BY' => 'filename',
-};
+$config{'query_default'}{'LIMIT'} = psmisc::check_int( $param->{'on_page'}, 10, 100, 10 );
+$param->{'period'} ||= $config{'default_period'};
 print '<a href="?">home</a>';
 print ' days ', (
   map {
-    qq{<a href="#" onclick="createCookie('time', '$_');window.location.reload(false);">}
+        '<a '
+      . ( $param->{'period'} eq $_ ? '' : 'href="#"' )
+      . qq{ onclick="createCookie('period', '$_');window.location.reload(false);">}
       . psmisc::human( 'time_period', $config{'periods'}{$_} ) . '</a> '
     } sort {
     $config{'periods'}{$a} <=> $config{'periods'}{$b}
     } keys %{ $config{'periods'} }
-    #3600, map {$_ * 86400}qw(1 7 30 366)
-) unless grep { $param->{$_} } qw(string tth);
-print ' limit ',
-  ( map { qq{<a href="#" onclick="createCookie('on_page', '$_');window.location.reload(false);">$_</a> } } qw(10 20 50 100) ),
-  '<br/>';
-#);
-#print "<pre>";
-#for my $days (  qw(1 7 30 365) ) {
-#for my $days (  qw(1 ) ) {
-#my $days =
-#$param->{'time'} = psmisc::check_int($config{'periods'}{$param->{'time'}},3600,10*86400*365,7*86400);
-#int( $param->{'time'} ) || 7*86400;
-#my $period = ;
-#!$param->{'time'} =  ( int( ( time - $days * 86400 ) / 1000 ) * 1000 );
+  )
+  unless (
+  grep {
+    $param->{$_}
+  } qw(string tth)
+  ) or ( $param->{'query'} and !$config{'queries'}{ $param->{'query'} }{'periods'} );
+print '<br/>';
+print
+qq{<div class="main-top-info">Для скачивания файлов по ссылке <a class="magnet-darr">[&dArr;]</a> необходим dc клиент, например <a href="http://www.apexdc.net/download/">apexdc</a>.</div>};
 $config{'human'}{'magnet-dl'} = sub {
   my ($row) = @_;
   $row = { 'tth' => $row } unless ref $row eq 'HASH';
   my $tth = ( $row->{'tth_orig'} || $row->{'tth'} );
-  #print length $row->{'tth'}, "[$row->{'tth'}]";
   my $string = $row->{'string_orig'} || $row->{'string'};
   $string ||= $tth, $tth = undef,
-    unless
-    #length $row->{'tth'} == 39 and $row->{'tth'} =~ /^[0-9A-Z]+$/;
-    $tth =~ /^[0-9A-Z]{39}$/;
-  local $_ = join '&', grep { $_ } ( $tth ? 'xt=urn:tree:tiger:' . $tth : '' ),
+    unless $tth =~ /^[0-9A-Z]{39}$/;
+  local $_ = join '&amp;', grep { $_ } ( $tth ? 'xt=urn:tree:tiger:' . $tth : '' ),
     ( $row->{'size'} ? 'xl=' . $row->{'size'} : '' ),
     ( $row->{'filename'} ? 'dn=' . psmisc::encode_url( $row->{'filename'} ) : '' ),
     ( $string ? 'kt=' . psmisc::encode_url($string) : '' ), ( $row->{'hub'} ? 'xs=dchub://' . $row->{'hub'} : '' );
-  return '&nbsp;<a class="magnet-darr" href="magnet:?' . $_ . '">&darr;</a>' if $_;
+  return '&nbsp;<a class="magnet-darr" href="magnet:?' . $_ . '">[&dArr;]</a>' if $_;
   return '';
 };
-print '<a>', $param->{'tth'}, '</a>', psmisc::human( 'magnet-dl', $param->{'tth'} ), '<br/>' if $param->{'tth'};
+$config{'human'}{'dchub-dl'} = sub {
+  my ($row) = @_;
+  $row = { 'hub' => $row } unless ref $row eq 'HASH';
+  #print "[$row->{'hub'}; $row->{'nick'}]";
+  return '&nbsp;<a class="magnet-darr" href="dchub://'
+    . ( join '/', grep { $_ } map { $row->{$_} } qw(hub nick) )
+    . '">[&dArr;]</a>'
+    if length $row->{'hub'};
+};
+print '<a>', psmisc::html_chars( $param->{'tth'} ), '</a>', psmisc::human( 'magnet-dl', $param->{'tth'} ), '<br/>'
+  if $param->{'tth'};
 my @ask;
-@ask = ('string') if $param->{'string'};
-@ask = ('tth')    if $param->{'tth'};
-#print Dumper @ask;
-for ( @ask ? @ask : sort { $queries{$a}{'order'} <=> $queries{$b}{'order'} } grep { $queries{$_}{'main'} } keys %queries ) {
-  #print "for $_;";
-  my $q = { %{ $queries{$_} } };
-  print "$_ ($q->{'desc'}):<br\n/>";
-  #push @{$q->{'WHERE'}} , "time >= ".(int((time-$period)/1000)*1000); #!!! TODO Cut by hour? or 1000 sec
-  $q->{'WHERE'} = join ' AND ', grep { $_ } @{ $q->{'WHERE'}, } if ref $q->{'WHERE'} eq 'ARRAY';
-  $q->{'WHERE'} = join ' AND ', grep { $_ } $q->{'WHERE'},
-    #( $param->{'time'} ? "time >= " . int( (time - $param->{'time'})/1000)*1000 : '' ),
-    map { "$_=" . $db->quote( $param->{$_} ) } grep { length $param->{$_} } qw(string tth);
-  my $sql = join ' ',
-    map { my $key = ( $q->{$_} || $config{query_default}{$_} ); length $key ? ( $_ . ' ' . $key ) : '' } 'SELECT', 'FROM',
-    #'NATURAL LEFT JOIN',
-    'LEFT JOIN',
-    #    'STRAIGHT_JOIN',
-    #    'LEFT OUTER JOIN',
-    'USING', 'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT';
-  #  print "[$sql]<br/>\n";
-  my $res = $db->query($sql);
+$config{'queries'}{'string'}{'desc'} = psmisc::html_chars( $param->{'string'} ), @ask = ('string') if $param->{'string'};
+@ask = ('tth')      if $param->{'tth'};
+@ask = ('filename') if $param->{'filename'};
+@ask = ( $param->{'query'} )
+  if $param->{'query'} and $config{'queries'}{ $param->{'query'} };
+$config{'query_default'}{'LIMIT'} = 100 if scalar @ask == 1;
+
+for (
+  @ask ? @ask : sort { $config{'queries'}{$a}{'order'} <=> $config{'queries'}{$b}{'order'} }
+  grep { $config{'queries'}{$_}{'main'} } keys %{ $config{'queries'} }
+  )
+{
+  my $q = { %{ $config{'queries'}{$_} || next } };
+  next if $q->{'disabled'};
+  $q->{'desc'} = $q->{'desc'}->{ $config{'lang'} } if ref $q->{'desc'} eq 'HASH';
+  print '<div class="onetable ' . $q->{'class'} . '">', $q->{'no_query_link'}
+    ? $_
+    : '<a href="?query=' . ( psmisc::encode_url($_) ) . '">' . ( $q->{'desc'} || $_ ) . '</a>';
+  #  print " ($q->{'desc'}):" if $q->{'desc'};
+  print "<br\n/>";
+  my $res = statlib::make_query( $q, $_, $param->{'period'} );
   print psmisc::human( 'time_period', time - $param->{'time'} ) . "<table>";
   print '<th>', $_, '</th>' for 'n', @{ $q->{'show'} };
   my $n;
   for my $row (@$res) {
     print '<tr><td>', ++$n, '</td>';
-    #    $row->{'tth_magnet'} = psmisc::human('tth-dl', $row )      if $row->{'tth'};
-    $row->{'tth_orig'}    = $row->{'tth'};
-    $row->{'string_orig'} = $row->{'string'};
-    $row->{$_}            = (
+    $row->{$_} = psmisc::html_chars( $row->{$_} ) for @{ $q->{'show'} };
+    $row->{'orig'} = {%$row};
+    #    $row->{'tth_orig'}    = $row->{'tth'};
+    #    $row->{'string_orig'} = $row->{'string'};
+    $row->{$_} = (
       $param->{$_}
       ? ''
       : qq{<a class="$_" title="}
@@ -306,18 +122,27 @@ for ( @ask ? @ask : sort { $queries{$a}{'order'} <=> $queries{$b}{'order'} } gre
         . psmisc::encode_url( $row->{$_} )
         . qq{">$row->{$_}</a>}
       )
-      . psmisc::human( 'magnet-dl', $row )
-      for grep { length $row->{$_} } qw(string tth);   #($param->{'string'} ? () : 'string' ), ($param->{'tth'} ? () : 'tth' );
-                                                       #    $row->{'tth'} .= psmisc::human('magnet-dl', $row ) if $row->{'tth'};
-    $row->{'time'} = psmisc::human( 'time_period', time - $row->{'time'} ) if int $row->{'time'};
-    $row->{'size'} = psmisc::human( 'size',        $row->{'size'} )        if int $row->{'size'};
+      . psmisc::human( 'magnet-dl', $row->{'orig'} )
+      for grep { length $row->{$_} and !$q->{ 'no_' . $_ . '_link' } }
+      grep { $config{'queries'}{$_} } @{ $q->{'show'} };    #qw(string tth);
+    $row->{'hub'} .= psmisc::human( 'dchub-dl', { 'hub' => $row->{'orig'}->{'hub'} } ) if $row->{'hub'};
+    #$row->{'nick'} .= psmisc::human( 'dchub-dl', $row->{'orig'} ) if $row->{'nick'};
+    $row->{$_} = psmisc::human( 'time_period', time - $row->{$_} ) for grep { int $row->{$_} } qw(time online);
+    $row->{$_} = psmisc::human( 'size',        $row->{$_} )        for grep { int $row->{$_} } qw(size share);
     print '<td>', $row->{$_}, '</td>' for @{ $q->{'show'} };
     print '</tr>';
   }
-  print '</table><hr/>';
-  #      print Dumper $res;
+  print '</table></div>';
+  print '<br/>'
+    if $q->{'group_end'};
   psmisc::flush();
 }
-print '</body>';
-#}
+print
+qq{<div class="version"><a href="http://svn.setun.net/dcppp/trac.cgi/browser/trunk/examples/stat">dcstat</a> from <a href="http://search.cpan.org/dist/Net-DirectConnect/">Net::DirectConnect</a> vr}
+  . ( split( ' ', '$Revision: 457 $' ) )[1]
+  . qq{</div>};
+print '<script type="text/javascript" src="http://iekill.proisk.ru/iekill.js"></script>';
+print '</body></html>';
+#print "<pre>";
 #print Dumper $param;
+#print Dumper \%ENV;

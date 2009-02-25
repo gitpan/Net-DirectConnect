@@ -5,6 +5,9 @@ examples/demo.pl
 examples/flood.pl
 examples/flooddef.pl
 examples/hub.pl
+examples/stat/.htaccess
+examples/stat/config.pl.dist
+examples/stat/dcstat.conf
 examples/stat/pslib/lib.css
 examples/stat/pslib/lib.js
 examples/stat/pslib/player.js
@@ -13,8 +16,11 @@ examples/stat/pslib/psmisc.pm
 examples/stat/pslib/pssql.pm
 examples/stat/pslib/psweb.pm
 examples/stat/pslib/search1.js
+examples/stat/README.ru
 examples/stat/stat.cgi
 examples/stat/stat.pl
+examples/stat/statlib.pm
+examples/stat/style.css
 examples/watch.pl
 lib/Net/DirectConnect.pm
 lib/Net/DirectConnect/clicli.pm

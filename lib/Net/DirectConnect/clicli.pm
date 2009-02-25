@@ -1,13 +1,9 @@
-#Copyright (C) 2005-2006 Oleg Alexeenkov http://sourceforge.net/projects/dcppp proler@gmail.com icq#89088275
-#my $Id = '$Id: clicli.pm 373 2008-12-20 20:28:43Z pro $';
+# $Id: clicli.pm 461 2009-01-19 22:56:47Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clicli.pm $
 package Net::DirectConnect::clicli;
-#eval { use Net::DirectConnect; };
-#use lib '../..';
 use Net::DirectConnect;
 use strict;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 373 $' ) )[1];
-#our @ISA = ('Net::DirectConnect');
+our $VERSION = ( split( ' ', '$Revision: 461 $' ) )[1];
 use base 'Net::DirectConnect';
 
 sub init {
@@ -41,7 +37,7 @@ sub init {
     'ADCGet'    => 1,
     'MiniSlots' => 1,
     @_,
-    'Direction' => 'Download',
+    'direction' => 'Download',
     #	'Direction' => 'Upload', #rand here
     #	'incomingclass' => 'dcppp::clicli',
     'reconnects' => 0,
@@ -54,13 +50,14 @@ sub init {
   #    ($self->{'peerport'}, $self->{'peerip'}) = unpack_sockaddr_in( getpeername( $self->{'socket'} ) ) if $self->{'socket'};
   #    $self->{'peerip'}  = inet_ntoa($self->{'peerip'}) if $self->{'peerip'};
   $self->get_peer_addr();
-  #     $self->{'log'}->('info', "[$self->{'number'}] Incoming client $self->{'peerip'}") if $self->{'peerip'};
-  $self->{'log'}->( 'info', "[$self->{'number'}] Incoming client $self->{'host'}:$self->{'port'}" ) if $self->{'incoming'};
+  #     $self->log('info', "[$self->{'number'}] Incoming client $self->{'peerip'}") if $self->{'peerip'};
+  $self->log( 'info', "Incoming client $self->{'host'}:$self->{'port'} via ", ref $self ) if $self->{'incoming'};
   #print("{{  $self->{'NickList'} }}");
   #print("[$_]")for sort keys %{$self->{'NickList'}};
   #print " clicli init clients:{", keys %{$self->{'clients'}}, "}\n";
   #print "parse init\n";
   #    %{$self->{'parse'}} = (
+$self->{'parse'} = undef if $self->{'parse'} and  !keys %{$self->{'parse'}};
   $self->{'parse'} ||= {
     'Lock' => sub {
       #print "CLICLI lock parse\n";
@@ -84,7 +81,7 @@ sub init {
       } else {
         $_[0] =~ /^(.+?)(\s+Pk=.+)?\s*$/is;
         #	  $self->cmd('Key', Net::DirectConnect::lock2key($1));
-        $self->{'Key'} = Net::DirectConnect::lock2key($1);
+        $self->{'key'} = Net::DirectConnect::lock2key($1);
         #         $self->{'sendbuf'} = 1;
         #         $self->cmd('MyNick');
         #	  $self->{'sendbuf'} = 0;
@@ -94,8 +91,8 @@ sub init {
     #      'Supports' => sub { },
     'Direction' => sub {
       #$self->cmd('selectfile') if $self->{'Direction'} eq 'Download';
-      if   ( $_[0] eq 'Download' ) { $self->{'Direction'} = 'Upload'; }
-      else                         { $self->{'Direction'} = 'Download'; }
+      if   ( $_[0] eq 'Download' ) { $self->{'direction'} = 'Upload'; }
+      else                         { $self->{'direction'} = 'Download'; }
     },
     'Key' => sub {
       if ( $self->{'incoming'} ) {
@@ -111,18 +108,19 @@ sub init {
              last;
           }
 =cut
+
       } else {
         $self->{'sendbuf'} = 1;
         $self->cmd('Supports');
         $self->cmd('Direction');
         $self->{'sendbuf'} = 0;
-        $self->cmd( 'Key', $self->{'Key'} );
+        $self->cmd( 'Key', $self->{'key'} );
       }
-      $self->cmd('selectfile') if $self->{'Direction'} eq 'Download';
-      #print "get:[filename:",$self->{'filename'},'; fileas:', $self->{'fileas'},"]\n";
-      $self->{'Get'} = $self->{'filename'} . '$' . ( $self->{'filefrom'} || 1 ),
-        $self->{'ADCGet'} = 'file ' . $self->{'filename'} . ' '.( $self->{'filefrom'} || 0 ).' -1',
-        $self->cmd( ( $self->{'NickList'}->{ $self->{'peernick'} }{'ADCGet'} ? 'ADC' : '' ) . 'Get' )
+      $self->cmd('selectfile') if $self->{'direction'} eq 'Download';
+      $self->log( "get:[filename:", $self->{'filename'}, '; fileas:', $self->{'fileas'}, "]" );
+      $self->{'get'} = $self->{'filename'} . '$' . ( $self->{'filefrom'} || 1 ),
+        $self->{'adcget'} = 'file ' . $self->{'filename'} . ' ' . ( $self->{'filefrom'} || 0 ) . ' -1',
+        $self->cmd( ( $self->{'NickList'}->{ $self->{'peernick'} }{'ADCGet'} ? 'ADCGET' : 'Get' ) )
         if $self->{'filename'};
     },
     'Get' => sub {
@@ -130,7 +128,7 @@ sub init {
       $self->cmd( 'FileLength', 0 );
     },
     'MyNick' => sub {
-      $self->{'log'}->( 'info', "[$self->{'number'}] peer is [", ( $self->{'peernick'} = $_[0] ), "]" );
+      $self->log( 'info', "peer is [", ( $self->{'peernick'} = $_[0] ), "]" );
       #         $self->{'NickList'}->{$self->{'peernick'}}{'ip'} = $self->{'peerip'};
       $self->{'NickList'}->{ $self->{'peernick'} }{'ip'} = $self->{'host'};
       #         $self->{'NickList'}->{$self->{'peernick'}}{'port'} = ($self->{'peerport'} or $self->{'port'});
@@ -140,15 +138,15 @@ sub init {
       $self->{'IpList'}->{ $self->{'host'} } = \%{ $self->{'NickList'}->{ $self->{'peernick'} } };
       $self->{'IpList'}->{ $self->{'host'} }->{'port'} = $self->{'PortList'}->{ $self->{'host'} };
       $self->handler( 'user_ip', $self->{'peernick'}, $self->{'host'}, $self->{'port'} );
-      #$self->{'log'}->('dev', "[$self->{'number'}] peer port is [ip:$self->{'host'} pl",
+      #$self->log('dev', "[$self->{'number'}] peer port is [ip:$self->{'host'} pl",
       # $self->{'PortList'}->{$self->{'host'}},
       # 'nl',$self->{'NickList'}->{$self->{'peernick'}}{'port'},
       # 'port',$self->{'port'},"]");
       if ( keys %{ $self->{'want'}->{ $self->{'peernick'} } } ) {
         #print ("we want to download ",keys %{$self->{'want'}->{$self->{'peernick'}}}, " files\n");
-        $self->{'Direction'} = 'Download';
+        $self->{'direction'} = 'Download';
       } else {
-        $self->{'Direction'} = 'Upload';
+        $self->{'direction'} = 'Upload';
         #print ("we dont want to download \n");
       }
     },
@@ -160,6 +158,7 @@ sub init {
       $self->cmd('Send');
     },
     'ADCSND' => sub {
+      $self->log( 'dev', "ADCSND::", @_ );
       $_[0] =~ /(\d+?)$/is;
       $self->{'filetotal'} = $1;
       return if $self->openfile();
@@ -180,11 +179,16 @@ sub init {
       $self->disconnect();
       }
   };
-  #print "cmd init ($self->{'cmd'})\n";
+  $self->log ( 'dev',"cmd init1 [$self]", ); #Dumper $self
+  $self->log ( 'dev',"cmd init2 [$self] z ( $self->{'cmd'} )", ); #Dumper $self->{'cmd'}
   #    %{$self->{'cmd'}} = {
+
+  $self->log ( 'dev', "del empty cmd", ), #Dumper $self
+$self->{'cmd'} = undef if $self->{'cmd'} and  !keys %{$self->{'cmd'}};
+
   $self->{'cmd'} ||= {
-    'connect' => sub {
-      $self->connect() && return;
+    'connect_aft' => sub {
+      #      $self->connect() && return;
       $self->{'sendbuf'} = 1;
       $self->cmd('MyNick');
       $self->{'sendbuf'} = 0;
@@ -208,41 +212,43 @@ sub init {
           $self->{'fileext'}  = '.DcLst';
           $self->{'filename'} = 'MyList' . $self->{'fileext'};
         }
-        #$self->{'log'}->('dev', "fas was", $self->{'fileas'});
+        #$self->log('dev', "fas was", $self->{'fileas'});
         $self->{'fileas'} .= $self->{'fileext'} if $self->{'fileas'};
-        #$self->{'log'}->('dev', "fas now", $self->{'fileas'});
+        #$self->log('dev', "fas now", $self->{'fileas'});
       }
     },
     'MyNick' => sub {
       $self->sendcmd( 'MyNick', $self->{'Nick'} );
     },
     'Lock' => sub {
-      $self->sendcmd( 'Lock', $self->{'Lock'} );
+      $self->sendcmd( 'Lock', $self->{'lock'} );
     },
     #      'Supports'	=> sub { $self->sendcmd('Supports', $self->{'Supports'}); },
     'Supports' => sub { $self->sendcmd( 'Supports', ( $self->supports() or return ) ); },
     'Direction' => sub {
-      $self->sendcmd( 'Direction', $self->{'Direction'}, int( rand(0x7FFF) ) );
+      $self->sendcmd( 'Direction', $self->{'direction'}, int( rand(0x7FFF) ) );
       #$self->{'want'}->{$self->{'peernick'}}
     },
     'Key' => sub {
+      my $self = shift if ref $_[0];
       $self->sendcmd( 'Key', $_[0] );
     },
     'Get' => sub {
-      $self->sendcmd( 'Get', $self->{'Get'} );
+      $self->sendcmd( 'Get', $self->{'get'} );
     },
     'Send' => sub {
       $self->sendcmd('Send');
     },
     'FileLength' => sub {
+      my $self = shift if ref $_[0];
       $self->sendcmd( 'FileLength', $_[0] );
     },
-    'ADCGet' => sub {
-#$ADCGET file TTH/I2VAVWYGSVTBHSKN3BOA6EWTXSP4GAKJMRK2DJQ 730020132 2586332
-      $self->sendcmd( 'ADCGET', $self->{'ADCGet'} );
-
+    'ADCGET' => sub {
+      #$ADCGET file TTH/I2VAVWYGSVTBHSKN3BOA6EWTXSP4GAKJMRK2DJQ 730020132 2586332
+      $self->sendcmd( 'ADCGET', $self->{'adcget'} );
     },
   };
   #print " clicli aftinit clients:{", keys %{$self->{'clients'}}, "}\n";
+  $self->log ( "init end");
 }
 1;

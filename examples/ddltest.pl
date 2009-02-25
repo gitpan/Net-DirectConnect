@@ -1,9 +1,10 @@
 #!/usr/bin/perl
-#my $Id = '$Id: ddltest.pl 377 2008-12-20 22:03:35Z pro $';
+#my $Id = '$Id: ddltest.pl 432 2009-01-12 01:53:07Z pro $';
 
 =copyright
 test direct downloading (without hub)
 =cut
+
 use strict;
 #  use Time::HiRes;
 eval { use Time::HiRes qw(time sleep); };

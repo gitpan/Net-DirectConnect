@@ -1,11 +1,10 @@
-#Copyright (C) 2005-2006 Oleg Alexeenkov http://sourceforge.net/projects/dcppp proler@gmail.com icq#89088275
-#my $Id = '$Id: hubhub.pm 369 2008-12-19 22:52:24Z pro $';
+# $Id: hubhub.pm 395 2009-01-09 05:34:13Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/hubhub.pm $
 # reserved for future 8)
 package Net::DirectConnect::hubhub;
 use Net::DirectConnect;
 use strict;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 369 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 395 $' ) )[1];
 #our @ISA = ('Net::DirectConnect');
 use base 'Net::DirectConnect';
 

@@ -32,11 +32,13 @@ INSTALLATION
 SEE ALSO
     # pro http://pro.setun.net/dcppp/ http://sourceforge.net/projects/dcppp
 
+    http://svn.setun.net/dcppp/timeline/browser/trunk
+
     latest snapshot svn co svn://svn.setun.net/dcppp/trunk/ dcppp
 
     usage example: used in [and created for]
-    http://sourceforge.net/projects/pro-search (
-    http://pro.setun.net/search/trac.cgi/browser/trunk/crawler.pl )
+    http://sourceforge.net/projects/pro-search http://pro.setun.net/search/
+    ( http://svn.setun.net/search/trac.cgi/browser/trunk/crawler.pl )
 
     protocol info: http://en.wikipedia.org/wiki/Direct_Connect_network
     http://www.teamfair.info/DC-Protocol.htm

@@ -1,5 +1,4 @@
-#Copyright (C) 2005-2006 Oleg Alexeenkov http://sourceforge.net/projects/dcppp proler@gmail.com icq#89088275
-#my $Id = '$Id: hubcli.pm 373 2008-12-20 20:28:43Z pro $';
+# $Id: hubcli.pm 456 2009-01-18 01:55:05Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/hubcli.pm $
 # reserved for future 8)
 package Net::DirectConnect::hubcli;
 use strict;
@@ -7,7 +6,7 @@ use Net::DirectConnect;
 use Data::Dumper;    #dev only
 $Data::Dumper::Sortkeys = 1;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 373 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 456 $' ) )[1];
 #our @ISA = ('Net::DirectConnect');
 use base 'Net::DirectConnect';
 
@@ -20,7 +19,7 @@ sub init {
   );
   $self->baseinit();
   $self->get_peer_addr();
-  $self->{'log'}->( 'info', "[$self->{'number'}] Incoming client $self->{'host'}:$self->{'port'}" ) if $self->{'incoming'};
+  $self->log( 'info', "[$self->{'number'}] Incoming client $self->{'host'}:$self->{'port'}" ) if $self->{'incoming'};
   $self->{'parse'} ||= {
     'Supports' => sub {
       #      $self->supports_parse( $_[0], $self->{'NickList'}->{ $self->{'peernick'} } );
@@ -86,14 +85,14 @@ sub init {
       for (@_) {
         return unless $self->{'socket'};
         $self->log( 'dcdmp', "($self->{'number'}) we send [", "<$from> $_|", "]:", $self->{'socket'}->send("<$from> $_|"), $! );
-        #$self->{'log'}->('dbg', 'sleep', $self->{'min_chat_delay'}),
+        #$self->log('dbg', 'sleep', $self->{'min_chat_delay'}),
       }
     },
     'chatline' => sub {
       my ( $nick, $text ) = $_[0] =~ /^<([^>]+)> (.+)$/;
       #$self->{'_chatline_rec'} = 1;
-      $self->{'log'}->( 'dbg', "[$self->{'number'}]",    'chatline Rstart', );
-      $self->{'log'}->( 'dbg', "[$self->{'number'}] to", $_->{'number'} ),
+      $self->log( 'dbg', "[$self->{'number'}]",    'chatline Rstart', );
+      $self->log( 'dbg', "[$self->{'number'}] to", $_->{'number'} ),
         #TO API
         $_->cmd( 'chatline_from', $self->{'peer_nick'}, $text )
         for grep { $_ and $_ ne $self } values( %{ $self->{'parent'}{'clients'} } );

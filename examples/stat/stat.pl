@@ -1,259 +1,339 @@
 #!/usr/bin/perl
-# $Id: stat.pl 373 2008-12-20 20:28:43Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.pl $
-
-=copyright
-stat bot
-=cut
-
+# $Id: stat.pm 383 2009-01-08 03:47:59Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.pm $
+package statpl;
 use strict;
-eval { use Time::HiRes qw(time sleep); };
+no warnings qw(uninitialized);
+our ( %config, $param, $db, );
+use statlib;
+use Data::Dumper;
+$Data::Dumper::Sortkeys = 1;
+use psmisc;
 our $root_path;
 use lib $root_path. '../../lib';
+use lib $root_path. './';
 use Net::DirectConnect::clihub;
-use Data::Dumper;    #dev only
-$Data::Dumper::Sortkeys = 1;
-#use DBI;
-our %config;
-use lib $root_path. './pslib';
-use pssql;
-use psmisc;
-psmisc::config( 0, 0, 0, 1 );
-#$config{'log_all'}=1;
-$config{'log_trace'} = $config{'log_dmpbef'} = 0;
-$config{'log_dmp'} = 0;
-#$config{'log_dcdev'}=1;
-#$config{'log_dcdmp'}=1;
-#$config{'log_obj'}='-obj.log';
-$config{'hit_to_ask'}         ||= 2;
-$config{'queue_recalc_every'} ||= 30;
-$config{'ask_retry'}          ||= 3600;
-$config{'limit_max'}          ||= 100;
-$config{'row_all'} = { 'not null' => 1, };
-$config{'periods'} = {
-  'h' => 3600,
-  'd' => 86400,
-  'w' => 7 * 86400,    #'m'=>31*86400, 'y'=>366*86400
-};
-$config{'sql'} = {
-  'driver'       => 'mysql',    #'sqlite',
-  'dbname'       => 'dcstat',
-  'auto_connect' => 1,
-  #'insert_by'=>10, # uncomment if you have 0-100 users # !!!TODO make auto !!! TODO max time in insert cache
-  'log' => sub { shift; psmisc::printlog(@_) },
-  'cp_in' => 'cp1251',
-  'table' => {
-    'queries' => {
-      #111.111.111.111
-      'time' => pssql::row( 'time', 'index' => 1 ),
-      #      'added' => pssql::row('added'),
-      'hub'  => pssql::row( undef, 'type' => 'VARCHAR',  'length' => 64, 'index'  => 1 ),
-      'nick' => pssql::row( undef, 'type' => 'VARCHAR',  'length' => 32, 'index'  => 1 ),
-      'ip'   => pssql::row( undef, 'type' => 'VARCHAR',  'length' => 15, 'Zindex' => 1 ),
-      'port' => pssql::row( undef, 'type' => 'SMALLINT', 'Zindex' => 1 ),
-      'tth'    => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 40,  'default' => '', 'index' => 1 ),
-      'string' => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 255, 'default' => '', 'index' => 1 ),
-    },
-    'results' => {
-      'time' => pssql::row( 'time', 'index' => 1 ),
-      'string'   => pssql::row( undef, 'type' => 'VARCHAR',  'length' => 255, 'index'  => 1 ),
-      'hub'      => pssql::row( undef, 'type' => 'VARCHAR',  'length' => 64,  'index'  => 1 ),
-      'nick'     => pssql::row( undef, 'type' => 'VARCHAR',  'length' => 32,  'index'  => 1 ),
-      'ip'       => pssql::row( undef, 'type' => 'VARCHAR',  'length' => 15,  'Zindex' => 1 ),
-      'port'     => pssql::row( undef, 'type' => 'SMALLINT', 'Zindex' => 1 ),
-      'tth'      => pssql::row( undef, 'type' => 'VARCHAR',  'length' => 40,  'index'  => 1 ),
-      'file'     => pssql::row( undef, 'type' => 'VARCHAR',  'length' => 255, 'Zindex' => 1 ),
-      'filename' => pssql::row( undef, 'type' => 'VARCHAR',  'length' => 255, 'index'  => 1 ),
-      'ext'      => pssql::row( undef, 'type' => 'VARCHAR',  'length' => 32,  'index'  => 1 ),
-      'size'     => pssql::row( undef, 'type' => 'BIGINT',   'index'  => 1 ),
-    },
-    'chat' => {
-      'time' => pssql::row( 'time', 'index' => 1 ),
-      'hub' => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 64, 'index' => 1 ),
-      #      'added'  => pssql::row('added'),
-      'nick'   => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 32,   'index'  => 1 ),
-      'string' => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 3090, 'Zindex' => 1 ),
-    },
-  }
-};
-$config{'sql'}{'table'}{ 'queries' . $_ } = {
-  'tth'    => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 40,  'default' => '', 'index' => 1, 'Zprimary' => 1, ),
-  'string' => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 255, 'default' => '', 'index' => 1, 'Zprimary' => 1, ),
-  'cnt'    => pssql::row( undef, 'type' => 'INT',     'index'  => 1 ),
-  }
-  for keys %{ $config{'periods'} };    #qw(h d w m y);
-$config{'sql'}{'table'}{'resultsf'} =
-  { %{ $config{'sql'}{'table'}{'results'} }, 'cnt' => pssql::row( undef, 'type' => 'INT', 'index' => 1 ), };
-delete $config{'sql'}{'table'}{'resultsf'}{$_} for qw(time nick ip port file);
+$config{'queue_recalc_every'} ||= 60;
+$static{'no_sig_log'} = 1;    #test
+print(
+  "usage:
+ stat.pl [--configParam=configValue] [dchub://]host[:port] [more params and hubs]\n
+ stat.pl calc[h|d|w|m]|[r]	-- calculate slow stats for all times or hour..day... r=d+w+m\n
+"
+  ),
+  exit
+  if !$ARGV[0];
+my $n = -1;
 
-=z
-            'file' => 'MUSIC\\UNSORTED_MUSIC_FROM_UPLOAD\\ћузыка от √а√а\\ћу«ика1\\G-Unit - 19 - Porno Star.mp3',
-            'filename' => 'G-Unit - 19 - Porno Star.mp3',
-            'ip' => '10.131.120.1',
-            'nick' => 'ftp.wwwcom.ru',
-            'port' => '411',
-            'size' => '4980839',
-            'tth' => 'OXYCI7EHF3JIHC47QSYQFVQVNHSWOE7N4KWWK7A'
-=cut
-
-our $db = pssql->new( %{ $config{'sql'} or {} }, );
-my %every;
-
-sub every {
-  my ( $sec, $func ) = ( shift, shift );
-  #printlog('dev','every', $sec, $every{$func}, time, $func ),
-  $func->(@_), $every{$func} = time if $every{$func} + $sec < time and ref $func eq 'CODE';
-}
-unless (caller) {
-  print("usage: stat.pl [--configParam=configValue] [dchub://]host[:port] [more params and hubs]\n"), exit if !$ARGV[0];
-  if ( $ARGV[0] eq 'calc' ) {
+for my $arg (@ARGV) {
+  ++$n;
+  if ( $arg =~ /^calc(\w)?$/i ) {
+    my $tim = $1;
+    $ARGV[$n] = undef;
+    local $db->{'cp_in'} = 'utf-8';
     #local $config{'log_dmp'}=1;
-    $db->do(
-      'CREATE TABLE IF NOT EXISTS resultsftmp LIKE resultsf',
-#      'REPLACE LOW_PRIORITY resultsftmp (string,hub,tth,filename,ext,size, cnt) SELECT string,hub,tth,filename,ext,size, COUNT(*) as cnt FROM results WHERE string != ""  GROUP BY string HAVING cnt > 1 ORDER BY cnt DESC LIMIT '        . $config{'limit_max'} . '',
-'REPLACE LOW_PRIORITY resultsftmp (string,hub,tth,filename,ext,size, cnt) SELECT string,hub,tth,filename,ext,size, COUNT(*) as cnt FROM results WHERE tth != ""  GROUP BY tth HAVING cnt > 1 ORDER BY  cnt DESC LIMIT '
-        . $config{'limit_max'} . '',
-      'DROP TABLE resultsf',
-      'RENAME TABLE resultsftmp TO resultsf',
-    );
-    $db->do(
-      'CREATE TABLE IF NOT EXISTS queries' . $_ . 'tmp LIKE queries' . $_,
-      'REPLACE LOW_PRIORITY queries' 
-        . $_
-        . 'tmp (string, cnt) SELECT string, COUNT(*) as cnt FROM queries WHERE string != "" AND time >= '
-        . ( int( time - $config{'periods'}{$_} ) )
-        . ' GROUP BY string HAVING cnt > 1 ORDER BY cnt DESC LIMIT '
-        . $config{'limit_max'} . '',
-      'REPLACE LOW_PRIORITY queries' 
-        . $_
-        . 'tmp (tth, cnt) SELECT tth, COUNT(*) as cnt FROM queries WHERE tth != "" AND time >= '
-        . ( int( time - $config{'periods'}{$_} ) )
-        . ' GROUP BY tth HAVING cnt > 1 ORDER BY  cnt DESC LIMIT '
-        . $config{'limit_max'} . '',
-      'DROP TABLE queries' . $_,
-      'RENAME TABLE queries' . $_ . 'tmp TO queries' . $_,
-      )
-      for $ARGV[1]
-      or sort { $config{'periods'}{$a} <=> $config{'periods'}{$b} } keys %{ $config{'periods'} };
-    exit;
-  }
-  our %work;
-  our @dc;
-
-  sub close_all {
-    flush_all();
-    $db->disconnect();
-    $_->destroy() for @dc;
-    exit;
-  }
-
-  sub flush_all {
-    $db->flush_insert();
-  }
-  $SIG{INT} = $SIG{__DIE__} = \&close_all;
-  $SIG{HUP} = $^O =~ /win/i ? \&close_all : \&flush_all;
-  for (@ARGV) {
-    local @_;
-    if ( /^-/ and @_ = split '=', $_ ) {
-      $config{config_file} = $_[1], psmisc::config() if $_[0] eq '--config';
-      psmisc::program_one( 'params_pre_config', @_[ 1, 0 ] );
-    } else {
-      my $hub = $_;
-      #    print "i=$_\n";
-      my $dc = Net::DirectConnect::clihub->new(
-        'Nick'      => 'dcstat',
-        'sharesize' => 40_000_000_000 + int( rand 10_000_000_000 ),
-        #   'log'		=>	sub {},	# no logging
-        'log' => sub { shift; psmisc::printlog(@_) },
-        #   'min_cmd_delay'	=> 0.401,
-        'myport'       => 41111,
-        'description'  => 'http://dc.proisk.ru/dcstat/',
-        'auto_connect' => 0,
-        #          'M'           => 'P',
-        'reconnects' => 500,
-        #    'print_search' => 1,
-        'handler' => {
-          'Search_parse_aft' => sub {
-            my $dc     = shift;
-            my $search = shift;
-            #        print "Sh=", Dumper(\@_);
-            my %s = ( %{ $_[0] }, );
-            #        print "s:[$search]\n";
-            #my ($who, $cmd)
-            #        printlog('dcdev', "search", $search);
-            #printlog('dcdev', "ignoring self search"),
-            return if $s{'nick'} eq $dc->{'Nick'};
-            #print "search[$nick, $ip, $port, ",join('|', @cmd),"]\n";
-            #        for (qw(tth nick string ip)) {          ++$stat{$_}{ $s{$_} } if $s{$_};        }
-            $db->insert_hash( 'queries', \%s );
-            #and !$work{'askstth'}++
-            my $q = $s{'tth'} || $s{'string'} || return;
-            ++$work{'ask'}{$q};
-            #        printlog('dcdev', "q1", $q, $work{'ask'}{ $q });
-            every(
-              $config{'queue_recalc_every'},
-              our $queuerecalc ||= sub {
-                my $time = int time;
-                $work{'toask'} = [ (
-                    sort { $work{'ask'}{$b} <=> $work{'ask'}{$a} }
-                      grep { $work{'ask'}{$_} >= $config{'hit_to_ask'} and !exists $work{'asked'}{$_} } keys %{ $work{'ask'} }
-                  ), (
-                    sort { $work{'ask'}{$b} <=> $work{'ask'}{$a} }
-                      grep {
-                            $work{'ask'}{$_} >= $config{'hit_to_ask'}
-                        and $work{'asked'}{$_}
-                        and $work{'asked'}{$_} + $config{'ask_retry'} < $time
-                      } keys %{ $work{'ask'} }
-                  )
-                ];
-                printlog( 'info', "queue len=", scalar @{ $work{'toask'} }, " first hits=", $work{'ask'}{ $work{'toask'}[0] } );
-              }
-            );
-            $q = shift @{ $work{'toask'} } or return;
-            #        printlog('dcdev', "q2", $q, $work{'ask'}{ $q }, Dumper $dc->{'search_todo'} );
-            #if ($q and ++$work{'ask'}{ $q }  >= $config{'hit_to_ask'}  and !exists $work{'asked'}{ $q }) {
-            if (
-              !$dc->{'search_todo'}
-              #and !@{$work{'toask'}||[]}
-              )
-            {
-              $work{'asked'}{$q} = int time;
-              $dc->search($q);
-            }
-#}
-#        print Dumper( \%stat );
-#every (10, our $dumpf ||= sub {if (open FO, '>', 'obj.log') {printlog("dumping dc");print FO Dumper(\%work, \%stat,);close FO;}});
-#$dc
-          },
-          'SR_parse_aft' => sub {
-            my $dc = shift;
-            #        my $search = shift;
-            my %s = %{ $_[1] || return };
-            #        printlog( 'SR=', Dumper( \@_ ) );
-            $db->insert_hash( 'results', \%s );
-          },
-          'chatline' => sub {
-            my $dc = shift;
-            #        printlog( 'chatline', join '!',@_ );
-            my %s;
-            ( $s{nick}, $s{string} ) = $_[0] =~ /^<([^>]+)> (.+)$/;
-            $db->insert_hash( 'chat', { %s, 'time' => int(time), 'hub' => $dc->{'hub'}, } );
-          },
-          'welcome' => sub {
-            my $dc = shift;
-            printlog( 'welcome', @_ );
-          },
-          #      'To' => sub {        my $dc = shift;printlog('to', @_);},
-        },
-        %config,
-      );
-      #$dc->{'no_print'}{'SR'} => 1;
-      $dc->connect($hub);
-      push @dc, $dc;
-      $_->work() for @dc;
+    for my $query ( sort keys %{ $config{'queries'} } ) {
+      next if $config{'queries'}{$query}{'disabled'};
+      next
+        unless statlib::is_slow($query);
+      for my $time (
+        $config{'queries'}{$query}{'periods'}
+        ? ( ( $tim ne 'r' ? $tim : () )
+            or sort { $config{'periods'}{$a} <=> $config{'periods'}{$b} } keys %{ $config{'periods'} } )
+        : ('')
+        )
+      {
+        next if $tim eq 'r' and ( !$config{'queries'}{$query}{'periods'} or $time eq 'h' );
+        printlog 'info', 'calculating ', $time, $query;
+        local $config{'queries'}{$query}{'WHERE'}[5] =
+          $config{'queries'}{$query}{'FROM'} . ".time >= " . int( time - $config{'periods'}{$time} )
+          if $time;
+        my $res = statlib::make_query( { %{ $config{'queries'}{$query} }, }, $query );
+        my $n = 0;
+        for my $row (@$res) {
+          ++$n;
+          my $dmp = Data::Dumper->new( [$row] )->Indent(0)->Terse(1)->Purity(1)->Dump();
+          $db->insert_hash( 'slow', { 'name' => $query, 'n' => $n, 'result' => $dmp, 'period' => $time, 'time' => int(time) } );
+        }
+        $db->do( "DELETE FROM slow WHERE name=" . $db->quote($query) . " AND period=" . $db->quote($time) . " AND n>$n " );
+        $db->flush_insert('slow');
+        #      sleep 3;
+      }
+    }
+    #  exit;
+  } elsif ( $arg eq 'purge' ) {
+    $ARGV[$n] = undef;
+    for my $table ( sort keys %{ $config{'sql'}{'table'} } ) {
+      #print "$table  \n";
+      my ($col) = grep { $config{'sql'}{'table'}{$table}{$_}{'purge'} } keys %{ $config{'sql'}{'table'}{$table} };
+      my $purge = $config{'sql'}{'table'}{$table}{$col}{'purge'};
+      #print "t $table c$col p$purge \n";
+      $purge = $config{'purge'} if $purge and $purge <= 1;
+      printlog 'info', "purge $table $col $purge =", $db->do( "DELETE FROM $table WHERE $col < " . int( time - $purge ) );
     }
   }
-  while ( grep { $_->active() } @dc ) {
+}
+our %work;
+our @dc;
+
+sub close_all {
+  flush_all();
+  $db->disconnect();
+  $_->destroy() for @dc;
+  psmisc::caller_trace(5);
+  printlog "bye close_all";
+  exit;
+}
+
+sub flush_all {
+  $db->flush_insert();
+}
+
+sub print_info {
+  printlog( 'info', "queue len=", scalar @{ $work{'toask'} || [] }, " first hits=", $work{'ask'}{ $work{'toask'}[0] } );
+  local @_ = grep { $_->active() } @dc;
+  printlog 'info', 'active hubs:', map { $_->{'host'} . ':' . $_->{'status'} } @_;
+  printlog 'info', 'hashes:',      map { $_ . '=' . scalar %{ $work{$_} || {} } } qw(ask asked ask_db);
+  printlog 'info', 'stat:',        map { $_ . '=' . $work{'stat'}{$_} } keys %{ $work{'stat'} || {} };
+  #  psmisc::file_rewrite(    'dumper',    Dumper [      'work' => \%work,      'db'   => $db,      'dc'   => \@dc,    ]  );
+  if ( $^O =~ /win/i ) {
+    our $__hup_time__;
+    printlog( 'info', 'doubleclose, bye' ), exit if time - $__hup_time__ < 2;
+    $__hup_time__ = time;
+  }
+}
+$SIG{INT} = $SIG{__DIE__} = \&close_all;
+$SIG{HUP} =
+  $^O =~ /win/i
+  ? \&print_info
+  : \&flush_all;
+$SIG{INFO} = \&print_info;
+
+
+ $SIG{__WARN__} = sub {
+    printlog( 'warn', $!, $@, @_ );
+#    printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
+psmisc::caller_trace(15);
+  };
+  $SIG{__DIE__} = sub {
+    printlog( 'die', $!, $@, @_ );
+    printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
+psmisc::caller_trace(5);
+
+  };
+
+
+for ( grep { length $_ } @ARGV ) {
+  local @_;
+  if ( /^-/ and @_ = split '=', $_ ) {
+    $config{config_file} = $_[1], psmisc::config() if $_[0] eq '--config';
+    psmisc::program_one( 'params_pre_config', @_[ 1, 0 ] );
+  } else {
+    my $hub = $_;
+    ++$work{'hubs'}{$hub};
+    my $dc = Net::DirectConnect::clihub->new(
+      'Nick'      => 'dcstat',
+      'sharesize' => 40_000_000_000 + int( rand 10_000_000_000 ),
+      #   'log'		=>	sub {},	# no logging
+      #      'log'          => sub { my $dc = shift; psmisc::printlog( "[$dc->{'number'}]($dc)", @_);
+      'log' => sub {
+        my $dc = shift;
+        psmisc::printlog( "[$dc->{'number'}]", @_ );
+        #psmisc::caller_trace(5)
+      },
+      'myport'       => 41111,
+      'description'  => 'http://dc.proisk.ru/dcstat/',
+      'auto_connect' => 0,
+      'reconnects'   => 500,
+      'handler'      => {
+        'Search_parse_aft' => sub {
+          my $dc     = shift;
+          my $search = shift;
+          my %s      = ( %{ $_[0] ||{}}, );
+          return if $s{'nick'} eq $dc->{'Nick'};
+          $db->insert_hash( 'queries', \%s );
+          my $q = $s{'tth'} || $s{'string'} || return;
+          ++$work{'ask'}{$q};
+          psmisc::schedule(
+            $config{'queue_recalc_every'},
+            our $queuerecalc_ ||= sub {
+              my $time = int time;
+              $work{'toask'} = [ (
+                  sort { $work{'ask'}{$b} <=> $work{'ask'}{$a} }
+                    grep { $work{'ask'}{$_} >= $config{'hit_to_ask'} and !exists $work{'asked'}{$_} } keys %{ $work{'ask'} }
+                )
+              ];
+              printlog( 'warn', "reasking" ), $work{'toask'} = [ (
+                  sort { $work{'ask'}{$b} <=> $work{'ask'}{$a} }
+                    grep {
+                          $work{'ask'}{$_} >= $config{'hit_to_ask'}
+                      and $work{'asked'}{$_}
+                      and $work{'asked'}{$_} + $config{'ask_retry'} < $time
+                    } keys %{ $work{'ask'} }
+                )
+                ]
+                unless @{ $work{'toask'} };
+              printlog( 'info', "queue len=", scalar @{ $work{'toask'} }, " first hits=", $work{'ask'}{ $work{'toask'}[0] } );
+            }
+          );
+          psmisc::schedule(
+            [ 3600, 3600 ],
+            our $hashes_cleaner_ ||= sub {
+              my $min = scalar keys %{ $work{'hubs'} || {} };
+              printlog 'info', "queue clear min[$min] now", scalar %{ $work{'ask'} || {} };
+              delete $work{'ask'}{$_} for grep { $work{'ask'}{$_} < $min } keys %{ $work{'ask'} || {} };
+              printlog 'info', "queue clear ok now", scalar %{ $work{'ask'} || {} };
+            }
+          );
+          psmisc::schedule(
+            $dc->{'search_every'},
+            our $queueask_ ||= sub {
+              my ($dc) = @_;
+              my $q;
+              while ( $q = shift @{ $work{'toask'} } or return ) {
+                my $r;
+                $r =
+                  $db->line( "SELECT * FROM results WHERE "
+                    . ( ( length $q == 39 and $q =~ /^[0-9A-Z]+$/ ) ? 'tth' : 'string' ) . "="
+                    . $db->quote($q)
+                    . " ORDER BY time DESC LIMIT 1" ),
+                  if ( !exists $work{'asked'}{$q} and !exists $work{'ask_db'}{$q} );
+                $work{'ask_db'}{$q} = $work{'asked'}{$q} = $r->{'time'}, next
+                  if $r and $r->{'time'};    # + $config{'ask_retry'} > time;
+                $work{'ask_db'}{$q} = 0;
+                last;
+              }
+              if ( !$dc->{'search_todo'} ) {
+                $work{'asked'}{$q} = int time;
+                printlog( 'info', "search", $q, 'on', $dc->{'host'} );
+                $dc->search($q);
+              } else {
+                unshift @{ $work{'toask'} }, $q;
+              }
+            },
+            $dc
+          );
+        },
+        'SR_parse_aft' => sub {
+          my $dc = shift;
+          my %s = %{ $_[1] || return };
+          $db->insert_hash( 'results', \%s );
+          ++$work{'stat'}{'SR'};
+        },
+        'chatline' => sub {
+          my $dc = shift;
+          printlog( 'chatline', @_ );
+          my %s;
+          ( $s{nick}, $s{string} ) = $_[0] =~
+            #/^<([^>]+)> (.+)$/s;
+            /^(?:<|\* )(.+?)>? (.+)$/s;
+          if ( $s{nick} and $s{string} ) {
+            $db->insert_hash( 'chat', { %s, 'time' => int(time), 'hub' => $dc->{'hub'}, } );
+          } else {
+            printlog( 'err', 'wtf chat', @_ );
+          }
+        },
+        'welcome' => sub {
+          my $dc = shift;
+          printlog( 'welcome', @_ );
+        },
+        'MyINFO' => sub {
+          my $dc = shift;
+          local ($_) = $_[0] =~ /\S+\s+(\S+)\s+(.*)/;
+          $db->insert_hash(
+            'users', {
+              'time'   => int(time),
+              'hub'    => $dc->{'hub'},
+              'nick'   => $_,
+              'size'   => $dc->{'NickList'}{$_}{'sharesize'},
+              'ip'     => $dc->{'NickList'}{$_}{'ip'},
+              'port'   => $dc->{'NickList'}{$_}{'port'},
+              'info'   => Data::Dumper->new( [ $dc->{'NickList'}{$_} ] )->Indent(0)->Terse(1)->Purity(1)->Dump(),
+              'online' => int time
+            }
+          );
+          ++$work{'stat'}{'MyINFO'};
+        },
+        'Quit' => sub {
+          my $dc = shift;
+          local $_ = $_[0];
+          $db->insert_hash(
+            'users', {
+              'time'   => int(time),
+              'hub'    => $dc->{'hub'},
+              'nick'   => $_,
+              'size'   => $dc->{'NickList'}{$_}{'sharesize'},
+              'ip'     => $dc->{'NickList'}{$_}{'ip'},
+              'port'   => $dc->{'NickList'}{$_}{'port'},
+              'info'   => Data::Dumper->new( [ $dc->{'NickList'}{$_} ] )->Indent(0)->Terse(1)->Purity(1)->Dump,
+              'online' => 0
+            }
+          );
+          ++$work{'stat'}{'Quit'};
+        },
+        #      'To' => sub {        my $dc = shift;printlog('to', @_);},
+      },
+      %config,
+    );
+    $dc->connect($hub);
+
+$dc->{'clients'}{'listener_http'}{'handler'}{''} = sub {
+my $dc = shift;
+  printlog "my cool cansend [$dc->{'geturl'}]";
+$dc->{'socket'}->send("Content-type: text/html\n\n"."hi");
+#$dc->{'socket'}->close();
+$dc->destroy();
+};
+
+
+    push @dc, $dc;
     $_->work() for @dc;
   }
-  $_->destroy() for @dc;
 }
+while ( my @dca = grep { $_ and $_->active() } @dc ) {
+  $_->work() for @dca;
+  psmisc::schedule(
+    [ 20, 60 * 60 ],
+    our $hubstats_ ||= sub {
+      my $time = int time;
+      for my $dc (@_) {
+        my @users = grep { $dc->{'NickList'}{$_}{'online'} } keys %{ $dc->{'NickList'} };
+        my $share;
+        $dc->cmd('GetINFO');
+        for ( 1, 0 .. scalar(@users) / 1000 ) {
+          $_->work(1) for @dca;
+        }
+        $dc->work(1);
+        $share += $dc->{'NickList'}{$_}{'sharesize'} for @users;
+        printlog 'info', "hubsize $dc->{'hub'}: bytes = $share users=", scalar @users;
+        $db->insert_hash( 'hubs', { 'time' => $time, 'hub' => $dc->{'hub'}, 'size' => $share, 'users' => scalar @users } )
+          if $share;
+      }
+      $db->flush_insert('hubs');
+    },
+    ,
+    @dc
+  );
+  psmisc::schedule(
+    [ 300, 60 * 40 ],
+    our $hubrunhour_ ||= sub {
+      psmisc::startme('calch');
+    }
+    ),
+    psmisc::schedule(
+    [ 600, 60 * 60 * 6 ],
+    our $hubrunrare_ ||= sub {
+      psmisc::startme('calcr');
+    }
+    ) if $config{'use_slow'};
+  psmisc::schedule(
+    900,
+    $config{'purge'} / 10,
+    our $hubrunpurge_ ||= sub {
+      psmisc::startme('purge');
+    }
+  );
+}
+printlog 'dev', map { $_->{'host'} . ":" . $_->{'status'} } @dc;
+#psmisc::caller_trace(20);
+$_->destroy() for @dc;
+printlog 'info', 'bye';

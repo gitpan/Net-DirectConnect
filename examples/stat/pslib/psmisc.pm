@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: psmisc.pm 4224 2008-12-17 19:26:13Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+# $Id: psmisc.pm 4256 2009-02-25 13:23:57Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
 
 =copyright
 PRO-search shared library
@@ -26,7 +26,6 @@ package psmisc;
 use locale;
 use strict;
 use Encode;
-
 use Data::Dumper;    #dev only
 $Data::Dumper::Sortkeys = 1;
 #use vars qw( %config %work %stat %static $param %processor %program %out );    #%human,
@@ -39,8 +38,6 @@ require Exporter;
 @ISA = qw(Exporter);
 #our
 #@psmisc::
-
-
 @EXPORT = qw(
   get_params_one
   get_params
@@ -84,13 +81,10 @@ require Exporter;
   loadlist
   shelldata
   %work %config %stat %static $param
-  %processor %program 
+  %processor %program
   );    #%human %out
 #  flush
-
 our ( %config, %work, %stat, %static, $param, %processor, %program, $root_path, %human );    #%human, %out,
-
-
 use Socket;
 use Time::HiRes qw(time);
 no warnings qw(uninitialized);
@@ -114,7 +108,7 @@ sub config_init {
       $config{'trans'}{'cp866'} ||=
 "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xF0\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF1\xF6\xF7\xF8\xF9\xF4\xF5";
       $config{'trans'}{'utf-8'} ||= "\xD0\xD1";    #JUST TRICK for autodetect
-      #$config{'trans_up'}{$_} = (split//, $config{'trans'}{$_})[0..32] for keys %{$config{'trans'}};
+           #$config{'trans_up'}{$_} = (split//, $config{'trans'}{$_})[0..32] for keys %{$config{'trans'}};
       $config{'trans_up'}{$_}   = substr( $config{'trans'}{$_}, 0,  33 ),
         $config{'trans_lo'}{$_} = substr( $config{'trans'}{$_}, 33, 33 ),
         #             print("$config{'trans_up'}{$_}\n$config{'trans_lo'}{$_}\n"),
@@ -192,100 +186,95 @@ sub config_init {
       #   @{ $config{'lng'}{''}{'month_table'} }{ @{ $config{'lng'}{''}{'months'} } } = ( 0 .. 11 )  ;
       $config{'lng'}{'en'}{'wdays'} ||= [qw(Sun Mon Tue Wed Thu Fri Sat)];
       $config{'log_screen'}         ||= 1;
-      $config{'log_default'}        ||= $config{'root_path'} . 'log.log';
+      $config{'log_default'} ||= $config{'root_path'} . 'log.log' unless $ENV{'SERVER_PORT'};
       #$config{'log_all'}     ||= '#book.log';
       #$config{'log_all'}     ||= '1';
       $config{'encode_url_file_mask'} ||= '[^a-zA-Z0-9\-.()_]';                                  #url = '[^a-zA-Z0-9\-.()_!,]';
-
-
-
-$config{'human'}{'date'} ||= sub {    #v1
-  my ( $day_of_month, $month, $year ) = ( localtime( ( $_[0] or time() ) ) )[ 3 .. 5 ];
-  return sprintf( '%04d' . ( ( ( $_[1] or '/' ) . '%02d' ) x 2 ), $year + 1900, $month + 1, $day_of_month );
-};
-$config{'human'}{'time'} ||= sub {
-  return sprintf( join( ( $_[1] or ':' ), ( ("%02d") x 3 ) ), ( reverse( ( localtime( ( $_[0] or time() ) ) )[ 0 .. 2 ] ) ) );
-};
-$config{'human'}{'date_time'} ||=
-  sub { return human( 'date', ( $_[0] or time() ), $_[2] ) . ( $_[1] or '-' ) . human( 'time', ( $_[0] or time() ), $_[3] ); };
-$config{'human'}{'float'} ||= sub {    #v1
-  return ( $_[0] < 8 and $_[0] - int( $_[0] ) )
-    ? sprintf( '%.' . ( $_[0] < 1 ? 3 : ( $_[0] < 3 ? 2 : 1 ) ) . 'f', $_[0] )
-    : int( $_[0] );
-};
-$config{'human'}{'micro_time'} ||= sub {
-  my $now = time();
-  ( $now = human( 'float', abs( int($now) - $now ) ) ) =~ s/^0//;
-  return ( $now or '' );
-};
-$config{'human'}{'rfc822_date_time'} ||= sub {
-  my ( $day_of_month, $month, $year, $wday ) = ( localtime( ( $_[0] or time() ) ) )[ 3 .. 6 ];
-  return sprintf( $config{'lng'}{'en'}{'wdays'}[$wday] . ', %02d ' . $config{'lng'}{'en'}{'months'}[$month] . ' %02d',
-    $day_of_month, $year + 1900 )
-    . ' '
-    . $config{'human'}{'time'}->( ( $_[0] or time() ) )
-    . ' +0300';
-};
-$config{'human'}{'size'} ||= sub {
-  my ( $size, $sp, $kilo ) = @_;
-  $sp ||= ( $ENV{'SERVER_PORT'} ? '&nbsp;' : ' ' );
-  $kilo ||= $config{'kilo'} || 8;
-  return int( $size / 1099511627776 ) . $sp . 'TB' if ( $size >= $kilo * 1099511627776 );
-  return int( $size / 1073741824 ) . $sp . 'GB'    if ( $size >= $kilo * 1073741824 );
-  return int( $size / 1048576 ) . $sp . 'MB'       if ( $size >= $kilo * 1048576 );
-  return int( $size / 1024 ) . $sp . 'KB'          if ( $size >= $kilo * 1024 );
-  return human( 'float', $size ) . $sp . 'B' if ( $size > 0 );
-  return $size;
-};
-$config{'human'}{'number_k'} ||= sub {
-  local $_ = $_[0];
-  $_ *= 1024          if ( $_ =~ s/kb?$//gi );
-  $_ *= 1048576       if ( $_ =~ s/mb?$//gi );
-  $_ *= 1073741824    if ( $_ =~ s/gb?$//gi );
-  $_ *= 1099511627776 if ( $_ =~ s/tb?$//gi );
-  return $_;
-};
-$config{'human'}{'procent'} ||= sub {    #v1
-  return sprintf( '%' . ( $_[0] < 10 ? '.3f' : 'd' ), $_[0] ) . '%';
-};
-$config{'human'}{'time_period'} ||= sub {    #v0
-  my ( $tim, $delim, $sign ) = @_;
-  $sign = '-', $tim = -$tim if $tim < 0;
-  #print("tpern[", $tim, ']'),
-  return '' if $tim == 0 or $tim > 1000000000;
-  #print("tperf[", $tim, ']'),
-  return ( $sign . human( 'float', $tim ) . $delim . "s" ) if $tim < 60;
-  $tim =  $tim / 60 ;
-  return ( $sign . int($tim) . $delim . "m" ) if $tim < 60;
-  $tim =  $tim / 60 ;
-  return ( $sign . int($tim) . $delim . "h" ) if $tim < 24;
-  $tim =  $tim / 24 ;
-  return ( $sign . int($tim) . $delim . "d" ) if $tim <= 31;
-  $tim =  $tim / 30.5 ;
-  return ( $sign . int($tim) . $delim . "M" ) if $tim < 12;
-  $tim =  $tim / 12 ;
-  return ( $sign . int($tim) . $delim . "Y" );
-};
-$config{'human'}{'number'} ||= sub {    #v0 #FIXIT
-  #  return $_ = reverse( join( ' ', split( /(\d{3})/, reverse $_[0] ) ) );
-  #  local $_ = reverse( join( ' ', split( /(\d{3})/, reverse $_[0] ) ) );
-  #  return $_;
-  #return reverse( join( ' ', grep {length $_} split( /(\d{3})/, reverse $_[0] ) ) )
-  return local $_ = reverse join ' ', grep { length $_ } split /(\d{3})/, reverse $_[0]   ;
-};
-$config{'human'}{'string_long'} ||= sub {
-  my $maxlen = ( $_[1] or 20 );
-  html_chars( \$_[0] );
-  return $_[0] if length $_[0] <= $maxlen;
-  my $print = substr( $_[0], 0, $maxlen );
-  $print =~ s/[\xD0\xD1]$//;
-  $_[0]  =~ s/\"/&quot;/g;
-  return "<span title=\"" . $_[0] . "\">$print...</span>";
-};
-
-
-
-
+      $config{'human'}{'date'}        ||= sub {                                                  #v1
+        my ( $day_of_month, $month, $year ) = ( localtime( ( $_[0] or time() ) ) )[ 3 .. 5 ];
+        return sprintf( '%04d' . ( ( ( $_[1] or '/' ) . '%02d' ) x 2 ), $year + 1900, $month + 1, $day_of_month );
+      };
+      $config{'human'}{'time'} ||= sub {
+        return
+          sprintf( join( ( $_[1] or ':' ), ( ("%02d") x 3 ) ), ( reverse( ( localtime( ( $_[0] or time() ) ) )[ 0 .. 2 ] ) ) );
+      };
+      $config{'human'}{'date_time'} ||= sub {
+        return human( 'date', ( $_[0] or time() ), $_[2] ) . ( $_[1] or '-' ) . human( 'time', ( $_[0] or time() ), $_[3] );
+      };
+      $config{'human'}{'float'} ||= sub {                                                        #v1
+        return ( $_[0] < 8 and $_[0] - int( $_[0] ) )
+          ? sprintf( '%.' . ( $_[0] < 1 ? 3 : ( $_[0] < 3 ? 2 : 1 ) ) . 'f', $_[0] )
+          : int( $_[0] );
+      };
+      $config{'human'}{'micro_time'} ||= sub {
+        my $now = time();
+        ( $now = human( 'float', abs( int($now) - $now ) ) ) =~ s/^0//;
+        return ( $now or '' );
+      };
+      $config{'human'}{'rfc822_date_time'} ||= sub {
+        my ( $day_of_month, $month, $year, $wday ) = ( localtime( ( $_[0] or time() ) ) )[ 3 .. 6 ];
+        return sprintf( $config{'lng'}{'en'}{'wdays'}[$wday] . ', %02d ' . $config{'lng'}{'en'}{'months'}[$month] . ' %02d',
+          $day_of_month, $year + 1900 )
+          . ' '
+          . $config{'human'}{'time'}->( ( $_[0] or time() ) )
+          . ' +0300';
+      };
+      $config{'human'}{'size'} ||= sub {
+        my ( $size, $sp, $kilo ) = @_;
+        $sp ||= ( $ENV{'SERVER_PORT'} ? '&nbsp;' : ' ' );
+        $kilo ||= $config{'kilo'} || 8;
+        return int( $size / 1099511627776 ) . $sp . 'TB' if ( $size >= $kilo * 1099511627776 );
+        return int( $size / 1073741824 ) . $sp . 'GB'    if ( $size >= $kilo * 1073741824 );
+        return int( $size / 1048576 ) . $sp . 'MB'       if ( $size >= $kilo * 1048576 );
+        return int( $size / 1024 ) . $sp . 'KB'          if ( $size >= $kilo * 1024 );
+        return human( 'float', $size ) . $sp . 'B' if ( $size > 0 );
+        return $size;
+      };
+      $config{'human'}{'number_k'} ||= sub {
+        local $_ = $_[0];
+        $_ *= 1024          if ( $_ =~ s/kb?$//gi );
+        $_ *= 1048576       if ( $_ =~ s/mb?$//gi );
+        $_ *= 1073741824    if ( $_ =~ s/gb?$//gi );
+        $_ *= 1099511627776 if ( $_ =~ s/tb?$//gi );
+        return $_;
+      };
+      $config{'human'}{'procent'} ||= sub {    #v1
+        return sprintf( '%' . ( $_[0] < 10 ? '.3f' : 'd' ), $_[0] ) . '%';
+      };
+      $config{'human'}{'time_period'} ||= sub {    #v0
+        my ( $tim, $delim, $sign ) = @_;
+        $sign = '-', $tim = -$tim if $tim < 0;
+        #print("tpern[", $tim, ']'),
+        return '' if $tim == 0 or $tim > 1000000000;
+        #print("tperf[", $tim, ']'),
+        return ( $sign . human( 'float', $tim ) . $delim . "s" ) if $tim < 60;
+        $tim = $tim / 60;
+        return ( $sign . int($tim) . $delim . "m" ) if $tim < 60;
+        $tim = $tim / 60;
+        return ( $sign . int($tim) . $delim . "h" ) if $tim < 24;
+        $tim = $tim / 24;
+        return ( $sign . int($tim) . $delim . "d" ) if $tim <= 31;
+        $tim = $tim / 30.5;
+        return ( $sign . int($tim) . $delim . "M" ) if $tim < 12;
+        $tim = $tim / 12;
+        return ( $sign . int($tim) . $delim . "Y" );
+      };
+      $config{'human'}{'number'} ||= sub {    #v0 #FIXIT
+                                              #  return $_ = reverse( join( ' ', split( /(\d{3})/, reverse $_[0] ) ) );
+                                              #  local $_ = reverse( join( ' ', split( /(\d{3})/, reverse $_[0] ) ) );
+                                              #  return $_;
+                                              #return reverse( join( ' ', grep {length $_} split( /(\d{3})/, reverse $_[0] ) ) )
+        return local $_ = reverse join ' ', grep { length $_ } split /(\d{3})/, reverse $_[0];
+      };
+      $config{'human'}{'string_long'} ||= sub {
+        my $maxlen = ( $_[1] or 20 );
+        html_chars( \$_[0] );
+        return $_[0] if length $_[0] <= $maxlen;
+        my $print = substr( $_[0], 0, $maxlen );
+        $print =~ s/[\xD0\xD1]$//;
+        $_[0]  =~ s/\"/&quot;/g;
+        return "<span title=\"" . $_[0] . "\">$print...</span>";
+      };
     },
     1000,
   );
@@ -295,7 +284,7 @@ sub get_params_one {    # p=x,p=y,p=z => p=x,p1=y,p2=z ; p>=z => p=z, p_mode='>'
   my $ret = shift || {};
   for (@_) {
     local %_;           #
-    #    ( $_{'k'}, $_{'v'} )
+                        #    ( $_{'k'}, $_{'v'} )
     @_{ 'k', 'v' } = (/^([^=]+=?)=(.+)$/) ? ( $1, $2 ) : ( ( (/^([^=]*)=?$/)[0] ), ( /^-/ ? 1 : '' ) );
     #    $_{'v'} =~ s/^NUL$//;  # PERL RULEZ # SORRY # 8-) #
     $_{$_} =~ tr/+/ /, $_{$_} =~ s/%([a-fA-F0-9]{2})/pack('C', hex($1))/eg for qw(k v);
@@ -355,11 +344,10 @@ sub encode_url_link {
   return $str if $str =~ /^(magnet|file):/i;
   #fixed?
   return $str if $config{'client_ie'};
-local %_ = split_url($str);
+  local %_ = split_url($str);
   $mask ||= '[^a-zA-Z0-9\-.()_\:@\/!,=]';
   $_{$_} =~ s/$mask/'%'.sprintf('%2X', ord($&))/ge for keys %_;
-  
-  return join_url(\%_);
+  return join_url( \%_ );
 }
 
 sub decode_url {    #v1
@@ -376,7 +364,7 @@ sub decode_url {    #v1
 # 0   *   *  0
 # 1   *   *  1
 sub printlog (@) {    #v4  # todo cache open logfiles ?
-  #  print "[devlog][fac:$_[0]=".$config{ 'log_' . $_[0]}."][][log_screen=$config{'log_screen'} ]\n",Dumper (\%config );
+      #  print "[devlog][fac:$_[0]=".$config{ 'log_' . $_[0]}."][][log_screen=$config{'log_screen'} ]\n",Dumper (\%config );
   return if defined $config{ 'log_' . $_[0] } and !$config{ 'log_' . $_[0] } and !$config{'log_all'};
   # my $file = ( $config{'log_all'} or ( defined $config{ 'log_' . $_[0] } ? $config{ 'log_' . $_[0] } : '' ) );
   my $file = ( (
@@ -393,7 +381,7 @@ sub printlog (@) {    #v4  # todo cache open logfiles ?
     last;
   }
   $file = undef if $file eq '1';
-  my $html = !$file and ($ENV{'SERVER_PORT'} or   $config{'view'} eq 'html'  or  $config{'view'} =~ /http/i  );
+  my $html = !$file and ( $ENV{'SERVER_PORT'} or $config{'view'} eq 'html' or $config{'view'} =~ /http/i );
   my $xml = $config{'view'} eq 'xml';
   my @string = (
     ( $xml  ? '<debug><![CDATA['    : () ),
@@ -405,7 +393,10 @@ sub printlog (@) {    #v4  # todo cache open logfiles ?
       )
     ), (
       $config{'log_caller'}
-      ? ( ' [', join( ',', grep $_, map ( ( caller($_) )[ 2 .. 3 ], ( 0 .. $config{'log_caller'} - 1 ) ) ), ']' )
+      ? (
+        ' [', join( ',', grep { $_ and $_ !~ /^ps/ } ( map { ( caller($_) )[ 2 .. 3 ] } ( 0 .. $config{'log_caller'} - 1 ) ) ),
+        ']'
+        )
       : ()
     ),
     ' ',
@@ -453,6 +444,25 @@ sub printprog {    #v1
   return $ret;
 }
 
+sub startme {
+  my ($start) = @_;
+  if ($start) {
+    #    $processor{'out'}{'array'}->();
+    if ( $^O =~ /^(?:(ms)?(dos|win(32|nt)?))/i and $^O !~ /^cygwin/i ) {
+      $config{'starter'}      ||= 'cmd /c';
+      $config{'spawn_prefix'} ||= 'start /min /low';
+    } else {
+      $config{'spawn_postfix'} ||= '&';
+    }
+    my $com =
+#"$config{'starter'} $config{'spawn_prefix'} $config{'perl'} $config{'root_path'}crawler.pl $force $start $config{'spawn_postfix'}";
+      join ' ', $config{'starter'}, $config{'spawn_prefix'}, $^X, $work{'$0'} || $0, $start, $config{'spawn_postfix'};
+    printlog( 'dbg', "starting with $start:", $com );
+    #    printlog( 'dbg', $com );
+    system($com);
+  }
+}
+
 sub state {
   $work{'$0'} ||= $0;
   $0 = $config{'state_prefix'} . join ' ', @_;
@@ -468,12 +478,11 @@ sub hconfig {
 }
 
 sub html_chars {
-#  local $_ = $_[0];
-  local $_;# = $_[0];
+  #  local $_ = $_[0];
+  local $_;    # = $_[0];
   $_ = \$_[0] unless ref $_[0];
   $_ ||= $_[0];
-
-#print "REf:",ref $_, $$_;
+  #print "REf:",ref $_, $$_;
   $$_ =~ s/\&/\&amp\;/g;
   $$_ =~ s/\</\&lt\;/g;
   $$_ =~ s/\>/\&gt\;/g;
@@ -483,9 +492,9 @@ sub html_chars {
 
 sub human {
   my $via = shift;
-#  my $code = $config{'human'}{$via} if ref $config{'human'}{$via} eq 'CODE';
-#  $code ||= $config{'human'}{$via} if ref $config{'human'}{$via} eq 'CODE';
-#  return $code->(@_) if $code;
+  #  my $code = $config{'human'}{$via} if ref $config{'human'}{$via} eq 'CODE';
+  #  $code ||= $config{'human'}{$via} if ref $config{'human'}{$via} eq 'CODE';
+  #  return $code->(@_) if $code;
   return $config{'human'}{$via}->(@_) if ref $config{'human'}{$via} eq 'CODE';
   return @_;
 }
@@ -572,19 +581,16 @@ sub join_url {    #v2
     . ( $_[0]->{'dcuser'} ? '/' . $_[0]->{'dcuser'} : '' )
     . ( ( !$_[0]->{'path'} or $_[0]->{'path'} =~ /^\// ) ? '' : '/' )
     . $_[0]->{'path'}
-    . ( ( ( !$_[0]->{'path'} and ( !$_[0]->{'host'} or !( $_[0]->{'name'} or $_[0]->{'ext'} ) ) ) or $_[0]->{'path'} =~ /\/$/ )
+    . (
+    ( ( !$_[0]->{'path'} and ( !$_[0]->{'host'} or !( $_[0]->{'name'} or $_[0]->{'ext'} ) ) ) or $_[0]->{'path'} =~ /\/$/ )
     ? ''
-    : '/' )
+    : '/'
+    )
     . $_[0]->{'name'}
-    . ( $_[0]->{'ext'} ? '.' . $_[0]->{'ext'} : '' )
+    . ( $_[0]->{'ext'}   ? '.' . $_[0]->{'ext'}   : '' )
     . ( $_[0]->{'param'} ? '?' . $_[0]->{'param'} : '' )
-    . ( $_[0]->{'pos'} ? '#' . $_[0]->{'pos'} : '' )
-
-;
-
-
+    . ( $_[0]->{'pos'}   ? '#' . $_[0]->{'pos'}   : '' );
 }
-
 #[[prot://][user[:pass]@]host[:port][/dcuser][/[path]][/[name[.ext]]][?param][#pos]
 sub split_url {    #v3
   my $table = ( $_[1] or $config{'sql_tresource'} );
@@ -598,18 +604,12 @@ sub split_url {    #v3
   ( $_{'name'} ) = $1;
   $_{'path'} =~ s|/*$|| if $_{'path'} ne '/';
   $_{'path'} ||= '/' if $_{'name'} or $_{'ext'};
-
-
-#  ( $_{'pos'} ) = ( $_{'name'} =~ s/#(.+)$// ? ($1) : (undef) );
-  ( $_{'pos'} ) = $1 if  $_{'name'} =~ s/#(.+)$// ;
-  ( $_{'param'} ) = $1 if  $_{'name'} =~ s/\?(.+)$// ;
-
-
-
+  #  ( $_{'pos'} ) = ( $_{'name'} =~ s/#(.+)$// ? ($1) : (undef) );
+  ( $_{'pos'} )   = $1 if $_{'name'} =~ s/#(.+)$//;
+  ( $_{'param'} ) = $1 if $_{'name'} =~ s/\?(.+)$//;
   ( $_{'ext'} ) = ( $_{'name'} =~ s/\.([^\.]+)$// ? ($1) : ('') );
   delete $_{'port'}
     unless ( $_{'port'} and ( !$static{'port2prot'}{ $_{'port'} } or ( $static{'port2prot'}{ $_{'port'} } ne $_{'prot'} ) ) );
-
   if ( $_{'prot'} eq 'dchub' ) {
     #printlog   ('split_url', 1, join ':', %_);
     my $dcuser;
@@ -654,15 +654,15 @@ sub cp_trans {    #v1
   my ( $cfrom, $cto, $string ) = @_;
   $cfrom = cp_normalize($cfrom);
   $cto   = cp_normalize($cto);
-  #    printlog('dev', 'cp_trans:', $cfrom, $cto, $string);
+  #      printlog('dev', 'cp_trans:', $cfrom, $cto, $string);
   return $string if $cto eq $cfrom or !length($string) or !$cfrom or !$cto;
-#    print('dev', 'cp_trans:', join ':',$cfrom, $cto, $string);
+  #    print('dev', 'cp_trans:', join ':',$cfrom, $cto, $string);
   #  local $_ = "$cfrom -> $cto";
   #  caller_trace();
-#!return scalar cp_trans_count(@_) unless $config{'fast_cp_trans'};
-#use Encode;
-#$string = encode($cto, decode($cfrom, $string));
-  return Encode::encode($cto, Encode::decode($cfrom, $string));
+  #return scalar cp_trans_count(@_); # unless $config{'fast_cp_trans'};
+  #use Encode;
+  #$string = encode($cto, decode($cfrom, $string));
+  return Encode::encode( $cto, Encode::decode( $cfrom, $string ) );
 }
 
 sub cp_trans_count {    #v1
@@ -671,14 +671,12 @@ sub cp_trans_count {    #v1
   $cto   = cp_normalize($cto);
   #    printlog('dev', 'cp_trans:', $cfrom, $cto, $string);
   return $string if $cto eq $cfrom or !length($string) or !$cfrom or !$cto;
-#    print('dev', 'cp_trans:', join ':',$cfrom, $cto, $string);
+  #    print('dev', 'cp_trans:', join ':',$cfrom, $cto, $string);
   #  local $_ = "$cfrom -> $cto";
   #  caller_trace();
-
-#use Encode;
-#$string = encode($cto, decode($cfrom, $string));
-#  return encode($cto, decode($cfrom, $string));
-
+  #use Encode;
+  #$string = encode($cto, decode($cfrom, $string));
+  #  return encode($cto, decode($cfrom, $string));
   return utf_trans( $cto, $string ) if $cfrom eq 'utf-8' and $config{'trans'}{$cto};
   return to_utf_trans( $cfrom, $string ) if $cto eq 'utf-8' and $config{'trans'}{$cfrom};
   my $cnt;
@@ -689,7 +687,6 @@ sub cp_trans_count {    #v1
   #    printlog('dev', "cp_trans($_):", $string),     caller_trace()     if $cnt;
   return wantarray ? ( $string, $cnt ) : $string;
 }
-
 
 sub utf_trans {
   my ( $cto, $string ) = @_;
@@ -710,7 +707,7 @@ sub utf_trans {
   $cnt += $string =~ s/\xC2\xBB/"/g;        # »
   $cnt += $string =~ s/\xD1\x98/j/g;        #
   $cnt += $string =~ s/\xD0\xB9/\xA9/g;     # é
-  #  $cnt += $string =~ s/\xD0\xA9/\xC9/g;                           # Ù
+                                            #  $cnt += $string =~ s/\xD0\xA9/\xC9/g;                           # Ù
   $cnt += $string =~ s/\xD0([\x90-\xBF])/chr(ord($1)-16)/eg;
   $cnt += $string =~ s/\xD1([\x80-\x8F])/chr(ord($1)+96)/eg;
   ( $string, $cnt2 ) = cp_trans_count( 'cp866', $cto, $string );
@@ -728,35 +725,35 @@ sub to_utf_trans {
   #  $cnt += $string =~ s/\xE9/\xD0\xB9/g;                           # é
   $cnt += $string =~ s/\xAB/"/g;            # <
   $cnt += $string =~ s/\xBB/"/g;            # <
-  #  print "\ndos0[$string]\n";
+                                            #  print "\ndos0[$string]\n";
   ( $string, $cnt ) = cp_trans_count( $cfrom, 'cp866', $string );
   # print "\ndos1[$string]\n";
   $cnt += $string =~ s/([\x80-\x88\x8A-\xA8\xAA-\xAF])/"\xD0".chr(ord($1)+16)/eg;
   $cnt += $string =~ s/([\xE0-\xE8\xEA-\xEF])/"\xD1".chr(ord($1)-96)/eg;
   #  print "\ndos2[$string]\n";
-  $cnt += $string =~ s/\xF0/\xD0\x81/g;     # e
-  $cnt += $string =~ s/\xF1/\xD1\x91/g;     # E
-  $cnt += $string =~ s/\xF4/\xD0\x84/g;     # ukr beg
+  $cnt += $string =~ s/\xF0/\xD0\x81/g;             # e
+  $cnt += $string =~ s/\xF1/\xD1\x91/g;             # E
+  $cnt += $string =~ s/\xF4/\xD0\x84/g;             # ukr beg
   $cnt += $string =~ s/\xF5/\xD1\x94/g;
   $cnt += $string =~ s/\xF6/\xD0\x86/g;
   $cnt += $string =~ s/\xF7/\xD1\x96/g;
   $cnt += $string =~ s/\xF8/\xD0\x87/g;
-  $cnt += $string =~ s/\xF9/\xD1\x97/g;     # ukr end
-  #=c
+  $cnt += $string =~ s/\xF9/\xD1\x97/g;             # ukr end
+                                                    #=c
   $cnt += $string =~ s/(?<!\xD0)\xB9/\x21\x16/g;    # ¹
   $cnt += $string =~ s/(?<!\xD0)\xA9/\xD0\xB9/g;    # é
   $cnt += $string =~ s/(?<!\xD0)\x89/\xD0\x99/g;    # É
   $cnt += $string =~ s/(?<!\xD0)\xE9/\xD1\x89/g;    # ù
   $cnt += $string =~ s/(?<!\xD0)\x99/\xD0\xA9/g;    # Ù
-  #=cut
-  #  $cnt += $string =~ s/\xAB/"/g;                           # <
-  #  $cnt += $string =~ s/\xBB/"/g;                           # >
+                                                    #=cut
+                                                    #  $cnt += $string =~ s/\xAB/"/g;                           # <
+                                                    #  $cnt += $string =~ s/\xBB/"/g;                           # >
   return wantarray ? ( $string, $cnt ) : $string;
 }
 
 sub cp_trans_hash {
   my ( $from, $to, $hash ) = @_;
-  #  printlog('dev', 'cp_trans_hash:', $from, $to, $hash);
+  #   printlog('dev', 'cp_trans_hash:', $from, $to, Dumper $hash);
   return $hash if $from eq $to;
   $hash->{$_} = cp_trans( $from, $to, $hash->{$_} ) for keys %$hash;
   return wantarray ? %$hash : $hash;
@@ -829,21 +826,21 @@ sub lang {
   return
     #  "[".(%config)."]".
     shift() .    # "CP[$config{'cp_config'},$work{'codepage'}]".
-     cp_trans(
-    ($config{'cp_config'}||$config{'cp_perl'}),
+    cp_trans(
+    ( $config{'cp_config'} || $config{'cp_perl'} ),
     $work{'codepage'}, (
-      defined $config{'lng'}{ $lang ||= ( $work{'lang'} || $config{'lang'} ) }{$key}
-      ? $config{'lng'}{$lang}{$key}
-      :  defined $config{'lng'}{''}{$key} ? $config{'lng'}{''}{$key} : $key 
+        defined $config{'lng'}{ $lang ||= ( $work{'lang'} || $config{'lang'} ) }{$key} ? $config{'lng'}{$lang}{$key}
+      : defined $config{'lng'}{''}{$key} ? $config{'lng'}{''}{$key}
+      : $key
     )
     ) . shift;
 }
 
-sub min {
+sub min (@_) {
   ( sort { $a <=> $b || $a cmp $b } @_ )[0];
 }
 
-sub max {
+sub max (@_) {
   ( sort { $b <=> $a || $b cmp $a } @_ )[0];
 }
 
@@ -851,7 +848,8 @@ sub alarmed {
   my ( $timeout, $proc, @proc_param ) = @_;
   my $ret;
   eval {
-    local $SIG{ALRM} = sub { die "alarm\n" }
+    local $SIG{ALRM} =
+      sub { die "alarm\n" }
       if $timeout;    # NB: \n required
     alarm $timeout if $timeout;
     $ret = $proc->(@proc_param) if ref $proc eq 'CODE';
@@ -870,7 +868,7 @@ sub alarmed {
 }
 
 sub mkdir_rec {
-# mkdir $` while m,/,g;
+  # mkdir $` while m,/,g;
   my ( $name, $mask ) = @_;
   my $ret;
   $name =~ s|/+\s*$||;
@@ -924,20 +922,25 @@ sub check_int {
   }
 }
 
+sub caller_trace { printlog( 'caller', $_, caller($_) ) for  0 .. $_[0] || 5  }
+
+
 sub lib_init {
   $SIG{__WARN__} = sub {
     printlog( 'warn', $!, $@, @_ );
-    printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
-  };
+#    printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
+caller_trace(15);
+  },
   $SIG{__DIE__} = sub {
     printlog( 'die', $!, $@, @_ );
     printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
-  };    #die $!;
+caller_trace(15);
+
+  } unless $static{'no_sig_log'};    #die $!;
   unless ( $static{'port2prot'} ) {
-    @{ $static{'port2prot'} }{ ( $config{'scanner'}{$_}{'port'}, $_ ) } = ( $_, $_ ) for ( keys %{ $config{'scanner'} } );
+    @{ $static{'port2prot'} }{ ( $config{'scanner'}{$_}{'port'}, $_ ) } = ( $_, $_ ) for  keys %{ $config{'scanner'} } ;
   }
 }
-sub caller_trace { printlog( 'caller', $_, caller($_) ) for ( 0 .. $_[0] || 5 ); }
 
 sub mysleep {
   if ( $_[0] > 1 and $config{'system'} eq 'win' ) {    #activeperl only?
@@ -964,7 +967,7 @@ sub sleeper {
 
 sub shuffle {
   my $deck = shift;
-#printlog('dev', 'shuffle call');
+  #printlog('dev', 'shuffle call');
   $deck = [ $deck, @_ ] unless ref $deck eq 'ARRAY';
   my $i = @$deck;
   while ( $i-- ) {
@@ -999,14 +1002,14 @@ sub paintdots_onreload {
 sub config_read {
   #print "config_read($ENV{'SCRIPT_FILENAME'}, $_[0]);\n";
   #print ("config_read NOREAD!;\n");
-  my $file = $config{'config_file'}||'config.pl';
+  my $file = $config{'config_file'} || 'config.pl';
   return if $static{'config_read'}{
-        $ENV{'SCRIPT_FILENAME'}.$file
+        $ENV{'SCRIPT_FILENAME'} . $file
           #  $ENV{'PROSEARCH_PATH'}
       }++ and !$_[0];
   #  print "  psmisc::config_read($_[0])";
   #  do $ENV{'PROSEARCH_PATH'} . './config.pl' or do '../config.pl';
-#  print "config_readb(); root_path = $root_path\n";
+  #  print "config_readb(); root_path = $root_path\n";
   ( $ENV{'SCRIPT_FILENAME'} || $work{'$0'} || $0 ) =~ m|^(.+)[/\\].+?$|;
   $root_path ||=    #$ENV{'PROSEARCH_PATH'} ||
     ( $1 ? $1 . '/' : undef );
@@ -1014,12 +1017,12 @@ sub config_read {
   $root_path =~ s|\\|/|g;
   #  do $ENV{'PROSEARCH_PATH'} . './config.pl' or
   #    print "pa=". ( $ENV{'SCRIPT_FILENAME'} ,';', $0),"\n";
-#  print "config_read(); root_path = $root_path\n";
+  #  print "config_read(); root_path = $root_path\n";
   my @errs;
   local $_ = do $root_path . $file;
   #    print( ' do1:',$_,',', $!, ' eval=', $@, "\n" ) if !$_ or $! or $@;
   push @errs, grep { $_ } $!, $@, $_ += do $root_path . '../config.pl', push @errs, grep { $_ } $!, $@ unless $_;
-  if (!$_ and !$_[1]) {
+  if ( !$_ and !$_[1] ) {
     print "Content-type: text/html\n\n" if defined( $ENV{'SERVER_PORT'} );
     print "config not found in $root_path$file and ../config.pl\nReason:\n", join ";\n", @errs;
   }
@@ -1048,8 +1051,7 @@ sub pre_calc_every {
 sub pre_calc_once {
   #  $config{'post_init_once'}->(@_) if $config{'post_init_once'};
   #print "pre_calc_once\n";
-  $config{'post_init_once'}{$_}->(@_)
-    for grep { $config{'post_init_once'}{$_} } sort keys %{ $config{'post_init_once'} or {} };
+  $config{'post_init_once'}{$_}->(@_) for grep { $config{'post_init_once'}{$_} } sort keys %{ $config{'post_init_once'} or {} };
 }
 
 sub pre_calc {
@@ -1066,7 +1068,7 @@ sub config_reload {
   $_[2]->() if ref $_[2] eq 'CODE';
   conf();
   #print ('compile err2:',$@, "\n");
-  if (!%config ) {
+  if ( !%config ) {
     print "Content-type: text/html\n\n" if defined( $ENV{'SERVER_PORT'} );
     print("Please fix error in config.pl: [$@]"), exit if $@;
     print "Please create config.pl with parametrs (see config.pl.dist) and correct modes [$!]";
@@ -1076,7 +1078,7 @@ sub config_reload {
   # print('config_reload',Dumper (\%config ));
 }
 sub configure { &config_reload; }
-sub config { &configure; } #to del
+sub config    { &configure; }       #to del
 
 sub reload_lib {
   %human = ();
@@ -1139,7 +1141,7 @@ sub conf {
 sub http_get {    # REWRITE easier
   my ( $what, $asfile, $lwpopt, $method, $content, $headers_out, $headers_in ) = @_;
   #return "ZZZZZ";
-  printlog('dev', 'http_get',$what, $asfile, "cd=$config{'cachedir'};c=$config{'cache_http'}; ");
+  #  printlog('dev', 'http_get',$what, $asfile, "cd=$config{'cachedir'};c=$config{'cache_http'}; ");
   my %url = split_url($what);
   my $c = encode_url( $what, $config{'encode_url_file_mask'} );
   if ( length $c > 200 ) {
@@ -1154,7 +1156,7 @@ sub http_get {    # REWRITE easier
   $c = ( $config{'cachedir'} || '.' ) . '/' . $c if $config{'cachedir'};
   $c = $asfile if $asfile and $asfile != 1;
   #printlog('dev', $what, $asfile, "cache=$config{'cache_http'}, dir=$config{'cachedir'};");
-  if ( $config{'cache_http'} and -e $c ) {
+  if ( $config{'cache_http'} and -e $c and -M $c < $config{'cache_http'} ) {
     return $c if $asfile;
     if ( open( CF, '<', $c ) ) {
       local $/;
@@ -1203,7 +1205,7 @@ sub http_get {    # REWRITE easier
         open( CF, '>', $c ) or return;
         binmode(CF);
         print CF$resp->$ret();    #content;
-        #        print CF $ret->(); #content;
+                                  #        print CF $ret->(); #content;
         close(CF);
       }
       #      return $asfile ? $c : ($resp->content); #{map {$_ => $resp->header($_)}$resp->header_field_names}
@@ -1211,7 +1213,7 @@ sub http_get {    # REWRITE easier
       #return "FUCCCCKKAAA";
       #return $resp->$ret();
       return ( $asfile ? $c : ( $resp->$ret() ) );    #{map {$_ => $resp->header($_)}$resp->header_field_names}
-      #      return $asfile ? $c : $ret->(); #{map {$_ => $resp->header($_)}$resp->header_field_names}
+            #      return $asfile ? $c : $ret->(); #{map {$_ => $resp->header($_)}$resp->header_field_names}
     } else {
       printlog( 'dev', 'http getfail', $what, $resp->message() );
       #      return $asfile ? undef: $resp->message;
@@ -1224,11 +1226,11 @@ sub http_get {    # REWRITE easier
 
 sub http_get_code {
   my ( $what, $lwpopt, $method ) = @_;
-#  printlog('dev', 'http_get_code',$what, $method);
+  #  printlog('dev', 'http_get_code',$what, $method);
   my $ret = eval {
     eval('use LWP::UserAgent; use URI::URL;1;') or printlog( 'err', 'http use libs', @!, $! );    #if not installed
-    #    my $ua = ;
-    #     $ua->proxy('http', 'http://proxy.ru:3128');
+                                                                                                  #    my $ua = ;
+            #     $ua->proxy('http', 'http://proxy.ru:3128');
     my $resp = (
       ( LWP::UserAgent->new( 'timeout' => hconfig('timeout'), %{ $config{'lwp'} or {} }, %{ $lwpopt or {} } ) )->request(
         new HTTP::Request(
@@ -1239,7 +1241,7 @@ sub http_get_code {
       )
     );
     #print "[H:",$resp->header();
-#print 'GCR', $resp->code(), "\n";
+    #print 'GCR', $resp->code(), "\n";
     return $resp->code();
   } or printlog( 'err', @$, @!, $! );
   return $ret || undef;
@@ -1304,6 +1306,40 @@ sub file_append {
   print FAP@_;
   close(FAP);
 }
+
+sub file_rewrite {
+  unlink $_[0] || return;
+  return file_append(@_);
+}
+{
+  my %schedule;
+
+  sub schedule {
+    my ( $every, $func ) = ( shift, shift );
+    #  my ($wait, $runs);
+    #  printlog 'everyS1', Dumper([ $every, $func,  $schedule{$func} ]);
+    my $p;
+    ( $p->{'wait'}, $p->{'every'}, $p->{'runs'}, $p->{'cond'} ) = @$every
+      if ref $every eq 'ARRAY';
+    #  printlog 'everyS2', Dumper([ $every, $func, $p, $schedule{$func} ]);
+    #  ( $wait, $every, $runs, $cond )
+    #  ( $p{'wait'}, $p{'every'}, $p{'runs'}, $p{'cond'} ) = @{$every}{qw(wait every runs cond)}
+    $p = $every if ref $every eq 'HASH';
+    #printlog('everyEE', $every),
+    $p->{'every'} ||= $every if !ref $every;
+    #  printlog 'everyS3', Dumper([ $every, $func, $p, $schedule{$func} ]);
+    $schedule{$func}{'last'} = time - $p->{'every'} + $p->{'wait'}
+      if $p->{'wait'} and !$schedule{$func}{'last'};
+    #  printlog 'everyS4', Dumper([ $every, $func, $p, $schedule{$func} ]), $func;
+    #     printlog('dev','everyR', Dumper($p, $schedule{$func} ), time, $func ),
+    $func->(@_), $schedule{$func}{'last'} = time
+      if $schedule{$func}{'last'} + $p->{'every'} < time
+        and ( !$p->{'runs'} or $schedule{$func}{'runs'}++ < $p->{'runs'} )
+        and ( !( ref $p->{'cond'} eq 'CODE' ) or $p->{'cond'}->( $p, $schedule{$func}, @_ ) )
+        and ref $func eq 'CODE';
+    #  printlog 'everyE';
+  }
+}
 {
   my ( $current, $order );
 
@@ -1328,7 +1364,7 @@ $program{ psmisc::program() }{'func'}       ||= sub {
   return 0 unless defined($w) and defined($v);
 #local @_ = split /__/, eval( '$config' . join( '', map { '{$_[' . $_ . ']}' } ( 0 .. $#_ ) ) . '= $param->{$_};' )  for ( grep { $param->{$_} } keys %$param );
   local @_ = split( /__/, $w ) or return 0;
-#    print( 'dev', 'genpre',$w, $v, @_, "\n");
+  #    print( 'dev', 'genpre',$w, $v, @_, "\n");
   #  printlog( 'dev', 'gen', @_,'$config' . join( '', map { '{$_[' . $_ . ']}' } ( 0 .. $#_ ) ) . ' = $v;' );
   eval( '$config' . join( '', map { '{$_[' . $_ . ']}' } ( 0 .. $#_ ) ) . ' = $v;' );
   #for ( grep { $param->{$_} } keys %$param );
@@ -1401,7 +1437,6 @@ sub program_run {
           and !$program{$current}{'runned'}
           )
         {
-          state( 'program:', $current );
           #          print( 'dbg', 'program run', $current , "\n");
           #          printlog( 'dbg', 'program run', $current );
           #         local $_ = $program{$current}{'func'}->(
@@ -1409,6 +1444,7 @@ sub program_run {
             ( defined( $param->{$par} ) and $param->{$par} ne '' ? $param->{$par} : () ),
             ( $program{$current}{'param_name'} ? $par : () )
           );
+          state( 'program:', $current, @_);
           program_one( $current . '_bef', @_ );
           local $_
             #eval {
