@@ -1,4 +1,4 @@
-//# $Id: search1.js 3937 2007-12-24 00:41:06Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/search1.js $
+//# $Id: search1.js 4320 2009-08-14 21:37:25Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/search1.js $
 // Copyright (C) 2003-2007 Oleg Alexeenkov http://pro.setun.net/search/ proler@gmail.com icq#89088275
 
 var allow_show_adv_auto = 1;
@@ -197,8 +197,10 @@ InputPlaceholder.prototype.onFocus = function() {
 InputPlaceholder.prototype.onKeyDown = function() { this.Input.className = ''; }
 InputPlaceholder.prototype.onBlur = function() {
 	if (this.Input.value == '' || this.Input.value == this.Value) {
+		//this.Input.helpValue = this.Input.defaultValue = 
 		this.Input.value = this.Value;
 		this.Input.className = this.CssEmpty;
+		
 	}
 	else	this.Input.className = this.CssFilled
 }

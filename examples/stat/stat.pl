@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: stat.pm 383 2009-01-08 03:47:59Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.pm $
+#$Id: stat.pm 383 2009-01-08 03:47:59Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.pm $
 package statpl;
 use strict;
 no warnings qw(uninitialized);
@@ -33,8 +33,7 @@ for my $arg (@ARGV) {
     #local $config{'log_dmp'}=1;
     for my $query ( sort keys %{ $config{'queries'} } ) {
       next if $config{'queries'}{$query}{'disabled'};
-      next
-        unless statlib::is_slow($query);
+      next unless statlib::is_slow($query);
       for my $time (
         $config{'queries'}{$query}{'periods'}
         ? ( ( $tim ne 'r' ? $tim : () )
@@ -56,10 +55,10 @@ for my $arg (@ARGV) {
         }
         $db->do( "DELETE FROM slow WHERE name=" . $db->quote($query) . " AND period=" . $db->quote($time) . " AND n>$n " );
         $db->flush_insert('slow');
-        #      sleep 3;
+        #sleep 3;
       }
     }
-    #  exit;
+    #exit;
   } elsif ( $arg eq 'purge' ) {
     $ARGV[$n] = undef;
     for my $table ( sort keys %{ $config{'sql'}{'table'} } ) {
@@ -83,10 +82,7 @@ sub close_all {
   printlog "bye close_all";
   exit;
 }
-
-sub flush_all {
-  $db->flush_insert();
-}
+sub flush_all { $db->flush_insert(); }
 
 sub print_info {
   printlog( 'info', "queue len=", scalar @{ $work{'toask'} || [] }, " first hits=", $work{'ask'}{ $work{'toask'}[0] } );
@@ -94,7 +90,7 @@ sub print_info {
   printlog 'info', 'active hubs:', map { $_->{'host'} . ':' . $_->{'status'} } @_;
   printlog 'info', 'hashes:',      map { $_ . '=' . scalar %{ $work{$_} || {} } } qw(ask asked ask_db);
   printlog 'info', 'stat:',        map { $_ . '=' . $work{'stat'}{$_} } keys %{ $work{'stat'} || {} };
-  #  psmisc::file_rewrite(    'dumper',    Dumper [      'work' => \%work,      'db'   => $db,      'dc'   => \@dc,    ]  );
+  #psmisc::file_rewrite(    'dumper',    Dumper [      'work' => \%work,      'db'   => $db,      'dc'   => \@dc,    ]  );
   if ( $^O =~ /win/i ) {
     our $__hup_time__;
     printlog( 'info', 'doubleclose, bye' ), exit if time - $__hup_time__ < 2;
@@ -102,26 +98,18 @@ sub print_info {
   }
 }
 $SIG{INT} = $SIG{__DIE__} = \&close_all;
-$SIG{HUP} =
-  $^O =~ /win/i
-  ? \&print_info
-  : \&flush_all;
-$SIG{INFO} = \&print_info;
-
-
- $SIG{__WARN__} = sub {
-    printlog( 'warn', $!, $@, @_ );
-#    printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
-psmisc::caller_trace(15);
-  };
-  $SIG{__DIE__} = sub {
-    printlog( 'die', $!, $@, @_ );
-    printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
-psmisc::caller_trace(5);
-
-  };
-
-
+$SIG{HUP}      = $^O =~ /win/i ? \&print_info : \&flush_all;
+$SIG{INFO}     = \&print_info;
+$SIG{__WARN__} = sub {
+  printlog( 'warn', $!, $@, @_ );
+  #printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
+  psmisc::caller_trace(15);
+};
+$SIG{__DIE__} = sub {
+  printlog( 'die', $!, $@, @_ );
+  printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
+  psmisc::caller_trace(5);
+};
 for ( grep { length $_ } @ARGV ) {
   local @_;
   if ( /^-/ and @_ = split '=', $_ ) {
@@ -133,8 +121,8 @@ for ( grep { length $_ } @ARGV ) {
     my $dc = Net::DirectConnect::clihub->new(
       'Nick'      => 'dcstat',
       'sharesize' => 40_000_000_000 + int( rand 10_000_000_000 ),
-      #   'log'		=>	sub {},	# no logging
-      #      'log'          => sub { my $dc = shift; psmisc::printlog( "[$dc->{'number'}]($dc)", @_);
+      #'log'		=>	sub {},	# no logging
+      #'log'          => sub { my $dc = shift; psmisc::printlog( "[$dc->{'number'}]($dc)", @_);
       'log' => sub {
         my $dc = shift;
         psmisc::printlog( "[$dc->{'number'}]", @_ );
@@ -148,7 +136,7 @@ for ( grep { length $_ } @ARGV ) {
         'Search_parse_aft' => sub {
           my $dc     = shift;
           my $search = shift;
-          my %s      = ( %{ $_[0] ||{}}, );
+          my %s      = ( %{ $_[0] || {} }, );
           return if $s{'nick'} eq $dc->{'Nick'};
           $db->insert_hash( 'queries', \%s );
           my $q = $s{'tth'} || $s{'string'} || return;
@@ -159,13 +147,12 @@ for ( grep { length $_ } @ARGV ) {
               my $time = int time;
               $work{'toask'} = [ (
                   sort { $work{'ask'}{$b} <=> $work{'ask'}{$a} }
-                    grep { $work{'ask'}{$_} >= $config{'hit_to_ask'} and !exists $work{'asked'}{$_} } keys %{ $work{'ask'} }
+                  grep { $work{'ask'}{$_} >= $config{'hit_to_ask'} and !exists $work{'asked'}{$_} } keys %{ $work{'ask'} }
                 )
               ];
               printlog( 'warn', "reasking" ), $work{'toask'} = [ (
-                  sort { $work{'ask'}{$b} <=> $work{'ask'}{$a} }
-                    grep {
-                          $work{'ask'}{$_} >= $config{'hit_to_ask'}
+                  sort { $work{'ask'}{$b} <=> $work{'ask'}{$a} } grep {
+                    $work{'ask'}{$_} >= $config{'hit_to_ask'}
                       and $work{'asked'}{$_}
                       and $work{'asked'}{$_} + $config{'ask_retry'} < $time
                     } keys %{ $work{'ask'} }
@@ -226,11 +213,8 @@ for ( grep { length $_ } @ARGV ) {
           ( $s{nick}, $s{string} ) = $_[0] =~
             #/^<([^>]+)> (.+)$/s;
             /^(?:<|\* )(.+?)>? (.+)$/s;
-          if ( $s{nick} and $s{string} ) {
-            $db->insert_hash( 'chat', { %s, 'time' => int(time), 'hub' => $dc->{'hub'}, } );
-          } else {
-            printlog( 'err', 'wtf chat', @_ );
-          }
+          if ( $s{nick} and $s{string} ) { $db->insert_hash( 'chat', { %s, 'time' => int(time), 'hub' => $dc->{'hub'}, } ); }
+          else                           { printlog( 'err', 'wtf chat', @_ ); }
         },
         'welcome' => sub {
           my $dc = shift;
@@ -270,21 +254,18 @@ for ( grep { length $_ } @ARGV ) {
           );
           ++$work{'stat'}{'Quit'};
         },
-        #      'To' => sub {        my $dc = shift;printlog('to', @_);},
+        #'To' => sub {        my $dc = shift;printlog('to', @_);},
       },
       %config,
     );
     $dc->connect($hub);
-
-$dc->{'clients'}{'listener_http'}{'handler'}{''} = sub {
-my $dc = shift;
-  printlog "my cool cansend [$dc->{'geturl'}]";
-$dc->{'socket'}->send("Content-type: text/html\n\n"."hi");
-#$dc->{'socket'}->close();
-$dc->destroy();
-};
-
-
+    $dc->{'clients'}{'listener_http'}{'handler'}{''} = sub {
+      my $dc = shift;
+      printlog "my cool cansend [$dc->{'geturl'}]";
+      $dc->{'socket'}->send( "Content-type: text/html\n\n" . "hi" );
+      #$dc->{'socket'}->close();
+      $dc->destroy();
+    };
     push @dc, $dc;
     $_->work() for @dc;
   }
@@ -299,9 +280,7 @@ while ( my @dca = grep { $_ and $_->active() } @dc ) {
         my @users = grep { $dc->{'NickList'}{$_}{'online'} } keys %{ $dc->{'NickList'} };
         my $share;
         $dc->cmd('GetINFO');
-        for ( 1, 0 .. scalar(@users) / 1000 ) {
-          $_->work(1) for @dca;
-        }
+        for ( 1, 0 .. scalar(@users) / 1000 ) { $_->work(1) for @dca; }
         $dc->work(1);
         $share += $dc->{'NickList'}{$_}{'sharesize'} for @users;
         printlog 'info', "hubsize $dc->{'hub'}: bytes = $share users=", scalar @users;
@@ -313,25 +292,10 @@ while ( my @dca = grep { $_ and $_->active() } @dc ) {
     ,
     @dc
   );
-  psmisc::schedule(
-    [ 300, 60 * 40 ],
-    our $hubrunhour_ ||= sub {
-      psmisc::startme('calch');
-    }
-    ),
-    psmisc::schedule(
-    [ 600, 60 * 60 * 6 ],
-    our $hubrunrare_ ||= sub {
-      psmisc::startme('calcr');
-    }
-    ) if $config{'use_slow'};
-  psmisc::schedule(
-    900,
-    $config{'purge'} / 10,
-    our $hubrunpurge_ ||= sub {
-      psmisc::startme('purge');
-    }
-  );
+  psmisc::schedule( [ 300, 60 * 40 ], our $hubrunhour_ ||= sub { psmisc::startme('calch'); } ),
+    psmisc::schedule( [ 600, 60 * 60 * 6 ], our $hubrunrare_ ||= sub { psmisc::startme('calcr'); } )
+    if $config{'use_slow'};
+  psmisc::schedule( [ 900, 86400 ], $config{'purge'} / 10, our $hubrunpurge_ ||= sub { psmisc::startme('purge'); } );
 }
 printlog 'dev', map { $_->{'host'} . ":" . $_->{'status'} } @dc;
 #psmisc::caller_trace(20);

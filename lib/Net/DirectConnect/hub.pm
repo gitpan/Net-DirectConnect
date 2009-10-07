@@ -1,18 +1,16 @@
-# $Id: hub.pm 395 2009-01-09 05:34:13Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/hub.pm $
+#$Id: hub.pm 472 2009-08-25 05:52:44Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/hub.pm $
 package Net::DirectConnect::hub;
 use Net::DirectConnect;
 use Net::DirectConnect::hubcli;
 use strict;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 395 $' ) )[1];
-#our @ISA = ('Net::DirectConnect');
+our $VERSION = ( split( ' ', '$Revision: 472 $' ) )[1];
 use base 'Net::DirectConnect';
 
 sub init {
   my $self = shift;
   %$self = (
     %$self,
-    #
     'incomingclass' => 'Net::DirectConnect::hubcli',
     'auto_connect'  => 0,
     'auto_listen'   => 1,

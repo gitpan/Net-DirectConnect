@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#my $Id = '$Id: countub.pl 432 2009-01-12 01:53:07Z pro $';
+#my $Id = '$Id: countub.pl 473 2009-10-07 20:35:21Z pro $';
 
 =copyright
 counting users-bytes from dchub for mrtg or cacti (snmpd)
@@ -17,7 +17,7 @@ my $dc = Net::DirectConnect::clihub->new(
   'log' => sub { },    # no logging
 );
 $dc->connect();
-#  $dc->cmd('GetNickList');
+#$dc->cmd('GetNickList');
 my ($share) = (0);
 $dc->wait_connect();    #for 1 .. 3;
 $dc->cmd('GetINFO');

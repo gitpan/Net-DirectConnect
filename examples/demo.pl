@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-# $Id: demo.pl 432 2009-01-12 01:53:07Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/demo.pl $
+#$Id: demo.pl 473 2009-10-07 20:35:21Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/demo.pl $
 use strict;
 no warnings qw(uninitialized);
 use Data::Dumper;    #dev only
@@ -39,7 +39,7 @@ $dc->chatline('hello world');
 $dc->sendcmd('GetINFO');
 $dc->search('3P7MBNO5COD4TLTVXLJB53ZJBVIL2QRHIGZ2N5A');
 $dc->search('xxx');
-# get all filelists
+#get all filelists
 $dc->get( $_, 'files.xml.bz2', $_ . '.xml.bz2' ), $dc->work() for grep $_ ne $dc->{'Nick'}, keys %{ $dc->{'NickList'} };
 #$dc->get('user', 'TTH/I2VAVWYGSVTBHSKN3BOA6EWTXSP4GAKJMRK2DJQ', 'file.zip'); # get file by tth from user
 $dc->work(10);

@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: psweb.pm 4249 2009-01-11 20:55:18Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
+#$Id: psweb.pm 4323 2009-08-25 05:43:42Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
 
 =copyright
 PRO-search web shared library
@@ -19,11 +19,10 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 =cut
 
-# print "Content-type: text/html\n\n" if defined($ENV{'SERVER_PORT'}); # for web dev debug
-#    print "misc execute " , $mi++;
-#=pac
+#print "Content-type: text/html\n\n" if defined($ENV{'SERVER_PORT'}); # for web dev debug
 package psweb;
 use locale;
+use Encode;
 #use utf8;
 use Data::Dumper;    #dev only
 $Data::Dumper::Sortkeys = 1;
@@ -50,12 +49,13 @@ require Exporter;
   cache_file_css
   is_img
   %work %config %stat %static $param
-  );    #%human %processor %program %out
+);
 use strict;
 use Socket;
 #use Time::HiRes qw(time);
 no warnings qw(uninitialized);
-our ( %config, %work, %stat, %static, $param, );    #%human,%processor,%program, %out,
+our ( %config, %work, %stat, %static, $param, );
+#*config=\%::config;
 sub BEGIN { $static{'script_start'} = psmisc::timer(); }
 
 sub config_init {
@@ -63,7 +63,7 @@ sub config_init {
   my ($param) = @_;
   conf(
     sub {
-      #      print "psweb::config_init;";
+      #print "psweb::config_init;";
       #my ($param) = @_;   # print "confonce($param);";    #,%$param   ;
       $config{'root_url'} ||= $ENV{'SCRIPT_NAME'} if $ENV{'REQUEST_URI'} =~ /^\Q$ENV{'SCRIPT_NAME'}/;
       $config{'root_dir'} ||= $1 if $ENV{'SCRIPT_NAME'} =~ m{^(.*/)([^/]+)?};
@@ -72,26 +72,22 @@ sub config_init {
       $config{'root_url'} ||= './';
       $config{'css_url'}  ||= $config{'root_dir'};
       $config{'js_url'}   ||= $config{'root_dir'};
-      #$config{'rewrite'} = $ENV{'REDIRECT_URL'};
+      $config{'img_url'}  ||= $config{'root_dir'};
       $config{'rewrite'} = $ENV{'REQUEST_URI'};
       $config{'rewrite'} =~ s/^$config{'root_dir'}(?:$script)?//;
       $config{'rewrite'} =~ s/\?.*//;
       $config{'rewrite'} = decode_url( $config{'rewrite'} );
-      #print "\n\nDC[$config{'rewrite'}; root=$config{'root_dir'}; scr=$script; req=$ENV{'REQUEST_URI'};]";
       $config{'result'} ||= $config{'rewrite'} || grep { defined( $param->{$_} ) } @{ $config{'user_param_founded'} };
-#psmisc::caller_trace(10);
-#print "RE[$config{'result'}] $config{'rewrite'} ||",@{ $config{'user_param_founded'} }, " :: ", Dumper $param, grep {defined( $param->{$_} )} @{ $config{'user_param_founded'} };
       $config{'gotopage_bb'} ||= 5;    #gotopage buttons before current
       $config{'gotopage_ba'} ||= 5;    #      --//--     after  --//--
       $config{'jscript_open'}  ||= "<script type=\"text/javascript\" language=\"JavaScript\"><!--\n";
       $config{'jscript_close'} ||= "\n//--></script>";
-      $config{'lang_default'} ||= '';  # empty = autodetect, en or ru or...
-                                       #      $config{'lng_default_auto'}           ||= 'en';               # if autodetect fail
+      $config{'lang_default'} ||= '';    # empty = autodetect, en or ru or...
+      #$config{'lng_default_auto'}           ||= 'en';               # if autodetect fail
       $config{'lng'}{'en'}{'language-code'} ||= 'en';
       $config{'lng'}{'en'}{'codepages'}     ||= [qw(utf-8 iso-8859-1)];
       $config{'lng'}{'ru'}{'language-code'} ||= 'ru';
       $config{'config_sets'}                ||= [qw(mode style)];
-      #  @{ $config{'config_user'} } = qw(mode style codepage lang specify on_page);
       $config{'config_user'} ||= [ @{ $config{'config_sets'} }, qw(codepage lang specify on_page css css_add ) ];
       $config{'lng'}{''}{'darr'}      ||= '&darr;';
       $config{'lng'}{''}{'uarr'}      ||= '&uarr;';
@@ -106,63 +102,47 @@ sub config_init {
       $config{'http-header-default'}  ||= "http-header: text/plain\n\n";    #'text/html'
       $config{'post_init_every'}{'psweb'} = sub {
         my ($param) = @_;
-        # print "confonce($param);";    #,%$param   ;
         local %_;
         @_{ @{ $config{'param_cookie'} or [] } } = (1) x @{ $config{'param_cookie'} or [] };
         delete $param->{$_} for grep { !$_{$_} } keys %{ get_params_one( undef, split( /;\s*/, $ENV{'HTTP_COOKIE'} ) ) };
         %$param = ( %{ $param || {} }, %{ $config{'force_param'} || {} } );
         $param->{ $config{'param_trans'}{$_} } = $param->{$_} for ( grep $config{'param_trans'}{$_}, keys %$param );
         $config{'view'} ||= ( $param->{'view'} || ( defined( $ENV{'SERVER_PORT'} ) ? 'html' : 'text' ) );
-        #warn "view=$config{'view'}; sp=$ENV{'SERVER_PORT'};";
-        #        my $l =  $ENV{'HTTP_ACCEPT_LANGUAGE'};
-        #print "ps[$ENV{'HTTP_ACCEPT_LANGUAGE'}]";
-        for ( map { lc } split( /\s*,\s*/, $ENV{'HTTP_ACCEPT_LANGUAGE'} ) ) {
+        for ( split( /\s*,\s*/, $ENV{'HTTP_ACCEPT_LANGUAGE'} ) ) {
+          $_ = lc;
           s/\;.*$//;
-          #          s/\;.*$//;
-          #print "test1 [$_];"; #, keys %{$config{'lng'}};
           $work{'lang'} ||= $_, last if $config{'lng'}{$_};
-          #{
-          #print "test2 [$_];"; #, keys %{$config{'lng'}};
           $work{'lang'} ||= $_, last if s/-(\w+)$// and ( $config{'lng'}{$_} or $config{'lng'}{$1} );
-          #}
-          #          undef $_;
         }
-#print "selected [$work{'lang'}]";
-#        print "langselect1 $l, $config{'lng_default'},",( ( grep { $config{'lng'}{$_} } split( /\s*\,\s*/, $l ) )[0] or $config{'lng_default'} );
-#        $l =~ s/\;.*$//;
-#        print "langselect2 $l, $config{'lng_default'},",( ( grep { $config{'lng'}{$_} } split( /\s*\,\s*/, $l ) )[0] or $config{'lng_default'} );
-        $work{'lang'} ||=
-          #          ( ( grep { $config{'lng'}{$_} } split( /\s*\,\s*/, $l ) )[0]
-          $config{'lang_default'};
-        #        print "worklang = $work{'lang'}\n";
-        $work{$_} = ( $param->{$_} || $config{$_} || $work{$_} )
-          #,print("work{$_}=$work{$_}; ")
-          for @{ $config{'config_sets'} };
+        if ( !$work{'lang'} or $work{'lang'} eq 'en' ) {
+          $ENV{'HTTP_USER_AGENT'} =~ /\(([^)]+)\)/;
+          for ( split '; ', $1 ) {
+            $_ = lc;
+            $work{'lang'} = $_, last if exists $config{'lng'}{$_} and $config{'lng'}{$_};
+          }
+        }
+        $work{$_} = ( $param->{$_} || $config{$_} || $work{$_} ) for @{ $config{'config_sets'} };
         #TODO recurse hash copy
-        %config = ( %config, %{ $config{ $work{$_} } || {} } )
-          #   ,print("setconf $_=$work{$_} =$config{ $work{$_} }= ", %{ $config{ $work{$_} } or {}})
-          for @{ $config{'config_sets'} };
-        $work{$_} = ( length( $param->{$_} ) ? $param->{$_} : ( $config{$_} or $work{$_} ) )
-          #     , print("work{$_}=$work{$_};")
-          for @{ $config{'config_user'} };
-        #  $config{$_} = ( $param->{$_} ) for grep defined( $param->{$_} ), @{ $config{'param_config'} };
+        %config = ( %config, %{ $config{ $work{$_} } || {} } ) for @{ $config{'config_sets'} };
+        $work{$_} = ( length( $param->{$_} ) ? $param->{$_} : ( $config{$_} or $work{$_} ) ) for @{ $config{'config_user'} };
         $work{$_} = $param->{$_} for grep { defined( $param->{$_} ) } @{ $config{'param_config'} };
+        $work{'lang'} = undef if $work{'lang'} and !exists $config{'lng'}{ $work{'lang'} };
+        $work{'lang'} ||= $config{'lang_default'};
         $config{'lng'}{'ru'}{'codepages'} ||= [ keys %{ $config{'trans'} } ];
-        #print $work{'lang'}, Dumper $config{'lng'}{$work{'lang'}}{'codepages'};
         my %c = ( map { $_ => 1 } @{ $config{'lng'}{ $work{'lang'} }{'codepages'} || [] } );
+
         for ( map { lc } split( /\s*,\s*/, $ENV{'HTTP_ACCEPT_CHARSET'} ) ) {
           s/\;.*$//;
           $_ = psmisc::cp_normalize( $_ || next );
-          #print Dumper(\%c);
-          #print "CPSEL[$_][$work{'codepage'}]" if $c{$_};
           $work{'codepage'} ||= $_, last if $c{$_};
         }
-        #cp_trans_hash($work{'codepage'}, $config{'cp_int'}, $param);
-        $work{'codepage'} ||= $config{'lng'}{ $work{'lang'} }{'codepage_default'} || $config{'codepage_default'};
+        $work{'codepage'} = undef if $work{'codepage'} and !Encode::find_encoding( $work{'codepage'} );
+        $work{'codepage'} ||=
+             $config{'lng'}{ $work{'lang'} }{'codepage_default'}
+          || $config{'codepage_default'}
+          || $config{'codepage'};
         $work{'codepage'} = psmisc::cp_normalize( $work{'codepage'} );
-        #print "CP=[$work{'codepage'};$config{'codepage'};$param->{'codepage'}]";
         $config{'rewrite'} = cp_trans( 'utf-8', $work{'codepage'}, $config{'rewrite'} );
-        #print "CP=[$work{'codepage'};$config{'codepage'};$param->{'codepage'}] === REW[$config{'rewrite'}]";
         $config{'lng'}{'en'}{'specify'} ||= 'more options';
         }
     },
@@ -172,36 +152,36 @@ sub config_init {
     sub {
       $config{'out'}{''}{'search'} ||= sub {
         my ( $param, $table, $where ) = @_;
-        #  printlog( 'dev', 'SEARCHSS', $where, 'lim=', $static{'db'}->{'limit'} );
+        #print( 'dev', 'SEARCHSS', $where, 'lim=', $static{'db'}->{'limit'} );
         part( 'similar-query', $param, $table ) if $param->{'q'};
-        #            printlog( 'dev', 'search001' , Dumper($param));
+        #printlog( 'dev', 'search001' , Dumper($param));
         $static{'db'}->user_params($param);
-        #        $static{'db'}->dump_cp();
+        #$static{'db'}->dump_cp();
         my $tim = time();
-        #    printlog( 'dev', 'tim0', $stat{'found_time'} ,time() , $tim);
+        #printlog( 'dev', 'tim0', $stat{'found_time'} ,time() , $tim);
         $static{'db'}->count( $param, $table ) if $static{'db'}->{'page'} eq 'rnd';
         $stat{'found_time'} += time() - $tim;
-        #    printlog( 'dev', 'tim1', $stat{'found_time'} ,time() , $tim);
-        #  printlog( 'dev', 'search01', $static{'db'}->{'limit_offset'}, $static{'db'}->{'page'} );
+        #printlog( 'dev', 'tim1', $stat{'found_time'} ,time() , $tim);
+        #printlog( 'dev', 'search01', $static{'db'}->{'limit_offset'}, $static{'db'}->{'page'} );
         my $err;
-        #        printlog( 'dev', 'search00', $where, 'lim=', $static{'db'}->{'limit'} );
+        #printlog( 'dev', 'search00', $where, 'lim=', $static{'db'}->{'limit'} );
         $where ||= $static{'db'}->where( $param, undef, $table );
         if ( $where and $static{'db'}->{'limit'} > 0 ) {
-          #        printlog( 'dev', 'search0', $where, 'lim=', $static{'db'}->{'limit'} );
+          #printlog( 'dev', 'search0', $where, 'lim=', $static{'db'}->{'limit'} );
 
 =was
     if ( $static{'db'}->{'limit'} > 0 ) {
-#            printlog( 'dev', 'search1', $where , $param->{'codepage'} ,$static{'db'}->{'cp_in'});
+#printlog( 'dev', 'search1', $where , $param->{'codepage'} ,$static{'db'}->{'cp_in'});
       psmisc::flush();
-#      ++$err if $static{'db'}->prepare( $static{'db'}->select_body( scalar cp_trans( $param->{'codepage'} ,$static{'db'}->{'codepage'}, $where ), $param, $table ) ) > 0;
+#++$err if $static{'db'}->prepare( $static{'db'}->select_body( scalar cp_trans( $param->{'codepage'} ,$static{'db'}->{'codepage'}, $where ), $param, $table ) ) > 0;
       ++$err if $static{'db'}->prepare( $static{'db'}->select_body( $where , $param, $table ) ) > 0;
-    #            printlog( 'dev', 'serr=', $err, $static{'db'}->{'sth'}, $static{'db'}->{'actual'}, $static{'db'}->{'limit'} );
+#printlog( 'dev', 'serr=', $err, $static{'db'}->{'sth'}, $static{'db'}->{'actual'}, $static{'db'}->{'limit'} );
     }
     if ( !$err and $static{'db'}->{'sth'} and $static{'db'}->{'actual'} > 0 and $static{'db'}->{'limit'} > 0 ) {
       #printlo
       my $row = $static{'db'}->{'sth'}->fetchrow_hashref();
       part( 'result_head', $param, $table, $row, { 'no_cont' => 1 } );
-      # while ( my $row = $static{'db'}->{'sth'}->fetchrow_hashref ) {
+#while ( my $row = $static{'db'}->{'sth'}->fetchrow_hashref ) {
       while ($row) {
         part( 'result_string_pre', $param, $table, $row, { 'no_cont' => 1 } );
         part( 'result_string',     $param, $table, $row, { 'no_cont' => 1 } );
@@ -213,61 +193,61 @@ sub config_init {
       part( 'result_foot', $param, $table, undef, { 'no_cont' => 1 } );
     }
     $static{'db'}->count( $param, $table );
-    #     $static{'db'}->count( $param, $table );
+#$static{'db'}->count( $param, $table );
     part( 'result_error', $param, $table ) if $err;
 =cut
 
           psmisc::flush();
-#    if ( $static{'db'}->{'limit'} > 0 ) {
-#            printlog( 'dev', 'search1', $where , $param->{'codepage'} ,$static{'db'}->{'cp_in'});
-#      ++$err if $static{'db'}->prepare( $static{'db'}->select_body( scalar cp_trans( $param->{'codepage'} ,$static{'db'}->{'codepage'}, $where ), $param, $table ) ) > 0;
-#      ++$err if $static{'db'}->prepare( $static{'db'}->select_body( $where , $param, $table ) ) > 0;
-#            printlog( 'dev', 'serr=', $err, $static{'db'}->{'sth'}, $static{'db'}->{'actual'}, $static{'db'}->{'limit'} );
-#    }
-#    if ( !$err and $static{'db'}->{'sth'} and $static{'db'}->{'actual'} > 0 and $static{'db'}->{'limit'} > 0 ) {
+#if ( $static{'db'}->{'limit'} > 0 ) {
+#printlog( 'dev', 'search1', $where , $param->{'codepage'} ,$static{'db'}->{'cp_in'});
+#++$err if $static{'db'}->prepare( $static{'db'}->select_body( scalar cp_trans( $param->{'codepage'} ,$static{'db'}->{'codepage'}, $where ), $param, $table ) ) > 0;
+#++$err if $static{'db'}->prepare( $static{'db'}->select_body( $where , $param, $table ) ) > 0;
+#printlog( 'dev', 'serr=', $err, $static{'db'}->{'sth'}, $static{'db'}->{'actual'}, $static{'db'}->{'limit'} );
+#}
+#if ( !$err and $static{'db'}->{'sth'} and $static{'db'}->{'actual'} > 0 and $static{'db'}->{'limit'} > 0 ) {
 #printlo
-#      my $row = $static{'db'}->{'sth'}->fetchrow_hashref();
+#my $row = $static{'db'}->{'sth'}->fetchrow_hashref();
           my $n;
           my $tim = time();
           for my $row ( $static{'db'}->select( $table, $param ) ) {
-            #        printlog( 'dev', 'searchr0', $row);
-            #       $stat{'found_time'} ||= time() - $work{'start_time'};
+            #printlog( 'dev', 'searchr0', $row);
+            #$stat{'found_time'} ||= time() - $work{'start_time'};
             $stat{'found_time'} += time() - $tim unless $n;
-            #    printlog( 'dev', 'tim2', $stat{'found_time'} ,time() , $tim);
+            #printlog( 'dev', 'tim2', $stat{'found_time'} ,time() , $tim);
             part( 'result_head', $param, $table, $row, { 'no_cont' => 1 } ) unless $n++;
-            # while ( my $row = $static{'db'}->{'sth'}->fetchrow_hashref ) {
-            #      while ($row) {
+            #while ( my $row = $static{'db'}->{'sth'}->fetchrow_hashref ) {
+            #while ($row) {
             part( 'result_string_pre', $param, $table, $row, { 'no_cont' => 1 } );
             part( 'result_string',     $param, $table, $row, { 'no_cont' => 1 } );
             ++$stat{'results'};
             part( 'result_string_post', $param, $table, $row, { 'no_cont' => 1 } );
-            #        $row = $static{'db'}->{'sth'}->fetchrow_hashref;
-            #        printlog( 'dev', 'searchr1', $row);
+            #$row = $static{'db'}->{'sth'}->fetchrow_hashref;
+            #printlog( 'dev', 'searchr1', $row);
           }
           $err += $static{'db'}->err();
-          #            printlog( 'dev', 'search err', $static{'db'}->err());
+          #printlog( 'dev', 'search err', $static{'db'}->err());
           $static{'db'}->count( $param, $table );
           $err += $static{'db'}->err();
           part( 'result_foot', $param, $table, undef, { 'no_cont' => 1 } );
-          #    }
-          #    $static{'db'}->count( $param, $table );
-          #     $static{'db'}->count( $param, $table );
+          #}
+          #$static{'db'}->count( $param, $table );
+          #$static{'db'}->count( $param, $table );
           part( 'result_error', $param, $table ) if $err;
         }
-        #  $stat{'found_time'} ||= time() - $work{'start_time'};
+        #$stat{'found_time'} ||= time() - $work{'start_time'};
         part( 'result-report', $param ) unless $err;
       };
       $config{'out'}{''}{'main_or_search'} ||= sub {
         my ( $param, $table ) = @_;
         my ($param_num);
-        #        my $wparam = {%$param};
+        #my $wparam = {%$param};
         #print "PCP1[$work{'codepage'}, $config{'cp_int'}]($wparam->{path})", Dumper $wparam;
         #cp_trans_hash( $work{'codepage'}, $config{'cp_int'}, $wparam );
         #print "PCP2[$work{'codepage'}, $config{'cp_int'}]($wparam->{path})";
         my $where = $static{'db'}->where( $param, $param_num, $table );
         uniout( \$config{'html_result_bef'}, $param ) if $where;
-        #  $work{'start_time'} ||= time();
-        #    printlog( 'dev', 'PRE-SERACH', $where, %$param, $table );
+        #$work{'start_time'} ||= time();
+        #printlog( 'dev', 'PRE-SERACH', $where, %$param, $table );
         if ( (
                ( $where and ( $static{'db'}->where( \%{ $config{'force_param'} }, $param_num, $table ) ne $where ) )
             or ( $param->{ 'count_f' . $param_num }    and !$config{'force_param'}{ 'count_f' . $param_num } )
@@ -285,9 +265,9 @@ sub config_init {
         part( 'loading', $param ) if ( $config{'ajax'} );
         part( 'pre-search-form', $param, $table );
         part( 'search-form',     $param, $table );
-        # print '<br/><br/>', lang('starting downloading'), ' <a href="', $param->{'go'}, '">', $param->{'go'}, '</a><br/>',
-        #   lang('if download does not start you can try other locations'), '<br/><br/>'
-        # if $param->{'go'};
+        #print '<br/><br/>', lang('starting downloading'), ' <a href="', $param->{'go'}, '">', $param->{'go'}, '</a><br/>',
+        #lang('if download does not start you can try other locations'), '<br/><br/>'
+        #if $param->{'go'};
       };
       $config{'out'}{'html'}{'search-form'} ||= sub {
         my ( $gparam, $table ) = @_;
@@ -301,17 +281,17 @@ sub config_init {
           ';',
           'for(i = 0; i < obj.length; ++i) { if (!obj[i].value || obj[i].className==\'input-help\') obj[i].disabled=true;}',
           '}',
-          #    'for(i in obj) { if (!obj[i].value || obj[i].className==\'input-help\') obj[i].disabled=true;}', '}',
+          #'for(i in obj) { if (!obj[i].value || obj[i].className==\'input-help\') obj[i].disabled=true;}', '}',
           'function enable_form(obj) {',
           'for(i = 0; i < obj.length; ++i) if (!obj[i].value || obj[i].className==\'input-help\') obj[i].disabled=false;', '}',
-#    'for(i in obj) if (\'value\' in obj[i] &&(!obj[i].value || obj[i].className==\'input-help\')&& \'disabled\' in obj[i]) obj[i].disabled=false;', '}',
+#'for(i in obj) if (\'value\' in obj[i] &&(!obj[i].value || obj[i].className==\'input-help\')&& \'disabled\' in obj[i]) obj[i].disabled=false;', '}',
           $config{'jscript_close'};
         print ' <form method="', $config{'form_method'}, '" action="', $config{'root_url'},
           '" id="searchform" ' . $config{'js_debug'} . 'onsubmit="disable_form(this);',
           ( $config{'ajax'} ? 'dosubmit(); return false;' : '' ),
           '" ' . $config{'js_debug'} . 'onmouseover="enable_form(this);" ',
-#    (!$config{'no_ajax'} ? ' onchange="alert(100);dosubmit();" ' : ''),
-#    (!$config{'no_ajax'} ? ' onkeypress="disable_form(this);dosubmit();enable_form(this);" _onchange="disable_form(this);dosubmit();enable_form(this);" ' : ''),
+#(!$config{'no_ajax'} ? ' onchange="alert(100);dosubmit();" ' : ''),
+#(!$config{'no_ajax'} ? ' onkeypress="disable_form(this);dosubmit();enable_form(this);" _onchange="disable_form(this);dosubmit();enable_form(this);" ' : ''),
           '>';
         part( 'search-form-input', $param, $table );
         print $config{'jscript_open'}, qq@
@@ -322,7 +302,9 @@ for(i in obj){
 setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>1)el.value=1;});
 }
 @, $config{'jscript_close'};
-        print '</form>';
+        print '</form>',
+          #$config{'jscript_open'},        qq@form_strip_setup('searchform');@,        $config{'jscript_close'},
+          ;
       };
       $config{'out'}{'html'}{'http-header'}   ||= "Content-type: text/html\n\n";
       $config{'out'}{'html'}{'form-i-search'} ||= sub {
@@ -353,26 +335,24 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
             )
           : uniout( $config{'i-search_bef'} )
           ),
-          '<input type="text" ', nameid( 'q' . $paramnum ), ' size="', (
-          ( !$paramnum and $config{'main_q_length'} )
+          '<input type="text" ', nameid( 'q' . $paramnum ), ' size="',
+          ( ( !$paramnum and $config{'main_q_length'} )
           ? $config{'main_q_length'}
-          : check_int( length( $param->{ 'q' . $valuenum } ), 20, 30, 20 )
-          ),
-          '" maxlength="160" ', value( $param->{ 'q' . $valuenum } ),
-          #      '" maxlength="160" value="', to_quot($param->{'q'.$valuenum}, '"'),
-          #      '" />', $config{'form-i-search-input_right'};
-          #    (!$config{'no_ajax'} ? ' onchange="dosubmit();" ' : ''),
-          #    (!$config{'no_ajax'} ? ' onkeypress="dosubmit();" ' : ''),
+          : check_int( length( $param->{ 'q' . $valuenum } ), 20, 30, 20 ) ), '" maxlength="160" ',
+          value( $param->{ 'q' . $valuenum } ),
+          #'" maxlength="160" value="', to_quot($param->{'q'.$valuenum}, '"'),
+          #'" />', $config{'form-i-search-input_right'};
+          #(!$config{'no_ajax'} ? ' onchange="dosubmit();" ' : ''),
+          #(!$config{'no_ajax'} ? ' onkeypress="dosubmit();" ' : ''),
           '/>', $config{'form-i-search-input_bef'};
-        print '<input ', (
-          !$config{'ajax'}
+        print '<input ',
+          ( !$config{'ajax'}
           ? 'type="submit"'
           : 'type="button" '
             . $config{'js_debug'}
-            . 'onclick="disable_form(my_getbyid(\'searchform\'));dosubmit(); return false;"'
-          ),
-          ' value="' . lang('search'), '"/> '
-          unless ( defined($paramnum) );
+            . 'onclick="disable_form(my_getbyid(\'searchform\'));dosubmit(); return false;"' ), ' value="'
+          #. 'onclick="dosubmit(); return false;"' ), ' value="'
+          . lang('search'), '"/> ' unless ( defined($paramnum) );
       };
       $config{'out'}{'html'}{'form-reset'} ||= sub {
         my ( $param, $table, $fparam, $cparam, $paramnum, $valuenum ) = @_;
@@ -387,7 +367,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
           undef, {
                 'onclick' => 'var obj = my_getbyid(\'searchform\');'
               . 'for(i = 0; i < obj.length; ++i) { if (obj[i].value && (obj[i].className!=\'input-help\' && obj[i].type!=\'submit\' && obj[i].type!=\'button\')) obj[i].value=\'\';}; return false;',
-#        . 'for(i in obj) { if (obj[i].value && (obj[i].className!=\'input-help\' && obj[i].type!=\'submit\' && obj[i].type!=\'button\')) obj[i].value=\'\';}; return false;',
+#. 'for(i in obj) { if (obj[i].value && (obj[i].className!=\'input-help\' && obj[i].type!=\'submit\' && obj[i].type!=\'button\')) obj[i].value=\'\';}; return false;',
             'href' => '#'
           },
           {}
@@ -403,7 +383,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
       };
       $config{'out'}{'html'}{'form-links'} ||= sub {
         my ( $param, $table ) = @_;
-        #  print "ZZZ";
+        #print "ZZZ";
         print $config{'form-link-bef'}, mylink( lang('..'), undef, undef, { 'base' => $_ } ), $config{'form-link-aft'},
           $config{'sel_sep'}
           if !$config{'no_form-links-up'} and ( ( $_ = $config{'root_url'} ) =~ s|^(\w+://[^/]+)/.+$|$1| );
@@ -419,7 +399,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
         my ( $param, $table, $fparam, $cparam, $paramnum, $valuenum ) = @_;
         part( 'form-adjust-win', $param, $table, undef, { 'cont_param' => ' style="display:none;" ' }, $paramnum, $valuenum );
         print $config{'form-link-bef'},
-          '<a href="#" '
+            '<a href="#" '
           . $config{'js_debug'}
           . 'onclick="menu_toggle(this, my_getbyid(\'form-adjust-win\'), -20, 5);return false;">', lang('adjust'), '</a>',
           $config{'form-link-aft'};
@@ -433,7 +413,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
       $config{'out'}{'html'}{'form-adjust-win'} ||= sub {
         my ( $param, $table, $fparam, $cparam, $paramnum, $valuenum ) = @_;
         print lang('show results'),
-          '<select name="on_page" dir="ltr" '
+            '<select name="on_page" dir="ltr" '
           . $config{'js_debug'}
           . 'onchange="createCookie(\'on_page\', value);"><option value=""></option>',
           map( (
@@ -444,7 +424,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
           ( 10, 20, 50, 100 ) ),
           '</select><br/><br/>';
         print lang('specify'),
-          '<select name="on_page" dir="ltr" '
+            '<select name="on_page" dir="ltr" '
           . $config{'js_debug'}
           . 'onchange="createCookie(\'specify\', value); if(value==\'on\') allow_show_adv_auto = 1,show_adv(); if(value==\'off\') allow_show_adv_auto = 0, hide_adv();if(value==\'auto\') allow_show_adv_auto = 1;"><option value=""></option>',
           map( (
@@ -462,7 +442,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
           @{ $config{'img_show_sizes'} } ),
           '</select><br/>'
           unless $config{'no_player'};
-#          print ' Будут показаны картинки с размером, не превышающий указанный, если all - то все картинки. Целесообразно использовать с галочкой online' if $param->{'help'};
+#print ' Будут показаны картинки с размером, не превышающий указанный, если all - то все картинки. Целесообразно использовать с галочкой online' if $param->{'help'};
         part( 'form-adjust-win-config', $param, $table, undef, undef, $paramnum, $valuenum );
         print '<br/><a href="#" ' . $config{'js_debug'} . 'onclick="window.location.reload(false);">', lang('apply'), '</a>';
         print '<br/><a href="#" ' . $config{'js_debug'} . 'onclick="',
@@ -485,7 +465,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
           @{ $config{'user_param_founded'} } ),
           map( 'if (!checked &amp;&amp; (my_getbyid(\''
             . $_
-            #   map( 'if (!checked && (my_getbyid(\'' . $_
+            #map( 'if (!checked && (my_getbyid(\'' . $_
             . '\').value== \'\' || my_getbyid(\'' 
             . $_
             . '\').className==\'input-help\')) my_getbyid(\''
@@ -499,10 +479,8 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
       };
       $config{'out'}{'html'}{'form-accurate'} ||= sub {
         my ( $param, $table, $fparam, $cparam, $paramnum, $valuenum ) = @_;
-        if (
-          grep { $config{'sql'}{'table'}{$table}{$_}{'fulltext'} and $config{'sql'}{'table'}{$table}{$_}{'stem'} }
-          keys %{ $config{'sql'}{'table'}{$table} }
-          )
+        if ( grep { $config{'sql'}{'table'}{$table}{$_}{'fulltext'} and $config{'sql'}{'table'}{$table}{$_}{'stem'} }
+          keys %{ $config{'sql'}{'table'}{$table} } )
         {
           print $config{'sel_sep_head'};
           my $link = 1 if $config{'result'} and $param->{ 'q' . $valuenum };
@@ -547,16 +525,16 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
             or $config{'table_param'}{$table}{'no_index'}
             or $config{'table_param'}{$table}{'ignore_index'} )
           {
-#  print'Искать только на доступных в данный момент ресурсах.' if $param->{'help'};      #  print'</tr><tr>' if $param->{'help'};
+ #print'Искать только на доступных в данный момент ресурсах.' if $param->{'help'};      #  print'</tr><tr>' if $param->{'help'};
             part( 'form-help', $param, $table, undef, undef, $work{'paramnum'}, $work{'valuenum'} );
             part(
               'form-link-hide-specify', $param, $table, undef,
-              #        { 'cont_param' => ' id="form-link-hide-specify" style="display:none;" ' },
+              #{ 'cont_param' => ' id="form-link-hide-specify" style="display:none;" ' },
               { 'cont_param' => ' style="display:none;" ' }, $work{'paramnum'}, $work{'valuenum'}
             ) unless $config{'no_hide'};
             part(
               'form-link-specify', $param, $table, undef, undef,
-              #      { 'cont_param' => ' id="form-link-specify" ' },
+              #{ 'cont_param' => ' id="form-link-specify" ' },
               $work{'paramnum'}, $work{'valuenum'}
             ) unless $config{'no_hide'};
           }
@@ -567,52 +545,50 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
           print $config{'sel_sep'};
         }
         my $name;
-        $name = lang( $_ . '_symb' ), ( $name eq $_ . '_symb' ? ( $name = lang($_) ) : () ), print($name ), (
-          ( $param->{'expert'} or $param->{ $_ . '_mode' . $work{'valuenum'} } )
+        $name = lang( $_ . '_symb' ), ( $name eq $_ . '_symb' ? ( $name = lang($_) ) : () ), print($name ),
+          ( ( $param->{'expert'} or $param->{ $_ . '_mode' . $work{'valuenum'} } )
           ? select_mode( $param, $work{'paramnum'}, $work{'valuenum'} )
-          : 0
-          ),
-          print(
+          : 0 ), print(
           '<input type="text" id="', $_, $work{'paramnum'}, '" name="', $_, $work{'paramnum'}, '" title="', lang($_),
           '" size="', psmisc::check_int( length( $param->{ $_ . $work{'valuenum'} } ), 5, 25 ),
-          #    (
-          #      ( defined( $param->{ $_ . $work{'valuenum'} } ) and ( length( $param->{ $_ . $work{'valuenum'} } ) > 5 ) )
-          #      ? length( $param->{ $_ . $work{'valuenum'} } )
-          #      : '5'
-          #    ),
+          #(
+          #( defined( $param->{ $_ . $work{'valuenum'} } ) and ( length( $param->{ $_ . $work{'valuenum'} } ) > 5 ) )
+          #? length( $param->{ $_ . $work{'valuenum'} } )
+          #: '5'
+          #),
           '" ', value( $param->{ $_ . $work{'valuenum'} } ), '/>'
           )
           for (
           sort { $config{'sql'}{'table'}{$table}{$b}{'order'} <=> $config{'sql'}{'table'}{$table}{$a}{'order'} } grep {
-                  !$config{ 'no_' . $_ }
+            !$config{ 'no_' . $_ }
               and $config{'sql'}{'table'}{$table}{$_}{'nav_field'}
               and !$config{'sql'}{'table'}{$table}{$_}{'nav_hide'}
           } keys %{ $config{'sql'}{'table'}{$table} }
           );
         print( $config{'sel_sep'} ), select_mode( $param, $work{'paramnum'}, $work{'valuenum'} ), print(
           '<input type="text" id="', $_, $work{'paramnum'}, '" name="', $_, $work{'paramnum'}, '" size="5" ',
-          #    ( defined( $param->{ $_ . $work{'valuenum'} } ) ? value($param->{ $_ . $work{'valuenum'} })  : '' ), '/> ' )
+          #( defined( $param->{ $_ . $work{'valuenum'} } ) ? value($param->{ $_ . $work{'valuenum'} })  : '' ), '/> ' )
           value( $param->{ $_ . $work{'valuenum'} } ), '/> '
           )
           for (
           sort { $config{'sql'}{'table'}{$table}{$b}{'order'} <=> $config{'sql'}{'table'}{$table}{$a}{'order'} } grep {
-                  !$config{ 'no_' . $_ }
+            !$config{ 'no_' . $_ }
               and $config{'sql'}{'table'}{$table}{$_}{'nav_num_field'}
               and !$config{'sql'}{'table'}{$table}{$_}{'nav_hide'}
           } keys %{ $config{'sql'}{'table'}{$table} }
           );
         print $config{'sel_sep'}, '<select id="search_days_mode', $work{'paramnum'}, '" name="search_days_mode',
           $work{'paramnum'}, '" dir="ltr">', '<option value="">', lang('days'), '</option>', '<option value="g" ',
-          ( $param->{ 'search_days_mode' . $work{'valuenum'} } =~ /[g>]/i ? 'selected="selected"' : '' ), '>', lang('>'),
+          ( $param->{ 'search_days_mode' . $work{'valuenum'} } =~ /[g>]/i ? 'selected="selected"' : '' ), '>', lang('<'),
           '</option>', '<option value="l" ',
-          ( $param->{ 'search_days_mode' . $work{'valuenum'} } =~ /[l<]/i ? 'selected="selected"' : '' ), '>', lang('<'),
+          ( $param->{ 'search_days_mode' . $work{'valuenum'} } =~ /[l<]/i ? 'selected="selected"' : '' ), '>', lang('>'),
           '</option>', '</select><input type="text" id="search_days', $work{'paramnum'}, '" name="search_days',
           $work{'paramnum'}, '" size="3" '
-          #    . (
-          #    defined( $param->{ 'search_days' . $work{'valuenum'} } )
-          #    ? value($param->{ 'search_days' . $work{'valuenum'} })
-          #    : ''
-          #    ),
+          #. (
+          #defined( $param->{ 'search_days' . $work{'valuenum'} } )
+          #? value($param->{ 'search_days' . $work{'valuenum'} })
+          #: ''
+          #),
           , value( $param->{ 'search_days' . $work{'valuenum'} } ), '/> '
           if !$config{'no_search_days'} and $config{'sql'}{'table'}{$table}{'time'};
         if ( $param->{'expert'} or defined( $param->{ 'gluel' . $work{'valuenum'} } ) ) {
@@ -652,8 +628,8 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
             sort { $config{'sql'}{'table'}{$table}{$b}{'order'} <=> $config{'sql'}{'table'}{$table}{$a}{'order'} }
             keys %{ $config{'sql'}{'table'}{$table} };
           print lang('page'), ':&nbsp;<input type="text" id="page" name="page" size="2" ', value( $param->{'page'} ), '/> ';
-          # (или "rnd")
-          #          print ' Показать данную страницу, если rnd - то случайную' if $param->{'help'};
+          #(или "rnd")
+          #print ' Показать данную страницу, если rnd - то случайную' if $param->{'help'};
           print $config{'sel_sep'}, '<select id="distinct" name="distinct" dir="ltr" ><option value="">', lang('distinct'),
             '</option>',
             map( {
@@ -678,7 +654,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
             #'if(document.getElementById) {',
             (
             map {
-   #        'var ph' . $_ . $work{'paramnum'} . ' = new InputPlaceholder (document.getElementById (\'' . $_ . $work{'paramnum'},
+           #'var ph' . $_ . $work{'paramnum'} . ' = new InputPlaceholder (document.getElementById (\'' . $_ . $work{'paramnum'},
               'var ph' . $_ . $work{'paramnum'} . ' = new InputPlaceholder (my_getbyid(\'' . $_ . $work{'paramnum'},
                 '\'), \'' . lang($_) . '\', \'\', \'input-help\');',
 #"\n",
@@ -687,7 +663,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
               $config{'sql'}{'table'}{$table}{$_}{'nav_field'}
               } keys %{ $config{'sql'}{'table'}{$table} }
             ),
-            #      "}",
+            #"}",
             $config{'jscript_close'} if !$config{'no_placeholder'} and $config{'input_help'} > $work{'paramnum'};
           if ( $work{'specify'} eq 'off' ) {
             print $config{'jscript_open'}, "allow_show_adv_auto = 0;", $config{'jscript_close'};
@@ -717,13 +693,12 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
               );
           }
         }
-        ++$work{'one'}{$_}
-          for grep {
-                $work{'paramnum'} ne 0
+        ++$work{'one'}{$_} for grep {
+          $work{'paramnum'} ne 0
             and !( $param->{'q'} and $static{'db'}->{'disable_slow'} )
             and $param->{ $_ . $work{'valuenum'} }
             and $param->{ $_ . $work{'valuenum'} } !~ /((^|\s)!)|[*]/
-          } keys %{ $config{'sql'}{'table'}{$table} };
+        } keys %{ $config{'sql'}{'table'}{$table} };
         $work{'paramnum'} += ( defined( $work{'paramnum'} ) ? 1 : 0 );
         $work{'valuenum'} = $work{'paramnum'} - ( $param->{'search_prev'} ? 1 : 0 );
         --$work{'valuenum'} if $work{'paramnum'} eq 0 and !$param->{'search_prev'};
@@ -733,15 +708,15 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
       $config{'out'}{'html'}{'head'} ||= sub {
         my ( $param, $table ) = @_;
         print '<?xml version="1.0"?>',
-          #    '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">',
+          #'<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">',
           '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">',
-          #          '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">',
+          #'<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">',
           '<html xmlns="http://www.w3.org/1999/xhtml" lang="'
           . lang('language-code')
           . '" xml:lang="'
           . lang('language-code') . '">';
         print '<head>';
-#    print map { '<META HTTP-EQUIV="Set-Cookie" CONTENT="' . $_ . '=' . encode_url($param->{$_}) . '; EXPIRES=Friday,31-Dec-15 23:59:59 GMT;"/>' } grep $param->{$_}, @{ $config{'user_param_save'} } ;# if $param->{'param_save'} # DOMAIN=domain_name; PATH=path;  SECURE
+#print map { '<META HTTP-EQUIV="Set-Cookie" CONTENT="' . $_ . '=' . encode_url($param->{$_}) . '; EXPIRES=Friday,31-Dec-15 23:59:59 GMT;"/>' } grep $param->{$_}, @{ $config{'user_param_save'} } ;# if $param->{'param_save'} # DOMAIN=domain_name; PATH=path;  SECURE
         part( 'head-head', $param, $table, undef, { 'no_cont' => 1 } );    #
         print '<meta http-equiv="Content-Type" content="text/html; charset=', lang( $work{'codepage'} ), '"/>',
           '<meta http-equiv="Content-Language" content="', lang('language-code'), '"/>', '<meta name="language" content="',
@@ -773,8 +748,8 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
 =temp disabled
     cache_file_css({'pre_url'=> '<link rel="alternate stylesheet" media="screen"  title="' . $_ . '" type="text/css" href="',
     'pre_cached'=> '<style rel="alternate stylesheet" media="screen" type="text/css" title="' . $_ . "\" >", #<!--\n
-#    }, $config{'css_list'}{$_}, $config{'css_list_add'}{$_}
-#    ) for grep {$_ ne $config{'style'}} keys %{ $config{'css_list'} };
+#}, $config{'css_list'}{$_}, $config{'css_list_add'}{$_}
+#) for grep {$_ ne $config{'style'}} keys %{ $config{'css_list'} };
     }, $config{$_}{'css'}, $config{$_}{'css_add'}
     ) for grep {$_ ne $work{'style'}} @{ $config{'styles'} };
 =cut
@@ -821,7 +796,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
           print "(";    #. $work{'codepage'};
           print lang('cp'), ': ' if !$config{'no_select_describe'};
           print join ' ', map {
-                "<a class=\"codepage\" "
+            "<a class=\"codepage\" "
               . ( $_ ne $work{'codepage'} ? "href=\"#\" " : ' ' ) . ' '
               . $config{'js_debug'}
               . 'onclick="createCookie(\'codepage\', \''
@@ -881,7 +856,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
       };
       $config{'out'}{'html'}{'pre-search-form'} ||= sub {
         my ( $param, $table ) = @_;
-        #  print "z";
+        #print "z";
         part( 'form-links',  $param, $table );
         part( 'form-adjust', $param, $table );
         part( 'view-select', $param, $table );
@@ -904,7 +879,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
             'where' => $static{'db'}->where( {
                 %$param,
                 'query' => $param->{'q'},
-                #        'query'  => scalar cp_trans( $work{'codepage'}, $config{'cp_db'}, $param->{'q'}, ),
+                #'query'  => scalar cp_trans( $work{'codepage'}, $config{'cp_db'}, $param->{'q'}, ),
                 'query_mode' => '!'
               },
               undef,
@@ -944,16 +919,14 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
         print '<tr class="result-head"><td>N</td>';
         if ( $param->{'distinct'} ) { print '<td>', $param->{'distinct'}, '</td>'; }
         else {
-          #    print "HI";
+          #print "HI";
           my %ord_param_hash = get_param_hash( $param, ( 'order', 'order_mode', 'page' ) ) unless $config{'destroy_link_sort'};
           #for my $rown ( sort keys %{ $config{'sql'}{'table'}{$table} } ) {
-          for my $rown (
-            sort { $config{'sql'}{'table'}{$table}{$b}{'order'} <=> $config{'sql'}{'table'}{$table}{$a}{'order'} }
-            grep { $config{'sql'}{'table'}{$table}{$_} and !$config{'sql'}{'table'}{$table}{$_}{'hide'} } keys %$row
-            )
+          for my $rown ( sort { $config{'sql'}{'table'}{$table}{$b}{'order'} <=> $config{'sql'}{'table'}{$table}{$a}{'order'} }
+            grep { $config{'sql'}{'table'}{$table}{$_} and !$config{'sql'}{'table'}{$table}{$_}{'hide'} } keys %$row )
           {
             print '<td>';
-            #      print "zz";
+            #print "zz";
             psweb::sorter( $param, { 'order' => $rown }, \%ord_param_hash );
             print '</td>';
           }
@@ -964,10 +937,8 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
         my ( $param, $table, $row ) = @_;
         $row->{'n'} = ++$work{'n'};
         print "<tr><td>$row->{'n'}</td>";
-        for my $rown (
-          sort { $config{'sql'}{'table'}{$table}{$b}{'order'} <=> $config{'sql'}{'table'}{$table}{$a}{'order'} }
-          grep { $config{'sql'}{'table'}{$table}{$_} and !$config{'sql'}{'table'}{$table}{$_}{'hide'} } keys %$row
-          )
+        for my $rown ( sort { $config{'sql'}{'table'}{$table}{$b}{'order'} <=> $config{'sql'}{'table'}{$table}{$a}{'order'} }
+          grep { $config{'sql'}{'table'}{$table}{$_} and !$config{'sql'}{'table'}{$table}{$_}{'hide'} } keys %$row )
         {
           print '<td>';
           $config{'sql'}{'table'}{$table}{$rown}{'show'}
@@ -977,20 +948,20 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
               $rown => $row->{$rown},
               #'size_mode' => 'e'
             }, {
-              #          'title' => "$row->{'size'} bytes",
+              #'title' => "$row->{'size'} bytes",
               ( $row->{$rown} == $param->{$rown} ? ( 'class' => 'hilight1' ) : () ),
-              #          ( $row->{'files'}                    ? ( 'href'  => undef )      : () )
+              #( $row->{'files'}                    ? ( 'href'  => undef )      : () )
             },
-            #        { 'destroy' => $config{'destroy_link_size'}, }
+            #{ 'destroy' => $config{'destroy_link_size'}, }
             ) if $row->{$rown};
           print '</td>';
         }
         #print "<td>[$row->{'stem'}]</td>";
         print "</tr>";
         #local $row->{'size'} = undef if $row->{'size'} ==1;
-        #  print "<tr><td colspan='20'>";
+        #print "<tr><td colspan='20'>";
         $work{'head'}{$_} += ( $row->{$_} =~ /^\s*\d+\s*$/ ? $row->{$_} : ( $row->{$_} =~ /\S/ ? 1 : 0 ) ),
-          #      print("$_ = $work{'head'}{$_};")
+          #print("$_ = $work{'head'}{$_};")
           for
           grep { ( $config{'sql'}{'table'}{$table}{$_}{'row'} or !$config{'sql'}{'table'}{$table}{$_}{'hide'} ) and $row->{$_} }
           keys %{ $config{'sql'}{'table'}{$table} };
@@ -1004,11 +975,10 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
       $config{'out'}{'html'}{'result_foot_hide'} ||= sub {
         my ( $param, $table ) = @_;
         print $config{'jscript_open'};
-        print 'toggleview(\'head_', $_, '\');'
-          for grep {
-                ( $config{'sql'}{'table'}{$table}{$_}{'row'} or !$config{'sql'}{'table'}{$table}{$_}{'hide'} )
-            and ( !$work{'head'}{$_}                         or $work{'n'} < 1 )
-          } keys %{ $config{'sql'}{'table'}{$table} };
+        print 'toggleview(\'head_', $_, '\');' for grep {
+          ( $config{'sql'}{'table'}{$table}{$_}{'row'} or !$config{'sql'}{'table'}{$table}{$_}{'hide'} )
+            and ( !$work{'head'}{$_} or $work{'n'} < 1 )
+        } keys %{ $config{'sql'}{'table'}{$table} };
         print $config{'jscript_close'};
       };
       $config{'out'}{'html'}{'result-report'} ||= sub {
@@ -1025,18 +995,15 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
         print ' ', lang('in'), ' ', psmisc::human( 'time_period', $stat{'found_time'} ), ' ' if $stat{'found_time'} > 0;
         print ', ', lang('showed'), ' ',
           ( $static{'db'}->{'dbirows'} ? $static{'db'}->{'limit_offset'} + 1 : $static{'db'}->{'limit_offset'} ) . '-'
-          . (
-            $static{'db'}->{'founded'} > $static{'db'}->{'limit_offset'} + $static{'db'}->{'limit'}
+          . ( $static{'db'}->{'founded'} > $static{'db'}->{'limit_offset'} + $static{'db'}->{'limit'}
           ? $static{'db'}->{'limit_offset'} + $static{'db'}->{'limit'}
-          : ( $static{'db'}->{'founded'} or $static{'db'}->{'limit_offset'} + $static{'db'}->{'dbirows'} )
-          )
-          . (
-          $static{'db'}->{'page'}
+          : ( $static{'db'}->{'founded'} or $static{'db'}->{'limit_offset'} + $static{'db'}->{'dbirows'} ) )
+          . ( $static{'db'}->{'page'}
           ? ' (' . lang('page') . " $static{'db'}->{'page'} " . lang('from') . " $static{'db'}->{'page_last'})"
-          : ''
-          ) if $static{'db'}->{'page_last'} > 1;
+          : '' )
+          if $static{'db'}->{'page_last'} > 1;
         print '<br/>';
-        #  printlog('d', Dumper($param));
+        #printlog('d', Dumper($param));
         part(
           'gotopage',
           $param, $table, {
@@ -1056,14 +1023,14 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
       };
       $config{'out'}{'html'}{'gotopage'} ||= sub {
         my ( $param, $table, $fparam ) = @_;
-        #                printlog('dev' , "gtp",  Dumper($fparam));
+        #printlog('dev' , "gtp",  Dumper($fparam));
         my $gotopage = gotopage($fparam);    #$param,
-                                             #                printlog('dev' , "gtp", gotopage($fparam), Dumper($fparam));
+        #printlog('dev' , "gtp", gotopage($fparam), Dumper($fparam));
         return unless keys %$gotopage;
-        # print "GOOO";
+        #print "GOOO";
         print lang('goto page') . ' ';
         my %param_hash = get_param_hash( $param, 'page' );
-        #  printlog('d', Dumper($param,\%param_hash));
+        #printlog('d', Dumper($param,\%param_hash));
         print ' ',
           mylink(
           lang('ctrl-prev') . ' ' . lang('prev'),
@@ -1079,7 +1046,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
           { 'title' => $gotopage->{'big'}->{$_}, ( $fparam->{'current'} == $_ ? ( 'href' => undef ) : () ) },
           {
             'destroy' => $config{'destroy_link_page'},
-            #    ( $fparam->{'current'} == $_ ? ( 'href' => 'NO' ) : () )
+            #( $fparam->{'current'} == $_ ? ( 'href' => 'NO' ) : () )
           }
           ),
           ' ' for sort {
@@ -1107,10 +1074,10 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
       $config{'out'}{'html'}{'viewas'} ||= sub {
         my ( $param, $table ) = @_;
         print '[';
-        #  printlog('vi', $config{'view'}, $param->{'view'});
+        #printlog('vi', $config{'view'}, $param->{'view'});
         print ' ', mylink(
           lang($_), { get_param_hash( $param, 'view' ), 'view' => $_ }, undef,
- #    { 'destroy' => $config{'destroy_link_view'}, ( ( $_ ne 'html' and $config{'view'} ne $_ ) ? () : ( 'href' => 'NO' ) ) } ),
+     #{ 'destroy' => $config{'destroy_link_view'}, ( ( $_ ne 'html' and $config{'view'} ne $_ ) ? () : ( 'href' => 'NO' ) ) } ),
           { 'destroy' => $config{'destroy_link_view'} || ( ( $_ ne 'html' and $config{'view'} ne $_ ) ? ('') : ('YES') ) }
           ),
           ' '
@@ -1119,7 +1086,6 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
       };
       $config{'out'}{'html'}{'stat'} ||= sub {
         my ($param) = @_;
-        #          print "STAAAAAT";
         part( 'main-topquery', $param, undef, { 'no_split' => 1, 'no_result_header' => 1, 'no_gotopage' => 1 } )
           if $config{'allow_query_stat'};
         part( 'main-stat', $param );
@@ -1167,12 +1133,12 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
         print '[', join( ',', @_ ), '] ' if @_;
       };
       for my $stat (qw(word query)) {
-        #        $config{'out'}{'html'}{'string'}{$stat} ||= sub {
+        #$config{'out'}{'html'}{'string'}{$stat} ||= sub {
         $config{'out'}{'html'}{ 'string_' . $stat } ||= sub {
-          #          my ( $row, $param ) = @_;
+          #my ( $row, $param ) = @_;
           my ( $param, undef, $row, ) = @_;
-          #    cp_trans_row($row);
-          #    printlog( "zzz",Dumper($row));
+          #cp_trans_row($row);
+          #printlog( "zzz",Dumper($row));
           print mylink(
             psmisc::human( 'string_long', $$row{$stat}, 30 ),
             { 'q' => $$row{$stat} },
@@ -1180,45 +1146,46 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
             ),
             ' ';
           part( 'item_info', $row, undef, undef, { 'no_cont' => 1 } );
-          #    print ' (', ( $param->{'order'} eq 'top' ? ( $$row{'top'} ) : () ),
-          #      ( $param->{'order'} eq 'last' ? ( psmisc::human( 'time_period', time() - $$row{'last'} ) ) : () ), ')'
-          #      if $param->{'order'};
-          #    print ' ';
+          #print ' (', ( $param->{'order'} eq 'top' ? ( $$row{'top'} ) : () ),
+          #( $param->{'order'} eq 'last' ? ( psmisc::human( 'time_period', time() - $$row{'last'} ) ) : () ), ')'
+          #if $param->{'order'};
+          #print ' ';
         };
       }
-      #      $config{'out'}{'html'}{'string'}{'file'} ||= sub {
+      #$config{'out'}{'html'}{'string'}{'file'} ||= sub {
       $config{'out'}{'html'}{'string_file'} ||= sub {
-        #        my ( $row, $param ) = @_;
+        #my ( $row, $param ) = @_;
         my ( $param, undef, $row, ) = @_;
         my %url = split_url( $$row{'file'} );
-        #          print "========",join':',%$row;
-        #  print "====", $work{'codepage'}, $$row{'cp'}||hconfig( 'cp_res', $url{'host'}, $url{'prot'} );
+        #print "========",join':',%$row;
+        #print "====", $work{'codepage'}, $$row{'cp'}||hconfig( 'cp_res', $url{'host'}, $url{'prot'} );
         print $config{'redirector'}->( {
             'go' => scalar psmisc::cp_trans(
               $work{'codepage'}, $$row{'cp'} || hconfig( 'cp_res', $url{'host'}, $url{'prot'} ),
               $$row{'file'}
             ),
-            'actname' => join_url( {
+            'actname' => part( 'result_string_img', undef, undef, { 'ext' => $url{'ext'}, size => 1 }, { 'no_cont' => 1 } )
+              . join_url( {
                 'name' => psmisc::human( 'string_long', $url{'name'}, 25 ),
                 'ext'  => psmisc::human( 'string_long', $url{'ext'},  5 )
               }
-            )
+              )
           }
         );
         part( 'item_info', $row, undef, undef, { 'no_cont' => 1 } );
-        #     item_info($row);
-        #  print '', ( ( $config{'show_query_ip'} and $$row{'lastip'} ) ? '[' . $$row{'lastip'} . ']' : '' );
-        #  print ' (', ( $param->{'order'} eq 'dl' ? ( $$row{'dl'} ) : () ),
-        #    ( $param->{'order'} eq 'last' ? ( psmisc::human( 'time_period', time() - $$row{'last'} ) ) : () ), ')'
-        #    if $param->{'order'};
-        #  print ' ';
+        #item_info($row);
+        #print '', ( ( $config{'show_query_ip'} and $$row{'lastip'} ) ? '[' . $$row{'lastip'} . ']' : '' );
+        #print ' (', ( $param->{'order'} eq 'dl' ? ( $$row{'dl'} ) : () ),
+        #( $param->{'order'} eq 'last' ? ( psmisc::human( 'time_period', time() - $$row{'last'} ) ) : () ), ')'
+        #if $param->{'order'};
+        #print ' ';
       };
       for my $stat (qw(file word query)) {
         $config{'out'}{'html'}{$stat} ||= sub {
           my ( $param, $table, $fparam ) = @_;
           $table = $config{ 'sql_t' . $stat . 'stat' };
-          #        printlog( 'dev', "fwq: $stat, $table;" , Dumper($param));
-          #    $param->{'on_page'} =
+          #printlog( 'dev', "fwq: $stat, $table;" , Dumper($param));
+          #$param->{'on_page'} =
           $static{'db'}->user_params($param);
           local $static{'db'}->{'limit'} = check_int( $param->{'results'}, 1, $config{'top_query_max'}, $config{'top_query'} );
           $param->{'order'}      = 'top' unless defined $param->{'order'};
@@ -1230,19 +1197,19 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
             $stat{'top_founded_max'} = max( $stat{'top_founded_max'}, $stat{'found'}{'files'} ),
             $stat{'top_pages_max'}   = max( $stat{'top_pages_max'},   $static{'db'}->{'page_last'} )
             unless $fparam->{'no_gotopage'};
-          #    printlog( 'dev', 'fwq0' );
+          #printlog( 'dev', 'fwq0' );
           my $top = $static{'db'}->query( $static{'db'}->select_body( $fparam->{'where'}, $param, $table ) )
-            #    my $top = $static{'db'}->select( $static{'db'}->select_body( $fparam->{'where'}, $param, $table ) )
+            #my $top = $static{'db'}->select( $static{'db'}->select_body( $fparam->{'where'}, $param, $table ) )
             if $static{'db'}->{'limit'};
-          #    $param->{'on_page'};
-          #        printlog( 'dev', 'fwq1', $top );
+          #$param->{'on_page'};
+          #printlog( 'dev', 'fwq1', $top );
           if ( $static{'db'}->{'limit'} and $top and scalar @$top >= 1 and keys %{ $top->[0] } ) {
             print $fparam->{'desc'};
             print lang( $stat . ' ' . $param->{'order'} ) unless $fparam->{'no_desc'};
             print ' (', mylink( '100', { 'show' => 'topquery', 'results' => '100' } ), ')' if $fparam->{'link_100'};
             print ':', ( $fparam->{'no_split'} ? ' ' : '<br/>' ) unless $fparam->{'no_desc'};
-            #            $config{'out'}{'html'}{'string'}{$stat}->( $_, $param ) for (@$top);
-            #            $config{'out'}{'html'}{'string_'.$stat}->( $param,$_,  ) for (@$top);
+            #$config{'out'}{'html'}{'string'}{$stat}->( $_, $param ) for (@$top);
+            #$config{'out'}{'html'}{'string_'.$stat}->( $param,$_,  ) for (@$top);
             part( 'string_' . $stat, $param, undef, $_, { 'no_cont' => 1 } ) for (@$top);
           }
         };
@@ -1253,7 +1220,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
           return unless @{ $work{$stat} };
           print lang( 'my ' . $stat ), ': ';
           my $output = $stat eq 'dls' ? 'file' : 'query';
-          #          $config{'out'}{'html'}{'string_'.$output}->(  { %$param, 'order' => undef }, { $output => $_ }, )
+          #$config{'out'}{'html'}{'string_'.$output}->(  { %$param, 'order' => undef }, { $output => $_ }, )
           part( 'string_' . $output, { %$param, 'order' => undef }, undef, { $output => $_ }, { 'no_cont' => 1 } )
             for ( @{ $work{$stat} } );
           print ' [<a href="#" ' . $config{'js_debug'} . 'onclick="createCookie(\'', $stat, '\', \'\');hide_id(\'', $stat,
@@ -1268,7 +1235,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
       $config{'out'}{'html'}{'topquery'} ||= sub {
         my ( $paramorig, $table, $fparam ) = @_;
         my $param;
-        #  printlog('dev', 'topq', $paramorig, $table, $fparam);
+        #printlog('dev', 'topq', $paramorig, $table, $fparam);
         %$param = %$paramorig;
         $fparam->{'no_gotopage'} = 1 unless $config{'topquery_gotopages'};
         uniout( \$config{'html_result_header_top'}, $param, $fparam ) if !$fparam->{'no_result_header'};
@@ -1312,10 +1279,8 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
         my ($param) = @_;
         for my $sets ( sort keys %{ $config{'preset'} } ) {
           print lang($sets), ":<br/>";
-          for my $preset (
-            sort { $config{'preset'}{$sets}{$a}{'order'} <=> $config{'preset'}{$sets}{$b}{'order'} }
-            keys %{ $config{'preset'}{$sets} }
-            )
+          for my $preset ( sort { $config{'preset'}{$sets}{$a}{'order'} <=> $config{'preset'}{$sets}{$b}{'order'} }
+            keys %{ $config{'preset'}{$sets} } )
           {
             print '&nbsp;', mylink( $preset, { 'q' => ':' . $preset } ), ":\t ";
             print join ' & ',
@@ -1358,10 +1323,8 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
         my ( $param, $table, $row ) = @_;
         $row->{'n'} = ++$work{'n'};
         print $row->{'n'};
-        for my $rown (
-          sort { $config{'sql'}{'table'}{$table}{$b}{'order'} <=> $config{'sql'}{'table'}{$table}{$a}{'order'} }
-          grep { $config{'sql'}{'table'}{$table}{$_} and !$config{'sql'}{'table'}{$table}{$_}{'hide'} } keys %$row
-          )
+        for my $rown ( sort { $config{'sql'}{'table'}{$table}{$b}{'order'} <=> $config{'sql'}{'table'}{$table}{$a}{'order'} }
+          grep { $config{'sql'}{'table'}{$table}{$_} and !$config{'sql'}{'table'}{$table}{$_}{'hide'} } keys %$row )
         {
           print "\t", $row->{$rown};
         }
@@ -1373,7 +1336,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
         $work{'param_str'} = get_param_url_str( $param, $config{'skip_from_link'} );
         $work{'rssn'} = $work{'n'} = $static{'db'}->{'limit_offset'};
         print '<?xml version="1.0" encoding="', lang( $work{'codepage'} ), '" ?>';
-        #  print '<?xml-stylesheet type="text/css" href="', $config{'root_url'}, $config{'css'}, '" ?>' if $config{'css'};
+        #print '<?xml-stylesheet type="text/css" href="', $config{'root_url'}, $config{'css'}, '" ?>' if $config{'css'};
         print '<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">', '<channel>';
         print '<title>', $config{'title'}, '</title>' if $config{'title'};
         print '<link>',        $config{'root_url'},         '</link>'        if $config{'root_url'};
@@ -1384,42 +1347,42 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
         my ( $param, $table, $row ) = @_;
         #printlog('dev', 'rss2RS');
         print '<item>';
-        #   "\n<link>", get_param_url_str( $param, ['view'] ), '#n', ( ++$work{'rssn'} ), '</link>';
-        #  '<description>';
-        #  my $buffer;
-        #  $buffer .= '<table>';
-        #  print 'ITEMS:[' ,join',',%$row;
+        #"\n<link>", get_param_url_str( $param, ['view'] ), '#n', ( ++$work{'rssn'} ), '</link>';
+        #'<description>';
+        #my $buffer;
+        #$buffer .= '<table>';
+        #print 'ITEMS:[' ,join',',%$row;
         unless ( $row->{'description'} ) {
           grab_begin( \$row->{'description'} );
           print '<![CDATA[<table>';
           {
             local $config{'view'} = 'html';
-            #    local $config{'view_from'}          = 'rss2';
+            #local $config{'view_from'}          = 'rss2';
             local $config{'allow_vote'}    = 0;
             local $config{'no_plus_minus'} = 1;
             local $config{'no_play'}       = 1;
             #print('dev', 'call parsRS', "\n");
             part( 'result_string', $param, undef, $row, { 'no_cont' => 1 } );
           }
-          #  print('dev', 'buf=[',$buffer,"]\n");
+          #print('dev', 'buf=[',$buffer,"]\n");
           print '</table>]]>';
           grab_end();
         }
-        #  $buffer .= '</table>';
-        #  html_chars( \$buffer );
-        #  print $buffer;
-        #  print '</description>';
+        #$buffer .= '</table>';
+        #html_chars( \$buffer );
+        #print $buffer;
+        #print '</description>';
         my $unique = $row->{ $config{'rss2_guid'} || 'full' };
-        #  print "UNIQ1[$unique:$config{'rss2_guid'}]";#, join',',%$row;
+        #print "UNIQ1[$unique:$config{'rss2_guid'}]";#, join',',%$row;
         html_chars( \$unique );
         $row->{'guid'} ||= $unique;
-        #  print "UNIQ[$unique]";#, join',',%$row;
+        #print "UNIQ[$unique]";#, join',',%$row;
         $row->{'pubDate'} ||= psmisc::human( 'rfc822_date_time', $row->{'time'} );
         $row->{'link'} ||= get_param_url_str( $param, ['view'] ), '#n', ( ++$work{'rssn'} );
         print '<', $_, '>', $row->{$_}, '</', $_, ">\n"
           for grep { $row->{$_} } qw(title description author category comments guid pubDate link);
-        #  '<pubDate>', , '</pubDate>',
-        #    "<guid></guid>"
+        #'<pubDate>', , '</pubDate>',
+        #"<guid></guid>"
         print "</item>\n";
       };
       $config{'out'}{'rss2'}{'footer'} ||= sub { print '</channel></rss>'; };
@@ -1473,9 +1436,9 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
         #printlog('dev', '1part', 'nofunc', $config{'view'}, $config{'out'}{'html'}{'cattest'}, 'runw:',@_, $config{'view'});
         part( 'head', $param, $table, undef, { 'no_cont' => 1 } );
         part( 'header', $param, $table ) unless $config{'no_auto_header'};
-        #          printlog('dev', 'show', $param->{'show'});
+        #printlog('dev', 'show', $param->{'show'});
         part( $param->{'show'}, $param, $table );
-        part( 'show', $param, $table );
+        part( 'show',           $param, $table );
         alarmed( $config{'web_max_search_time'}, sub { part( 'main_or_search', $param, $table ); } )
           if !$param->{'show'} and !$param->{'form'};
         part( 'footer', $param, $table ) unless $config{'no_auto_footer'};
@@ -1485,7 +1448,7 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
             part( 'foot', $param, $table, undef, { 'no_cont' => 1 } );
             redirect_update( $param, $table ) if $param->{'go'};
             update_query_stat() if $stat{'results'};
-            #      printlog('dev', 'alarmed upstat end ');
+            #printlog('dev', 'alarmed upstat end ');
           }
         );
         #printlog('dev', 'the end');
@@ -1498,8 +1461,8 @@ config_init($param);
 
 sub mylink {
   my ( $body, $param, $params, $lparam, ) = @_;
-  #  printlog('dev', 'mylink', $body, %{$param or {}}, %{$params or {}}, %{$lparam or {}}) ;
-  #  printlog(Dumper([$body, $param, $params, $lparam]));
+  #printlog('dev', 'mylink', $body, %{$param or {}}, %{$params or {}}, %{$lparam or {}}) ;
+  #printlog(Dumper([$body, $param, $params, $lparam]));
   $config{'mylink_bef_bef'}->( \( $body, $param, $params, $lparam, ) ) if ref $config{'mylink_bef_bef'} eq 'CODE';
   local %_ = (
     'glue'      => '&amp;',
@@ -1515,12 +1478,12 @@ sub mylink {
   $config{$_}->( \( $body, $param, $params ), \%_, ) for grep { ref $config{$_} eq 'CODE' } (qw(mylink_bef mylink_rewrite));
   local $config{'ajax'} = 0 if ( $_{'base'} ne $config{'root_url'} ) or ( $param->{'view'} and ( $param->{'view'} ne 'html' ) );
   my %modes =
-    #  map {s/(\d*)$//;$_ => $param->{$_.'_mode'.$1} }
+    #map {s/(\d*)$//;$_ => $param->{$_.'_mode'.$1} }
     map { s/_mode(\d*)$//; $_ . $1 => $param->{ $_ . '_mode' . $1 } }
-    #  grep { s/_mode(\d*)$/$1/ and $param->{$_.'_mode'.$1}=~ /^\W+$/}
-    #  grep { /^(.+)_mode(\d*)$/ and $param->{$1.'_mode'.$1}=~ /^\W+$/}
+    #grep { s/_mode(\d*)$/$1/ and $param->{$_.'_mode'.$1}=~ /^\W+$/}
+    #grep { /^(.+)_mode(\d*)$/ and $param->{$1.'_mode'.$1}=~ /^\W+$/}
     grep { /_mode\d*$/ and $param->{$_} =~ /^\W+$/ } keys %$param;
-  #  printlog('dev', Dumper(\%modes));
+  #printlog('dev', Dumper(\%modes));
   local @_ = sort grep { length($_) and length( $param->{$_} ) and !( /^(.+)_mode(\d*)$/ and $modes{ $1 . $2 } ) } keys %$param;
   if ( !$config{'ajax'} ) {
     if ( !$_{'destroy'} ) {
@@ -1536,7 +1499,7 @@ sub mylink {
     $params->{'onclick'} ||= 'dosubmit({' . join( ',', map { "'" . $_ . "':'" . $param->{$_} . "'" } @_ ) . '});return false;';
   }
   local $_ = join '', '<', $_{'tag'}, ' ',
-    #    print("[$_ = $params->{$_}] "),
+    #print("[$_ = $params->{$_}] "),
     join( ' ', map { $_ . '="' . $params->{$_} . '"' } sort grep { defined $params->{$_} } keys %$params ), '>', $_{'body'},
     '</', $_{'tag'}, '>';
   $config{'mylink_aft'}->( \$_ ) if ref $config{'mylink_aft'} eq 'CODE';
@@ -1545,7 +1508,7 @@ sub mylink {
 
 sub out_bold {
   my ( $string, $what, @whata ) = @_;
-  #    print " out_bold($string, $what, @whata);";
+  #print " out_bold($string, $what, @whata);";
   return $string if !( ( $what or @whata ) and $string );
   my $mask = (
     join(
@@ -1557,7 +1520,7 @@ sub out_bold {
       )
       or return $string
   );
-  #  print " obmask=$mask; ";
+  #print " obmask=$mask; ";
   return $string if $string =~ /[\xD0\xD1]/;    #dont break utf
   $string =~ s{($mask)}{($1 ? "<span class=\"hilight1\">$1</span>" : '')}gie;
   return $string;
@@ -1589,7 +1552,8 @@ sub to_quot {    #v0c0
 
 sub value {
   return unless defined $_[0];
-  return ' value="'
+  return
+    ' value="'
     . ( $_[0] ? destroy_quotes( cp_trans( $config{'cp_int'}, $work{'codepage'}, $_[0] ), ( $_[1] or '"' ) ) : '' ) . '" ';
 }
 
@@ -1618,7 +1582,7 @@ GPSL1: for my $par ( sort keys %$param ) {
     $string .= $par . '=' . $tmp . $glue;
   }
   $string =~ s/$glue$//g;
-  #  print "[$glue, $string]";
+  #print "[$glue, $string]";
   return $string;
 }
 
@@ -1627,10 +1591,10 @@ sub get_param_url_str {
   return $config{'root_url'} . ( $gps ? '?' . $gps : '' );
 }
 {
-  #  no strict;    #strange error with open(STDOUT, [ ActiveState Perl v5.6.1 build 631]
-  #  local *OLDSTDOUT;
-  #  local *STDOUT;
-  #  our (OLDSTDOUT, STDOUT);
+  #no strict;    #strange error with open(STDOUT, [ ActiveState Perl v5.6.1 build 631]
+  #local *OLDSTDOUT;
+  #local *STDOUT;
+  #our (OLDSTDOUT, STDOUT);
   sub grab_begin {    #(\$)    #v1
     open( OLDSTDOUT, '>&', STDOUT );    #local *
     close(STDOUT);                      # or return;
@@ -1656,28 +1620,30 @@ sub uniout {
 sub nameid { return " name=\"$_[0]\" id=\"$_[0]\" "; }
 
 sub part {
-  #       printlog('', 'part:',$config{'view'},@_);
+  #printlog('', 'part:',$config{'view'},@_);
   my ($part) = shift;
-  #  my ( $param, $table, $part_param, $cont_param, $paramnum, $valuenum ) = @_;
+  #my ( $param, $table, $part_param, $cont_param, $paramnum, $valuenum ) = @_;
   my ( $param, $table, $part_param, $cont_param ) = @_;
-  my $func = $config{'out'}{ $config{'view'} }{$part}
+  my $func =
+       $config{'out'}{ $config{'view'} }{$part}
     || $config{'out'}{''}{$part}
     || $config{ $config{'view'} . '_' . $part }
     || $config{ '_' . $part };
-#   printlog('', 'view:',$config{'view'} , 'func',$func, 'param', %$param);
-#  printlog('dev', 'part', 'nofunc', $config{'view'}, $config{'out'}{'html'}{'cattest'}, 'runw:',@_)      if (!$part      or $param->{ 'no_' . $part }     or $config{ 'no_' . $part }      or !$func)      and $cont_param ne 'NODIV'      ;
+#printlog('', 'view:',$config{'view'} , 'func',$func, 'param', %$param);
+#printlog('dev', 'part', 'nofunc', $config{'view'}, $config{'out'}{'html'}{'cattest'}, 'runw:',@_)      if (!$part      or $param->{ 'no_' . $part }     or $config{ 'no_' . $part }      or !$func)      and $cont_param ne 'NODIV'      ;
   $cont_param ||= {};
-  #  print "COPAR[$part]:", %$cont_param;
-  #  sub check_opt {
-  #    my ( $part, $param, $cont_param, $opt ) = @_;
+  #print "COPAR[$part]:", %$cont_param if $part eq 'search';
+  #sub check_opt {
+  #my ( $part, $param, $cont_param, $opt ) = @_;
   my $check_opt = sub {
     my ($opt) = @_;
-#   print "CO","[$part]:$opt=",$param->{$part.'_'.$opt} ,'or', $config{$part.'_'.$opt} ,'or', $config{$config{'view'} . '_' .$part.'_'.$opt} ,'or', $cont_param->{$opt};
+#print "CO","[$part]:$opt=",$param->{$part.'_'.$opt} ,'or', $config{$part.'_'.$opt} ,'or', $config{$config{'view'} . '_' .$part.'_'.$opt} ,'or', $cont_param->{$opt};
     return $param->{ $opt . '_' . $part } || $work{ $opt . '_' . $part } || $config{ $opt . '_' . $part } || $cont_param->{$opt}
       if $opt eq 'no';
     return defined $config{ $part . '_' . $opt } ? $config{ $part . '_' . $opt } : $config{ $opt . '_def' }
       if $config{ $opt . '_def' };
-    return $param->{ $part . '_' . $opt }
+    return
+         $param->{ $part . '_' . $opt }
       || $work{ $part . '_' . $opt }
       || $config{ $part . '_' . $opt }
       || $work{ $config{'view'} . '_' . $part . '_' . $opt }
@@ -1685,58 +1651,58 @@ sub part {
       || $cont_param->{$opt};
   };
   return if !$part or !$func or $check_opt->('no');
-  #  my $cont = ($cont_param->{'cont'} or ( $part =~ /^form-/ ? 'span' : 'div' ));
-  #  print "[1]";
+  #my $cont = ($cont_param->{'cont'} or ( $part =~ /^form-/ ? 'span' : 'div' ));
+  #print "[1]";
   my $cont = $check_opt->('tag') || ( $part =~ /^form-/ ? 'span' : 'div' );
-  #    printlog('trace',"<br/>part:$part:"),
-  #   print "[2]";
+  #printlog('trace',"<br/>part:$part:"),
+  #print "[2]";
   print "\n<!-- $part BEGIN $cont [$config{'view'}] no_cont=", $check_opt->('no_cont'), " -->\n"
     if $param->{'debug'} eq 'on'    #' ',Dumper(@_),
                                     #;#
       and !$check_opt->('no_cont');
   $work{'part_stack'}{$part} = ++$work{'part_stack_current'};
-  #  uniout( \$config{ $config{'view'} . '_' . $part . '_bef_bef' }, @_ );
+  #uniout( \$config{ $config{'view'} . '_' . $part . '_bef_bef' }, @_ );
   uniout( $check_opt->('bef_bef'), @_ );
-  #  return if $config{ 'no_' . $part } or !$func;
+  #return if $config{ 'no_' . $part } or !$func;
   #print "[3]";
   return if !$part or !$func or $check_opt->('no');
-  # print "[4]";
+  #print "[4]";
   if ( $config{'view'} eq 'html' and !$check_opt->('no_cont') ) {
     print '<', $cont, ( $check_opt->('no_class') ? () : ( ' class="', $cont_param->{'class'} || $part, '" ' ) ),
       ( $check_opt->('no_nameid') ? () : ( nameid($part) ) ), $cont_param->{'cont_param'}, ' ';
-    #    uniout( \$config{ $config{'view'} . '_' . $part . '_param' }, @_ );
+    #uniout( \$config{ $config{'view'} . '_' . $part . '_param' }, @_ );
     uniout( $check_opt->('param'), @_ );
     print '>';
   }
   uniout( $check_opt->('bef'), @_ );
-  #  uniout( \$config{ $config{'view'} . '_' . $part . '_bef' }, @_ );
-  #  $func->( $param, $table, $part_param, $paramnum, $valuenum );
-  #  print "[5fu $func]";
-  #  $func->(@_) if ref $func eq 'CODE';
-  uniout( $func, @_ );
+  #uniout( \$config{ $config{'view'} . '_' . $part . '_bef' }, @_ );
+  #$func->( $param, $table, $part_param, $paramnum, $valuenum );
+  #print "[5fu $func]";
+  #$func->(@_) if ref $func eq 'CODE';
+  uniout( $func,               @_ );
   uniout( $check_opt->('aft'), @_ );
-  #  uniout( \$config{ $config{'view'} . '_' . $part . '_aft' }, @_ );
+  #uniout( \$config{ $config{'view'} . '_' . $part . '_aft' }, @_ );
   print "</$cont>" if $config{'view'} eq 'html' and !$check_opt->('no_cont');
   uniout( $check_opt->('aft_aft'), @_ );
-  #  uniout( \$config{ $config{'view'} . '_' . $part . '_aft_aft' }, @_ );
+  #uniout( \$config{ $config{'view'} . '_' . $part . '_aft_aft' }, @_ );
   --$work{'part_stack_current'};
   delete $work{'part_stack'}{$part};
   print "\n<!-- $part END -->\n" if $param->{'debug'} eq 'on' and !$check_opt->('no_cont');
 }
 #changed!
-# founded_files founded -> total
-# onpage limit -> size
-# dbirows -> actual
-# maxpage -> last
-sub gotopage {    # $Id: psweb.pm 4249 2009-01-11 20:55:18Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
+#founded_files founded -> total
+#onpage limit -> size
+#dbirows -> actual
+#maxpage -> last
+sub gotopage {    # $Id: psweb.pm 4323 2009-08-25 05:43:42Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
   my ($fparam) = @_;    #$param,
   my (%ret);
-  # $fparam->{'total'} : total results, usually COUNT(*) as total
-  # -----------size -- : size of one page in rows (LIMIT x,size)
-  # current : current page number
-  # actual : usually $DBI::rows, if total unknown
-  # last : last page number (auto calculated from total/size if 0)
-  #      printlog('dmp', 'gotopage start:', Dumper($fparam));
+  #$fparam->{'total'} : total results, usually COUNT(*) as total
+  #-----------size -- : size of one page in rows (LIMIT x,size)
+  #current : current page number
+  #actual : usually $DBI::rows, if total unknown
+  #last : last page number (auto calculated from total/size if 0)
+  #printlog('dmp', 'gotopage start:', Dumper($fparam));
   $fparam->{'size'} = 100 unless defined $fparam->{'size'};
   return {} unless $fparam->{'size'};
   $fparam->{'actual'} = $fparam->{'size'} unless defined $fparam->{'actual'};
@@ -1765,7 +1731,7 @@ sub gotopage {    # $Id: psweb.pm 4249 2009-01-11 20:55:18Z pro $ $URL: svn://sv
     substr( $a, $len, length($a) - $len ) = '0' x ( length($a) - $len ) if $len > 0 and length($a) > $len;
     return $a;
   };
-  #    printlog('dmp', 'gotopage calc:'," <br\n/>" .Dumper($fparam) . "<br\n/>");
+  #printlog('dmp', 'gotopage calc:'," <br\n/>" .Dumper($fparam) . "<br\n/>");
   my $next = $fparam->{'actual'} == $fparam->{'size'};
   if ( ( !$fparam->{'total'} and $fparam->{'actual'} > 0 )
     or $fparam->{'total'} >= $fparam->{'size'}
@@ -1792,7 +1758,7 @@ sub gotopage {    # $Id: psweb.pm 4249 2009-01-11 20:55:18Z pro $ $URL: svn://sv
     }
     $fparam->{'jumpfrom'} ||= 1;
     $fparam->{'jumpto'}   ||= $fparam->{'last'};
-    #    $fparam->{'jumpto'} = psmisc::min( $fparam->{'jumpto'}, $fparam->{'last'} );
+    #$fparam->{'jumpto'} = psmisc::min( $fparam->{'jumpto'}, $fparam->{'last'} );
     $fparam->{'jumpto'} = $fparam->{'last'} if $fparam->{'last'} < $fparam->{'jumpto'};
     if ( $fparam->{'power'} > 1 ) {
       my ($n);
@@ -1818,7 +1784,7 @@ sub gotopage {    # $Id: psweb.pm 4249 2009-01-11 20:55:18Z pro $ $URL: svn://sv
       if $next and !$fparam->{'last'}
         or $fparam->{'current'} < $fparam->{'last'};
   }
-  #    printlog('dmp', 'gotopage ret:', Dumper(\%ret));
+  #printlog('dmp', 'gotopage ret:', Dumper(\%ret));
   return wantarray ? ( sort { $a <=> $b } keys %{ $ret{'big'} }, keys %{ $ret{'small'} } ) : \%ret;
 }
 
@@ -1829,7 +1795,7 @@ sub cache_file {
       my $full = $config{'root_path'} . $file;
       if (
         !defined $static{'cache'}{$full} and open( CFH, '<',
-          #      $ENV{'PROSEARCH_PATH'}
+          #$ENV{'PROSEARCH_PATH'}
           $full
         )
         )
@@ -1837,9 +1803,9 @@ sub cache_file {
         local $/;
         $static{'cache'}{$full} = cp_trans( $config{'cp_cache'}, $config{'cp_int'}, <CFH> );
         close(CFH);
-        #      print "cache readed($file, $full) = ",length $static{'cache'}{$full},";\n";
+        #print "cache readed($file, $full) = ",length $static{'cache'}{$full},";\n";
       }
-      #      print "cache print($file, $full);\n";
+      #print "cache print($file, $full);\n";
       print $fparam->{'pre_cached'}, cp_trans( $config{'cp_int'}, $work{'codepage'}, $static{'cache'}{$full} ),
         $fparam->{'post_cached'};
     } else {
@@ -1879,24 +1845,26 @@ sub cache_file_css {
 }
 
 sub is_img {
-  #printlog('dev', 'is_img', $_[0]);
+  #printlog('devw', '0is_img', "F[$_[0]]", defined( $static{'is_img'}{ $_[0] } ), $static{'is_img'}{ $_[0] });
+  return undef unless length $_[0];
   return $static{'is_img'}{ $_[0] } if defined( $static{'is_img'}{ $_[0] } );
   local $_ = $_[0];
   $_ = $config{'img_trans'}{$_} if defined $config{'img_trans'}{$_};
-  #printlog('dev', '1is_img=', $_[0]),
-  return $static{'is_img'}{$_} = $_[0] if $_[0] =~ m|\w+://|;
-  #printlog('dev', '2is_img=', $config{'img_url'} . $_ . '.' . $config{'img_ext'}),
-  return $static{'is_img'}{$_} = $config{'img_url'} . $_ . '.' . $config{'img_ext'}
-    if $config{'img_url'} =~ m|\w+://| and $config{'img_external'}{$_};
-#printlog('dev', '3is_img=', !!-e $ENV{'PROSEARCH_PATH'} . $config{'img_url'} . $_ . '.' . $config{'img_ext'}    ? $config{'img_url'} . $_ . '.' . $config{'img_ext'}    : '',  $ENV{'PROSEARCH_PATH'} . $config{'img_url'} . $_ . '.' . $config{'img_ext'}),
-  return $static{'is_img'}{$_} = $_[0] if $_[0] =~ m|/| and !!-e
-      #$ENV{'PROSEARCH_PATH'}
-      $config{'root_path'} . $_[0];
-  return $static{'is_img'}{$_} = !!-e
-    #$ENV{'PROSEARCH_PATH'}
-    $config{'root_path'} . $config{'img_url'} . $_ . '.' . $config{'img_ext'}
-    ? $config{'img_url'} . $_ . '.' . $config{'img_ext'}
+  #printlog('devw', '1is_img=', $_[0]),
+  return $static{'is_img'}{$_} = $_[0] if $_[0] =~ m|^\w+://|;
+  #printlog('devw', '2is_img=', $config{'img_url'} .$config{'img_path'}. $_ . '.' . $config{'img_ext'}),
+  return $static{'is_img'}{$_} = $config{'img_url'} . $config{'img_path'} . $_ . '.' . $config{'img_ext'}
+    if $config{'img_url'} =~ m|\w+://| and ( $config{'img_external'}{$_} or -e $config{'root_path'} . $_[0] );
+#printlog('devw', '3is_img=', !!-e $config{'root_path'} . $config{'img_path'} . $_ . '.' . $config{'img_ext'}    ? $config{'img_url'} . $_ . '.' . $config{'img_ext'}    : '',   $config{'img_path'} . $_ . '.' . $config{'img_ext'}),
+  return $static{'is_img'}{$_} = $_[0] if $_[0] =~ m|/| and !!-e $config{'root_path'} . $_[0];
+  #return $static{'is_img'}{$_} = !!-e if  $config{'img_url'} =~ m|^\w+://| and ;
+  #my $r =
+  return $static{'is_img'}{$_} =
+    !!-e $config{'root_path'} . $config{'img_path'} . $_ . '.' . $config{'img_ext'}
+    ? $config{'img_url'} . $config{'img_path'} . $_ . '.' . $config{'img_ext'}
     : '';
+#printlog('devw', '4is_img=', $_[0], $config{'root_path'} . $config{'img_path'} . $_ . '.' . $config{'img_ext'}, $config{'img_url'} . $config{'img_path'}.$_ . '.' . $config{'img_ext'}, "R[$r]");
+#return $r;
 }
 
 sub select_mode {
@@ -1921,20 +1889,20 @@ sub cp_trans_row {
 
 sub update_query_stat {
   return if !$config{'allow_query_stat'} or $config{'client_bot'};
-#    printlog( 'dev', 'update_query_stat' , $work{'codepage'}, $config{'cp_db'}, keys %{ $work{'word'} }, keys %{ $work{'query'} });
+#printlog( 'dev', 'update_query_stat' , $work{'codepage'}, $config{'cp_db'}, keys %{ $work{'word'} }, keys %{ $work{'query'} });
   print $config{'jscript_open'}, 'createCookie(\'queries\', \'',
     ( join '||', map { encode_url($_) } grep { $_ } ( keys %{ $work{'query'} }, @{ $work{'queries'} } )[ 0 .. 10 ], ), '\');',
     $config{'jscript_close'}
     if $config{'view'} eq 'html' and keys %{ $work{'query'} };
   psmisc::flush();
   local $config{'sql'}{'database'} = $config{'sql_base_wup'};
-  #  local $static{'db'}->{'cp_in'} = $config{'cp_db'};
+  #local $static{'db'}->{'cp_in'} = $config{'cp_db'};
   for my $word ( grep { $_ =~ /\w/ } keys %{ $work{'word'} } ) {
     #map {scalar cp_trans( $self->{'cp_in'}, $self->{'codepage'}, $_ )}
     $static{'db'}->update(
       $config{'sql_twordstat'},
       ['word'], {
-        #        'word'   => $word,
+        #'word'   => $word,
         'word'   => scalar cp_trans( $work{'codepage'}, $config{'cp_db'}, $word ),
         'lastip' => $config{'client_ip'},
         'last'   => int( time() )
@@ -1946,19 +1914,19 @@ sub update_query_stat {
   }
   #$static{'db'}->dump_cp();
   for my $query ( grep $_ =~ /\w/, keys %{ $work{'query'} } ) {
-#    $query =~ s/\W+/ /g ,    $query =~ s/(^\s+)|(\s+$)//g if $config{'cp_db'} ne 'utf-8';
-#    printlog( 'dev', 'update_query_stat' , $work{'codepage'}, $config{'cp_db'}, keys %{ $work{'word'} }, keys %{ $work{'query'} });
+#$query =~ s/\W+/ /g ,    $query =~ s/(^\s+)|(\s+$)//g if $config{'cp_db'} ne 'utf-8';
+#printlog( 'dev', 'update_query_stat' , $work{'codepage'}, $config{'cp_db'}, keys %{ $work{'word'} }, keys %{ $work{'query'} });
     $static{'db'}->update(
       $config{'sql_tquerystat'},
       ['query'], {
-        #        'query'  => $query, #scalar cp_trans( $work{'zcodepage'}, $config{'cp_db'}, $query ),
+        #'query'  => $query, #scalar cp_trans( $work{'zcodepage'}, $config{'cp_db'}, $query ),
         'query'  => scalar cp_trans( $work{'codepage'}, $config{'cp_db'}, $query ),
         'lastip' => $config{'client_ip'},
         'last'   => int( time() )
       },
       '',
       '',
-      #      ", `top` = `top`+'1'"
+      #", `top` = `top`+'1'"
       ", " . $static{'db'}->rquote('top') . " = " . $static{'db'}->rquote('top') . "+" . $static{'db'}->quote(1)
     );
   }
@@ -1968,7 +1936,7 @@ sub sorter {
   my ( $param, $fparam, $oph ) = @_;
   $fparam->{'id'}   ||= $fparam->{'order'};
   $fparam->{'lang'} ||= $fparam->{'order'};
-  #  print "hi", Dumper(( $param, $fparam, $oph ));
+  #print "hi", Dumper(( $param, $fparam, $oph ));
   print '<span id="head_', $fparam->{'id'}, '">';
   print mylink(
     lang( $fparam->{'lang'} ), {
@@ -1987,7 +1955,7 @@ sub sorter {
     undef, {
       'destroy' => $config{'destroy_link_sort'}
         || ( ( $param->{'order'} eq $fparam->{'order'} and !$param->{'order_mode'} ) ? ('NO') : () ),
-#      ( ( $param->{'order'} eq $fparam->{'order'} and !$param->{'order_mode'}  ) ? ( 'href' => 'NO' ) : () ),      'destroy' => $config{'destroy_link_sort'}
+#( ( $param->{'order'} eq $fparam->{'order'} and !$param->{'order_mode'}  ) ? ( 'href' => 'NO' ) : () ),      'destroy' => $config{'destroy_link_sort'}
     },
     ),
     '&nbsp;'
@@ -1996,7 +1964,7 @@ sub sorter {
     lang('uarr'),
     { %$oph, 'order' => $fparam->{'order'}, 'order_mode' => '!' },
     undef, {
-#      ( ( $param->{'order'} eq $fparam->{'order'} and $param->{'order_mode'} ) ? ( 'href' => 'NO' ) : () ),      'destroy' => $config{'destroy_link_sort'}
+#( ( $param->{'order'} eq $fparam->{'order'} and $param->{'order_mode'} ) ? ( 'href' => 'NO' ) : () ),      'destroy' => $config{'destroy_link_sort'}
       'destroy' => $config{'destroy_link_sort'}
         || ( ( $param->{'order'} eq $fparam->{'order'} and $param->{'order_mode'} ) ? ('NO') : () ),
     },

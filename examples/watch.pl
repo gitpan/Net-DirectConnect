@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# $Id: watch.pl 432 2009-01-12 01:53:07Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/watch.pl $
+#$Id: watch.pl 473 2009-10-07 20:35:21Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/watch.pl $
 
 =readme
 
@@ -18,9 +18,9 @@ my $dc = Net::DirectConnect::clihub->new(
   'host' => $1,
   ( $2 ? ( 'port' => $2 ) : () ),
   'Nick' => ( $ARGV[1] or int( rand(100000000) ) ),
-  #   'Nick'		=>	'xxxx',
+  #'Nick'		=>	'xxxx',
   'sharesize' => int( rand 100000000000 ) + int( rand 10000000000 ) * int( rand 100 ),
-  #       'log'		=>	sub {},	# no logging
+  #'log'		=>	sub {},	# no logging
   'client'      => '++',
   'V'           => '0.698',
   'description' => '',
@@ -35,8 +35,6 @@ my $dc = Net::DirectConnect::clihub->new(
       } qw(welcome chatline To)
   },
 );
-while ( $dc->active() ) {
-  $dc->work();
-}
+while ( $dc->active() ) { $dc->work(); }
 $dc->destroy();
 sleep(1);

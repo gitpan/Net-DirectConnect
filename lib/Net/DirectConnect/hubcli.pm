@@ -1,35 +1,30 @@
-# $Id: hubcli.pm 456 2009-01-18 01:55:05Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/hubcli.pm $
-# reserved for future 8)
+#$Id: hubcli.pm 472 2009-08-25 05:52:44Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/hubcli.pm $
+#reserved for future 8), but something works
 package Net::DirectConnect::hubcli;
 use strict;
 use Net::DirectConnect;
-use Data::Dumper;    #dev only
+use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 456 $' ) )[1];
-#our @ISA = ('Net::DirectConnect');
+our $VERSION = ( split( ' ', '$Revision: 472 $' ) )[1];
 use base 'Net::DirectConnect';
 
 sub init {
   my $self = shift;
-  %$self = (
-    %$self,
-    #
-    , @_
-  );
+  %$self = ( %$self,, @_ );
   $self->baseinit();
   $self->get_peer_addr();
   $self->log( 'info', "[$self->{'number'}] Incoming client $self->{'host'}:$self->{'port'}" ) if $self->{'incoming'};
   $self->{'parse'} ||= {
     'Supports' => sub {
-      #      $self->supports_parse( $_[0], $self->{'NickList'}->{ $self->{'peernick'} } );
+      #$self->supports_parse( $_[0], $self->{'NickList'}->{ $self->{'peernick'} } );
       $self->supports_parse( $_[0], $self->{'peer_supports'} );
     },
     'Key' => sub {
     },
     'ValidateNick' => sub {
-  #$self->log('dev', 'denide', $_[0], Dumper $self->{'NickList'}),
-  #!      return $self->cmd('ValidateDenide') if exists $self->{'NickList'}{ $_[0] } and $self->{'NickList'}{ $_[0] }{'online'};
+      #$self->log('dev', 'denide', $_[0], Dumper $self->{'NickList'}),
+      #!return $self->cmd('ValidateDenide') if exists $self->{'NickList'}{ $_[0] } and $self->{'NickList'}{ $_[0] }{'online'};
       $self->{'peer_nick'}                          = $_[0];
       $self->{'NickList'}->{ $self->{'peer_nick'} } = $self->{'peer_supports'};
       $self->{'status'}                             = 'connected';
@@ -44,14 +39,10 @@ sub init {
     },
     'MyINFO' => sub {
       my ( $nick, $info ) = $_[0] =~ /\S+\s+(\S+)\s+(.*)/;
-      #        print("Bad nick:[$_[0]]"), return unless length $nick;
       return if $nick ne $self->{'peer_nick'};
       $self->{'NickList'}{$nick}{'Nick'} = $nick;
-      #        $self->{'NickList'}->{$nick}{'info'} = $info;
-      #print "preinfo[$info] to $self->{'NickList'}->{$nick}\n";
       $self->info_parse( $info, $self->{'NickList'}{$nick} );
       $self->{'NickList'}{$nick}{'online'} = 1;
-      #        print  "info:$nick [$info]\n";
     },
     'GetINFO' => sub {
       my $to = shift;
@@ -61,19 +52,11 @@ sub init {
     },
   };
   $self->{'cmd'} ||= {
-    'Lock' => sub {
-      $self->sendcmd( 'Lock', $self->{'Lock'} );
-    },
-    'HubName' => sub {
-      $self->sendcmd( 'HubName', $self->{'HubName'} );
-    },
-    'ValidateDenide' => sub {
-      $self->sendcmd('ValidateDenide');
-    },
-    'Hello' => sub {
-      $self->sendcmd( 'Hello', $self->{'peer_nick'} );
-    },
-    'NickList' => sub {
+    'Lock'           => sub { $self->sendcmd( 'Lock',    $self->{'Lock'} ); },
+    'HubName'        => sub { $self->sendcmd( 'HubName', $self->{'HubName'} ); },
+    'ValidateDenide' => sub { $self->sendcmd('ValidateDenide'); },
+    'Hello'          => sub { $self->sendcmd( 'Hello',   $self->{'peer_nick'} ); },
+    'NickList'       => sub {
       $self->sendcmd( 'NickList', join '$$', grep { !$self->{'NickList'}{$_}{'oper'} } keys %{ $self->{'NickList'} } );
     },
     'OpList' => sub {
@@ -102,7 +85,7 @@ sub init {
   };
   $self->{'handler_int'} ||= {
     'disconnect_aft' => sub {
-      #      $self->{'NickList'}{$self->{'peer_nick'}}{'online'} = 0;
+      #$self->{'NickList'}{$self->{'peer_nick'}}{'online'} = 0;
       delete $self->{'NickList'}{ $self->{'peer_nick'} };
       $self->log( 'dev', 'deleted', $self->{'peer_nick'}, Dumper $self->{'NickList'} );
     },

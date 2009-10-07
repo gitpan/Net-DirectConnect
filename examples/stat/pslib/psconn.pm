@@ -1,4 +1,4 @@
-# $Id: psconn.pm 4135 2008-05-26 10:32:16Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psconn.pm $
+#$Id: psconn.pm 4323 2009-08-25 05:43:42Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psconn.pm $
 package psconn;
 use strict;
 #use psmisc;
@@ -8,7 +8,7 @@ sub new {
   my $self  = {};
   bless( $self, $class );
   $self->init(@_);
-  #  printlog( 'conn', 'new', $self, $class, 'deb:', $self->{'error_sleep'} );
+  #printlog( 'conn', 'new', $self, $class, 'deb:', $self->{'error_sleep'} );
   return $self;
 }
 
@@ -21,40 +21,40 @@ sub init {
   return $self;
 }
 ##methods
-# connect
-# reconnect
-# disconnect
-# dropconnect
-# keep
+#connect
+#reconnect
+#disconnect
+#dropconnect
+#keep
 ##child can do
-#  _connect
-#  _disconnect
-#  _dropconnect
-#  check_error
-#  parse_error
-#  _keep
+#_connect
+#_disconnect
+#_dropconnect
+#check_error
+#parse_error
+#_keep
 ##vars
-# tries
-# error_sleep
-# auto_connect
+#tries
+#error_sleep
+#auto_connect
 ##vars status
-# connected
+#connected
 sub connect {
   my $self = shift;
-  #  return ($self->{'connect_check'} ? $self->keep() : 0) if $self->{'connected'};
+  #return ($self->{'connect_check'} ? $self->keep() : 0) if $self->{'connected'};
   return 1 if $self->{'in_connect'} or $self->{'in_disconnect'};
   return $self->keep() if $self->{'connected'};
-  #    printlog( 'dev', "conn::connect[$self->{'connect_tried'} <= $self->{'connect_tries'}]" );
-  #  if (!$self->_connect()) {   #ok
+  #printlog( 'dev', "conn::connect[$self->{'connect_tried'} <= $self->{'connect_tries'}]" );
+  #if (!$self->_connect()) {   #ok
   while ( !$self->{'die'} and $self->{'connect_tried'}++ <= $self->{'connect_tries'} ) {
-    #  do {    {    #ok
+    #do {    {    #ok
     $self->{'in_connect'} = 1;
     if ( !$self->_connect() ) {
       #printlog('CONNECTED!?');
       $self->{'in_connect'} = 0;
       ++$self->{'connected'};
       ++$self->{'connects'};
-      #      printlog( 'dev', 'oncon', $_ ),
+      #printlog( 'dev', 'oncon', $_ ),
       $self->{ 'on_connect' . $_ }->($self) for grep { ref $self->{ 'on_connect' . $_ } eq 'CODE' } ( '', 1 .. 10 );
       return 0;
     }
@@ -69,7 +69,7 @@ sub connect {
     );
     $self->sleep( $self->{'error_sleep'} );
   }
-  #  } while ( ++$self->{'connect_tried'} <= $self->{'connect_tries'} );
+  #} while ( ++$self->{'connect_tried'} <= $self->{'connect_tries'} );
   return 1;
 }
 
@@ -77,13 +77,13 @@ sub reconnect {
   my $self = shift;
   $self->disconnect(@_);
   return $self->connect(@_);
-  #  ++$self->{'reconnects'};
+  #++$self->{'reconnects'};
 }
 
 sub disconnect {
   my $self = shift;
   return 0 unless $self->{'connected'};
-  #    printlog('trace', 'psconn::disconnect');
+  #printlog('trace', 'psconn::disconnect');
   $self->_disconnect(@_);
   $self->dropconnect(@_);
 }
@@ -97,22 +97,22 @@ sub dropconnect {
 
 sub keep {
   my $self = shift;
-  #      print("psconn::keep\n");
-  #      print("psconn::keep:R1=0\n"),
+  #print("psconn::keep\n");
+  #print("psconn::keep:R1=0\n"),
   return 0 if $self->{'connected'} and !$self->{'connect_check'};
-  #  local $_ =$self->_check();
-  #      print("keep:preR2[$_]\n");
-  #      print("keep:R2=0[$_]\n"),
-  #  return 0 if !$_;
+  #local $_ =$self->_check();
+  #print("keep:preR2[$_]\n");
+  #print("keep:R2=0[$_]\n"),
+  #return 0 if !$_;
   return 0 if !$self->_check();
-  #      print("keep:postR2[$_]\n");
-  #      print('keep:R3=rc'),
+  #print("keep:postR2[$_]\n");
+  #print('keep:R3=rc'),
   return $self->reconnect();
 }
 
 sub _connect {
   my $self = shift;
-  #  printlog('NEWER');
+  #printlog('NEWER');
   return 0;
 }
 
@@ -128,7 +128,7 @@ sub _dropconnect {
 
 sub _check {
   my $self = shift;
-  #  printlog('DONT');
+  #printlog('DONT');
   return 0;
 }
 
@@ -144,17 +144,17 @@ sub parse_error {
 
 sub DESTROY {
   my $self = shift;
-  #    printlog('trace', 'psconn::DESTROY');
+  #printlog('trace', 'psconn::DESTROY');
   $self->disconnect();
 }
 
 sub sleep {
   my $self = shift;
-  #  $self->log( 'dev', 'psconn::sleep', @_ );
-  # local $_ = $work{'sql_locked'};
-  # sql_unlock_tables() if $work{'sql_locked'} and $_[0];
+  #$self->log( 'dev', 'psconn::sleep', @_ );
+  #local $_ = $work{'sql_locked'};
+  #sql_unlock_tables() if $work{'sql_locked'} and $_[0];
   sleep(@_);
-  #  return psmisc::sleeper(@_);
-  # sql_lock_tables($_) if $_ and $_[0];
+  #return psmisc::sleeper(@_);
+  #sql_lock_tables($_) if $_ and $_[0];
 }
 1;
