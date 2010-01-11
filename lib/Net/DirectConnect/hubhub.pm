@@ -1,10 +1,11 @@
-#$Id: hubhub.pm 472 2009-08-25 05:52:44Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/hubhub.pm $
+#$Id: hubhub.pm 505 2009-11-22 03:52:21Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/hubhub.pm $
 #reserved for future 8)
-package Net::DirectConnect::hubhub;
+package    #hide from cpan
+  Net::DirectConnect::hubhub;
 use Net::DirectConnect;
 use strict;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 472 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 505 $' ) )[1];
 use base 'Net::DirectConnect';
 
 sub init {

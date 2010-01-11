@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: pssql.pm 4336 2009-10-07 20:32:32Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/pssql.pm $
+#$Id: pssql.pm 4387 2010-01-10 21:16:02Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/pssql.pm $
 
 =copyright
 PRO-search sql library
@@ -23,6 +23,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 todo:
 
 pg
+2009/10/06-13:53:11 dev HandleError DBD::Pg::db do failed: no connection to the server
+ DBI::db=HASH(0x1229568)  7 no connection to the server
+
+
+
 2009/06/02-19:37:35 dev HandleError DBD::Pg::st execute failed: FATAL:  terminating connection due to administrator command
 server closed the connection unexpectedly
         This probably means the server terminated abnormally
@@ -47,6 +52,7 @@ $work
 
 package pssql;
 use strict;
+our $VERSION = ( split( ' ', '$Revision: 4387 $' ) )[1];
 use locale;
 use DBI;
 use Data::Dumper;    #dev only
@@ -60,7 +66,7 @@ use base 'psconn';
 no warnings qw(uninitialized);
 our $AUTOLOAD;
 our ( %config, %work, %stat, %static, $param, );    #%human, %processor, %program
-our $VERSION = ( split( ' ', '$Revision: 4336 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4387 $' ) )[1];
 my ( $tq, $rq, $vq );
 #todoo
 #=c
@@ -138,18 +144,19 @@ BEGIN {
     #$self->{'default'} ||= {
     'sqlite' => {
       #'dbi'          => 'SQLite2',
-      'dbi'            => 'SQLite',
-      'params'         => [qw(dbname)],
-      'dbname'         => $config{'root_path'} . 'sqlite.db',
-      'table quote'    => '"',
-      'row quote'      => '"',
-      'value quote'    => "'",
-      'IF NOT EXISTS'  => 'IF NOT EXISTS',
-      'IF EXISTS'      => 'IF EXISTS',
-      'REPLACE'        => 'REPLACE',
-      'AUTO_INCREMENT' => 'AUTOINCREMENT',
-      'err_ignore'     => [qw( 1 )],
-      'error_type'     => sub {                                 #TODO!!!
+      'dbi'                 => 'SQLite',
+      'params'              => [qw(dbname)],
+      'dbname'              => $config{'root_path'} . 'sqlite.db',
+      'table quote'         => '"',
+      'row quote'           => '"',
+      'value quote'         => "'",
+      'IF NOT EXISTS'       => 'IF NOT EXISTS',
+      'index_IF NOT EXISTS' => 'IF NOT EXISTS',
+      'IF EXISTS'           => 'IF EXISTS',
+      'REPLACE'             => 'REPLACE',
+      'AUTO_INCREMENT'      => 'AUTOINCREMENT',
+      'err_ignore'          => [qw( 1 )],
+      'error_type'          => sub {                                 #TODO!!!
         my $self = shift;
         my ( $err, $errstr ) = @_;
         #printlog('dev',"ERRDETECT($err, $errstr)");
@@ -173,17 +180,19 @@ BEGIN {
       #'port' => 5432,
       'IF EXISTS' => 'IF EXISTS', 'CREATE TABLE' => 'CREATE TABLE', 'OFFSET' => 'OFFSET',
       #'unsigned'     => 0,
-      'UNSIGNED'        => '',
-      'table quote'     => '"',
-      'row quote'       => '"',
-      'value quote'     => "'",
-      'REPLACE'         => 'INSERT',
-      'EXPLAIN'         => 'EXPLAIN ANALYZE',
-      'CASCADE'         => 'CASCADE',
-      'fulltext_config' => 'pg_catalog.simple',
-      'params'          => [qw(dbname host port path)],
-      'err_ignore'      => [qw( 1 7)],
-      'error_type'      => sub {
+      'UNSIGNED'         => '',
+      'table quote'      => '"',
+      'row quote'        => '"',
+      'value quote'      => "'",
+      'index_name_table' => 1,
+      'REPLACE'          => 'INSERT',
+      'EXPLAIN'          => 'EXPLAIN ANALYZE',
+      'CASCADE'          => 'CASCADE',
+      'SET NAMES'        => 'SET client_encoding = ',
+      'fulltext_config'  => 'pg_catalog.simple',
+      'params'           => [qw(dbname host port path)],
+      'err_ignore'       => [qw( 1 7)],
+      'error_type'       => sub {
         my $self = shift, my ( $err, $errstr ) = @_;
         #printlog('dev',"ERRDETECT($err, [$errstr])");
         #printlog('dev',"ERRRET1"),
@@ -203,6 +212,7 @@ BEGIN {
       'on_connect' => sub {
         #printlog('dev',"pgoncon");
         my $self = shift;
+        $self->set_names();
         $self->do("select set_curcfg('default');") if $self->{'use_fulltext'} and $self->{'old_fulltext'};
         #$self->query_log("SET lc_messages='English_English'") ;
         #$self->query_log("SET lc_messages='de'") ;
@@ -224,9 +234,9 @@ BEGIN {
       'err_connection' => [qw( 1 1040 1053 1129 1213 1226 2002 2003 2006 2013 )],
       'err_fatal'      => [qw( 1016 1046 1251 )],                                   # 1045,
       'err_syntax'  => [qw( 1054 1060 1064 1065 1067 1071 1096 1103 1118 1148 1191 1364 1366 1406 1439)],  #maybe all 1045..1075
-      'err_repair'  => [qw( 126  130 144 145 1034 1062 1194 1582 )],
+      'err_repair'  => [qw( 126 130 144 145 1034 1062 1194 1582 )],
       'err_retry'   => [qw( 1317 )],
-      'err_install' => [qw(  1146  )],
+      'err_install' => [qw( 1146 )],
       'err_install_db' => [qw( 1049 )],
       'err_ignore '    => [qw( 2 1264 )],
       'error_type'     => sub {
@@ -309,9 +319,23 @@ BEGIN {
             my $stem =
               grep { $self->{'table'}{$table}{$_}{'fulltext'} eq $index and $self->{'table'}{$table}{$_}{'stem_index'} }
               keys %{ $self->{'table'}{$table} };
+            #TODO: maybe some message for user ?
+            $self->{'accurate'} = 1, next,
+              if ($stem
+              and length $search_str_stem
+              and $self->{'auto_accurate_on_slow'}
+              and $search_str_stem =~ /\b\w{$self->{'auto_accurate_on_slow'}}\b/ );
+            #{
+            #printlog 'slow',
+            #$stem = ! ($search_str_stem =~ /\b\w{$self->{'auto_accurate_on_slow'}}\b/);
+##                        printlog 'slow', $stem, ':',;
+            #$stem = undef;
+            #$stem = undef;
+            #}
             my $double =
               grep { $self->{'table'}{$table}{$_}{'fulltext'} and $self->{'table'}{$table}{$_}{'stem'} }
               keys %{ $self->{'table'}{$table} };
+            #printlog ('next', "$double and ( $self->{'accurate'} xor !$stem"),
             next if $double and ( $self->{'accurate'} xor !$stem );
             #printlog('acc', $index, $self->{'table'}{$table}{$index}{'fulltext'} ,
             #and
@@ -319,6 +343,7 @@ BEGIN {
             #and
             #;
             #printlog('I', $index, $_, $stem, $double, $self->{'accurate'});
+            #printlog('I', $index, $_, $stem, $double, $self->{'accurate'}, "$stem , $search_str_stem , $search_str");
             my $match = ' MATCH (' . $_ . ') AGAINST (' . $self->squotes( $stem ? $search_str_stem : $search_str ) . (
               ( !$self->{'no_boolean'} and $param->{ 'adv_query' . $param_num } eq 'on' )
               ? 'IN BOOLEAN MODE'
@@ -582,7 +607,7 @@ sub calc {
 
 sub _connect {
   my $self = shift;
-  $self->log( 'trace', 'pssql::_connect' );
+  #$self->log( 'trace', 'pssql::_connect' );
   #$self->log("pssql::_connect: try $self->{'in_connect'} or $self->{'in_disconnect'}");
   #return 1 if $self->{'in_connect'} or $self->{'in_disconnect'}
   #or  ( $self->{'errors'} >= $self->{'error_tries'} )
@@ -718,10 +743,10 @@ sub functions {
     #psmisc::program('repair');
     #$program{ psmisc::program() }{'func'} ||= sub {
     my $tim = psmisc::timer();
-    @_ = keys %{ $self->{'table'} } unless @_;
+    @_ = sort keys %{ $self->{'table'} } unless @_;
     @_ = grep { $_ and $self->{'table'}{$_} } @_;
     $self->log( 'info', 'Repairing table...', @_ );
-    $self->flush();
+    $self->flush() unless $self->{'no_repair_flush'};
     local $self->{'error_tries'} = 0;    #!
     $self->query_log( "REPAIR TABLE "
         . join( ',', map( $self->tquote("$self->{'table_prefix'}$_"), @_ ) )
@@ -788,8 +813,8 @@ sub functions {
 #$self->log( 'dev',      "can_query[$self->{'errors_chain'} < $self->{'error_chain_tries'}  ) or ( $self->{'errors'} < $self->{'error_tries'}] ==[]" );
     return
         !( $work{'die'} or $self->{'die'} or $self->{'fatal'} )
-      && ( $self->{'errors_chain'} < $self->{'error_chain_tries'} )
-      && ( $self->{'errors'} < $self->{'error_tries'} );
+      && ( !$self->{'error_chain_tries'} or $self->{'errors_chain'} < $self->{'error_chain_tries'} )
+      && ( !$self->{'error_tries'} or $self->{'errors'} < $self->{'error_tries'} );
   };
   $self->{'prepare'} ||= sub {
     #sub prepare {    #v1
@@ -806,6 +831,7 @@ sub functions {
       {
         #last if $self->can_query();
         #last if $self->{'errors_chain'} > $self->{'error_chain_tries'};
+        next unless $self->{'dbh'};
         $self->{'sth'}->finish() if $self->{'sth'};
         #$self->log( 'dev', "prepare query $query" );
         #$self->err(0);
@@ -904,7 +930,7 @@ sub functions {
       push( @ret, $self->query_print( $self->query($_) ) );
     }
     #query_print(\@ret);
-    return \@ret;
+    return wantarray ? @ret : \@ret;
   };
   $self->{'query_print'} ||= sub {
     #sub query_print {    #v0
@@ -1026,8 +1052,8 @@ tries
       if $work{'die'}
         or $self->{'die'}
         or $self->{'fatal'}
-        or ( $self->{'errors'} > $self->{'error_tries'} )
-        or ( $self->{'errors_chain'} > $self->{'error_chain_tries'} );
+        or ( $self->{'error_tries'} and $self->{'errors'} > $self->{'error_tries'} )
+        or ( $self->{'error_chain_tries'} and $self->{'errors_chain'} > $self->{'error_chain_tries'} );
     #or !$self->{'use_dbi'}
     #$self->log( 'sql', "dbi_err_retry OK1", $work{'errors'}, $DBI::err ),
 ##  $self->sleep( $self->{'error_sleep'}, 'sql_retry' ),
@@ -1140,7 +1166,7 @@ tries
     }
     $self->log( 'dev', "err_parse st2 ret1 no dbh", $err, $errstr ), return $self->err(1) if !$self->{'dbh'};
     #}
-    $self->log( 'dev', "err_parse unknown error ret($self->{'err_retry_unknown'}), end ", $err, $errstr, $errtype );
+    $self->log( 'dev', "err_parse unknown error ret($self->{'err_retry_unknown'}), end: [$err], [$errstr], [$errtype]" );
     #local $_ = 1;
     #todo COUNT check here
     #++$self->{'errors_chain'};
@@ -1220,7 +1246,7 @@ tries
       #push( @unique, $rq . $row . $rq ) if $table->{$row}{'unique'};
       push( @{ $fulltext{ $table->{$row}{'fulltext'} } }, $rq . $row . $rq ) if $table->{$row}{'fulltext'};
       push( @{ $unique{ $table->{$row}{'unique'} } }, $rq . $row . $rq )
-        if $table->{$row}{'unique'} and $table->{$row}{'unique'} =~ /\D/;    #/////// farcolorer
+        if $table->{$row}{'unique'} and $table->{$row}{'unique'} =~ /\D/;
     }
     if ( $self->{'driver'} =~ /pg/i and $self->{'use_fulltext'} ) {
       #$self->log('dev', 'ftdev',$tab,Dumper(\%fulltext),
@@ -1470,10 +1496,10 @@ tries
       next if $row =~ /^\W/;
       push( @ret,
             'CREATE INDEX '
-          . $self->{'IF NOT EXISTS'} . ' '
+          . $self->{'index_IF NOT EXISTS'} . ' '
           . $rq
-          . $row . '_'
-          . $tab
+          . $row
+          . ( $self->{'index_name_table'} ? '_' . $tab : '' )
           . $self->{'index_postfix'}
           . $rq . ' ON '
           . " $tq$self->{'table_prefix'}$tab$tq ( $rq$row$rq )" )
@@ -1481,6 +1507,10 @@ tries
     }
     #}
     return $self->do(@ret);
+  };
+  $self->{'create_indexes'} ||= sub {
+    #printlog values  %{ $self->{'table'}};
+    $self->create_index( $_, $self->{'table'}{$_} ) for keys %{ $self->{'table'} };
   };
   #$self->{'do'}{'drop_table'} = 1;
   $self->{'drop_table'} ||= sub {
@@ -1709,10 +1739,12 @@ tries
     local $_;
     #$processor{'out'}{'sql'}
     $_ = $self->do(
-      "UPDATE $self->{'IGNORE'} $tq$self->{'table_prefix'}$table$tq $set $setignore WHERE $bywhere $where $whereignore")
+"UPDATE $self->{$self->{'update_options'}} $self->{'IGNORE'} $tq$self->{'table_prefix'}$table$tq $set $setignore WHERE $bywhere $where $whereignore"
+      )
       if ( $set or $lwhere or !$self->{'ON DUPLICATE KEY UPDATE'} )
       and ( $bywhere or $where or $whereignore );
-#$self->log( 'dev', "WHERE[" . $where . "] BYwhere[" . $bywhere . "] whereignore[$whereignore] ",      " UPVAL=", %{$values}, "UPSET=", $set, "RES[$_]" );
+#$self->log( 'dev','by', Dumper $by);
+#$self->log( 'dev', "WHERE[" . $where . "] BYwhere[" . $bywhere . "] whereignore[$whereignore] ",      " UPVAL=", %{$values}, "UPSET=", $set, "RES[$_]" , Dumper $self->{'table'}{$table});
 #$processor{'out'}{'hash'}->
 #$self->hash($table, { '' => $values } ),    #$processor{'out'}{'array'}->($table)
 #$self->log( 'dev',"insert_hash run? ", "( !$set or !int($_) ) and !$where");
@@ -1820,7 +1852,7 @@ tries
           #and ($hash->{$_} ne $self->{'table'}{$table}{$_}{'default'} )
           and keys %{ $self->{'table'}{$table}{$_} } and !$self->{'table'}{$table}{$_}{'array_insert'}
         } keys %{ $self->{'table'}{$table} };
-      #$self->log('dmp','insertdata2=',Dumper(\@_));
+      #$self->log('dmp','insertdata2($table)=',Dumper(\@_));
       $self->insert_cached(
         $table,
         \@{$hash}{
@@ -2139,11 +2171,14 @@ tries
           next if $self->{'no_empty'} and ( $pi !~ /\S/ or $pi =~ /^\s*[%_]+\s*$/ );
           #printlog('dev', 'pi_:', $pi);
           $llask .= ' LIKE ';
-        } else {
-          if    ( $param->{ $item . '_mode' . $param_num } =~ /[g>]/i ) { $llask .= ( $not ? '<' : '>' ) . '= '; }
-          elsif ( $param->{ $item . '_mode' . $param_num } =~ /[l<]/i ) { $llask .= ( $not ? '>' : '<' ) . '= '; }
-          else                                                          { $llask .= '= '; }
         }
+        #} else {
+        elsif ( $param->{ $item . '_mode' . $param_num } =~ /notnull/i ) { $llask .= 'IS NOT NULL'; next; }
+        elsif ( $param->{ $item . '_mode' . $param_num } =~ /null/i )    { $llask .= 'IS NULL';     next; }
+        elsif ( $param->{ $item . '_mode' . $param_num } =~ /[g>]/i ) { $llask .= ( $not ? '<' : '>' ) . '= '; }
+        elsif ( $param->{ $item . '_mode' . $param_num } =~ /[l<]/i ) { $llask .= ( $not ? '>' : '<' ) . '= '; }
+        else                                                          { $llask .= '= '; }
+        #}
         $pi =~ s/(^\s*)|(\s*$)//g;
         $pi = psmisc::human( 'number_k', $pi ) if $item eq 'size';
         $work{ 'bold_' . $item } .= ' ' . $pi;
@@ -2540,7 +2575,9 @@ tries
       @what = ( $self->join_where( $where, $param, $table ), @what );
     }
     $sql = join( ', ', grep { $_ } @what, ) . ' ' . $sql;
-    $sql = " SELECT $self->{'HIGH_PRIORITY'} " . $sql;    #SQL_CALC_FOUND_ROWS
+    my $priority;
+    $priority = $self->{'HIGH_PRIORITY'} unless $config{'client_bot'};
+    $sql = " SELECT $priority " . $sql;    #SQL_CALC_FOUND_ROWS
     $sql .= $self->groupby( $param, $table );
     $sql .= $self->orderby( $param, $table );
     #$work{'on_page'} = 10 unless defined $work{'on_page'};
@@ -2806,7 +2843,7 @@ http://linguist.nm.ru/stemka/stemka.html
   for my $action (qw(optimize analyze)) {
     $self->{$action} ||= sub {
       my $self = shift;
-      @_ = keys %{ $self->{'table'} } unless @_;
+      @_ = sort keys %{ $self->{'table'} } unless @_;
       @_ = grep { $_ and $self->{'table'}{$_} } @_;
       $self->log( 'err', 'not defined action', $action, ), return unless $self->{ uc $action };
       $self->log( 'info', $action, @_ );
@@ -2818,7 +2855,7 @@ http://linguist.nm.ru/stemka/stemka.html
   for my $action (qw(flush)) {
     $self->{$action} ||= sub {
       my $self = shift;
-      @_ = keys %{ $self->{'table'} } unless @_;
+      @_ = sort keys %{ $self->{'table'} } unless @_;
       @_ = grep { $_ and $self->{'table'}{$_} } @_;
       $self->log( 'err', 'not defined action', $action, ), return unless $self->{ uc $action };
       $self->log( 'info', $action, @_ );

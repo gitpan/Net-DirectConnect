@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-#$Id: hub.pl 473 2009-10-07 20:35:21Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/hub.pl $
+#$Id: hub.pl 498 2009-11-16 08:37:21Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/hub.pl $
 
 =r
 
@@ -9,12 +9,50 @@ dev hub test
 
 use strict;
 use Data::Dumper;    #dev only
-$Data::Dumper::Sortkeys = 1;
+$Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = 1;
 use lib '../lib';
 use Net::DirectConnect::hub;
-my $dc = Net::DirectConnect::hub->new( no_print => undef, );
+use lib '../lib';
+use lib './stat/pslib';
+use psmisc;
+psmisc::config();
+#my $dc = Net::DirectConnect::hub->new( no_print => undef, );
+my $dc = Net::DirectConnect->new(
+  'protocol' => 'adc',
+  hub        => 1,
+  no_print   => undef,
+  myport     => 413,
+  'log'      => sub {
+    my $dc = ref $_[0] ? shift : {};
+    #psmisc::printlog shift(), $dc->{'number'}, join ' ', psmisc::human('time'), @_, "\n";
+    psmisc::printlog shift(), "[$dc->{'number'}]", @_,;
+  },
+  'auto_work' => sub {
+    my $dc = shift;
+    psmisc::schedule(
+      [ 20, 10 ],
+      our $dump_sub__ ||= sub {
+        print "Writing dump\n";
+        psmisc::file_rewrite( 'dump.hub', Dumper $dc);
+      }
+    );
+  }
+);
 #$dc->work(100);      #seconds
-$dc->work() while $dc->active();    #forever
+
+=without auto_work
+while ( $dc->active() ) {
+  $dc->work();    #forever
+  psmisc::schedule(
+    [ 20, 10 ],
+    our $dump_sub__ ||= sub {
+      print "Writing dump\n";
+      psmisc::file_rewrite( 'dump.hub', Dumper $dc);
+    }
+  );
+}
 #$dc->wait_finish();
 $dc->disconnect();
+=cut
+
 #$dc = undef;

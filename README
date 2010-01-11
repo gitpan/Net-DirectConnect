@@ -2,13 +2,13 @@ NAME
     Net::DirectConnect - Perl Direct Connect protocol implementation
 
 SYNOPSIS
-      use Net::DirectConnect::clihub;
-      my $dc = Net::DirectConnect::clihub->new(
-        'host' => 'dc.mynet.com',
-        'port' => '4111', #if not 411
+      use Net::DirectConnect;
+      my $dc = Net::DirectConnect->new(
+        'host' => 'dc.mynet.com:4111', #if not 411
         'Nick' => 'Bender', 
         'description' => 'kill all humans',
-        'M'           => 'P', #passive mode, active by default
+         #'M'           => 'P', #passive mode, autodetect by default
+         #'local_mask'       => [qw(80.240)], #mode=active if hub in this nets and your ip in gray
       );
       $dc->wait_connect();
       $dc->chatline( 'hi all' );
@@ -22,10 +22,9 @@ SYNOPSIS
 
 DESCRIPTION
      Currently NOT supported:
-     sharing;
+     self filelist making 
      segmented, multisource download;
      async connect;
-     full ADC;
 
 INSTALLATION
      To install this module type the following:
@@ -53,6 +52,11 @@ SEE ALSO
      also useful for creating links from web:
      http://magnet-uri.sourceforge.net/
      http://en.wikipedia.org/wiki/Magnet:_URI_scheme
+
+TODO
+     CGET file files.xml.bz2 0 -1 ZL1<<<
+
+     Rewrite better
 
 AUTHOR
     Oleg Alexeenkov, <pro@cpan.org>

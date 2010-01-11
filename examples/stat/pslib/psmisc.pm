@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: psmisc.pm 4336 2009-10-07 20:32:32Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+#$Id: psmisc.pm 4378 2009-12-29 19:34:51Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
 
 =copyright
 PRO-search shared library
@@ -23,8 +23,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #print "misc execute " , $mi++;
 #=pac
 package psmisc;
-use locale;
 use strict;
+our $VERSION = ( split( ' ', '$Revision: 4378 $' ) )[1];
+use locale;
 use Encode;
 use POSIX qw(strftime);
 use Data::Dumper;    #dev only
@@ -360,6 +361,7 @@ sub decode_url($) {    #v1
   sub file_append(;$@) {
     #print( 'append', @_, "\n" );
     local $_ = shift;
+    #print "append to [$_]";
     for ( defined $_ ? $_ : keys %fh ) {
       #print("")
       #printlog('dev', 'closing file', $_),
@@ -384,8 +386,7 @@ sub decode_url($) {    #v1
 
 sub file_rewrite(;$@) {
   unlink $_[0] if $_[0];    #|| return;
-  #return file_append(@_);
-  return &file_append;
+  return &file_append, file_append();
 }
 #all def fac =
 #u   u   u  0
@@ -442,6 +443,7 @@ sub printlog (@) {          #v5
   );
 #print "[devlog][fac:$_[0]=".$config{ 'log_' . $_[0]}."][file=$file][log_screen=$config{'log_screen'} log_default=$config{'log_default'} noscreen=$noscreen html=$html xml=$xml]\n" ;
   file_append( $config{'log_dir'} . $file, @string );
+  file_append() if !$config{'log_cache'};
   #if ( @_ and $file and open( LOG, '>>', $config{'log_dir'}.$file ) ) {
   #print LOG@string;
   #close(LOG);
@@ -450,6 +452,16 @@ sub printlog (@) {          #v5
   #state(@_);
   flush() if $config{'log_flush'};
   return @_;
+}
+
+sub file_read ($) {
+  open my $f, '<', $_[0] or return;
+  #print "slurp[$_[0]]";
+  local $/ = undef;
+  my $ret = <$f>;
+  close $f;
+  #print "=[$ret]";
+  return $ret;
 }
 
 sub openproc($) {
@@ -565,12 +577,18 @@ sub name_to_ip($)   { return func_cache( \&name_to_ip_noc,   @_ ); }
 
 sub normalize_ip_noc($) {    #v2
   my ($ip) = @_;
+  return lc $ip
+    if $config{'norm_skip_host'}
+      and
+      ( ( ref $config{'norm_skip_host'} eq 'Regexp' ? $ip =~ $config{'norm_skip_host'} : $ip =~ /$config{'norm_skip_host'}/i )
+      );
   my ($err);
   ( $ip, $err ) = name_to_ip($ip);
   return $ip if $err;
   my ( $tmp, $host );
   return $ip unless $tmp = inet_aton($ip);
   return $ip unless $host = ( gethostbyaddr( $tmp, AF_INET ) )[0];
+
   for my $repl ( @{ $config{'ip_normalize_pre'} } ) {
     last if $host =~ /^$repl\./;
     my $thost = $host;
@@ -1081,14 +1099,14 @@ sub config_read {
 
 sub pre_calc_every {
   $config{'post_init_every'}{$_}->(@_)
-    for grep { $config{'post_init_every'}{$_} } sort keys %{ $config{'post_init_every'} or {} };
+    for grep { ref $config{'post_init_every'}{$_} eq 'CODE' } sort keys %{ $config{'post_init_every'} || {} };
 }
 
 sub pre_calc_once {
   #$config{'post_init_once'}->(@_) if $config{'post_init_once'};
   #print "pre_calc_once\n";
   $config{'post_init_once'}{$_}->(@_)
-    for grep { $config{'post_init_once'}{$_} } sort keys %{ $config{'post_init_once'} or {} };
+    for grep { ref $config{'post_init_once'}{$_} eq 'CODE' } sort keys %{ $config{'post_init_once'} || {} };
 }
 
 sub pre_calc {
@@ -1179,7 +1197,7 @@ sub conf(;$$) {
 sub http_get {    # REWRITE easier
   my ( $what, $asfile, $lwpopt, $method, $content, $headers_out, $headers_in ) = @_;
   #return "ZZZZZ";
-  #printlog('dev', 'http_get',$what, $asfile, "cd=$config{'cachedir'};c=$config{'cache_http'}; ");
+  #printlog( 'dev', 'http_get', $what, $asfile, "cd=$config{'cachedir'};c=$config{'cache_http'}; " );
   my %url = split_url($what);
   my $c = encode_url( $what, $config{'encode_url_file_mask'} );
   if ( length $c > 200 ) {
@@ -1208,9 +1226,11 @@ sub http_get {    # REWRITE easier
   return eval
     #do
   {
+    #printlog 'dev' ,0 ;
     eval('use LWP::UserAgent; use URI::URL;1;') or printlog( 'err', 'http use libs', @!, $! );    #if not installed
     my $ua = LWP::UserAgent->new(
-      'timeout' => hconfig( 'timeout', $url{'host'}, $url{'prot'} ),
+      'agent' => $config{'useragent'} || $config{'crawler_name'},
+      'timeout' => hconfig( 'timeout', $url{'host'}, $url{'prot'} ) || 10,
       %{ $config{'lwp'} || {} }, %{ $lwpopt || {} }
     );
     #$ua->proxy('http', 'http://proxy.ru:3128');
@@ -1221,6 +1241,7 @@ sub http_get {    # REWRITE easier
     } elsif ( $config{'proxy'} ) {
       $ua->proxy( 'http', $config{'proxy'} );
     }
+    #printlog 'dev' ,1 , $asfile , $c;
     $ua->mirror( $what, $c ), return $c if $asfile;
     $method ||= 'GET';
     #print "RwM:$method;";
@@ -1230,12 +1251,17 @@ sub http_get {    # REWRITE easier
         new HTTP::Request(
           $method,
           new URI::URL($what),
-          new HTTP::Headers( 'User-Agent' => $config{'useragent'} || $config{'crawler_name'}, %{ $headers_in || {} } ), $content
+          new HTTP::Headers(
+            #'User-Agent' => ($config{'useragent'} || $config{'crawler_name'}),
+            %{ $headers_in || {} }
+          ),
+          $content
         )
       )
     );
     #my $ret = $headers ? \$resp->content : \$resp->asfile;
     my $ret = $headers_out ? 'as_string' : 'content';
+    #printlog 'resp', Dumper $resp;
     #print "[H:",$resp->header();
     #print "[H:",$resp->code();
     if ( $resp->is_success ) {
@@ -1274,7 +1300,7 @@ sub http_get_code {
         new HTTP::Request(
           ( $method or 'GET' ),
           new URI::URL($what),
-          new HTTP::Headers( 'User-Agent' => $config{'crawler_name'} )
+          new HTTP::Headers( 'User-Agent' => $config{'useragent'} || $config{'crawler_name'} )
         )
       )
     );
@@ -1305,17 +1331,10 @@ sub loadlist {
       my $host = shift or next;
       local %_;
       get_params_one( \%_, @_ );
-      #my ( $host, $tim ) = /^\s*(\S+)\s*(\S*)\s*/;
-      #next
-      #if !$host
-      #or ( $tim and ( $tim < time - hconfig( 'period', $host ) ) );
-      #$res{$host} = ( $tim or 1 );
-      #printlog('dev', 'loadlist', $host, '=',\%_, '=', %_  );
       $res{$host} = \%_;
     }
     close(SSF);
   }
-  #printlog('dev', 'loadlist-res:', \%res );
   return wantarray ? %res : \%res;
 }
 sub shelldata(@) { s/[\x0d\x0a\"\'\`|><&]//g for @_; }    #`
@@ -1342,27 +1361,22 @@ sub save_list {
   my %schedule;
 
   sub schedule($$;@) {
+    #for (1..100000000) { psmisc::schedule(10, our $my_every_10sec_sub__ ||= sub { print "every 10 sec"})};
     my ( $every, $func ) = ( shift, shift );
-    #my ($wait, $runs);
     #printlog 'everyS1', Dumper([ $every, $func,  $schedule{$func} ]);
     my $p;
-    ( $p->{'wait'}, $p->{'every'}, $p->{'runs'}, $p->{'cond'} ) = @$every if ref $every eq 'ARRAY';
-    #printlog 'everyS2', Dumper([ $every, $func, $p, $schedule{$func} ]);
-    #( $wait, $every, $runs, $cond )
-    #( $p{'wait'}, $p{'every'}, $p{'runs'}, $p{'cond'} ) = @{$every}{qw(wait every runs cond)}
+    ( $p->{'wait'}, $p->{'every'}, $p->{'runs'}, $p->{'cond'}, $p->{'id'} ) = @$every if ref $every eq 'ARRAY';
     $p = $every if ref $every eq 'HASH';
-    #printlog('everyEE', $every),
     $p->{'every'} ||= $every if !ref $every;
-    #printlog 'everyS3', Dumper([ $every, $func, $p, $schedule{$func} ]);
-    $schedule{$func}{'last'} = time - $p->{'every'} + $p->{'wait'} if $p->{'wait'} and !$schedule{$func}{'last'};
+    $p->{'id'} ||= $func;
+    $schedule{ $p->{'id'} }{'last'} = time - $p->{'every'} + $p->{'wait'} if $p->{'wait'} and !$schedule{ $p->{'id'} }{'last'};
     #printlog 'everyS4', Dumper([ $every, $func, $p, $schedule{$func} ]), $func;
-    #printlog('dev','everyR', Dumper($p, $schedule{$func} ), time, $func ),
-    $func->(@_), $schedule{$func}{'last'} = time
-      if $schedule{$func}{'last'} + $p->{'every'} < time
-        and ( !$p->{'runs'} or $schedule{$func}{'runs'}++ < $p->{'runs'} )
-        and ( !( ref $p->{'cond'} eq 'CODE' ) or $p->{'cond'}->( $p, $schedule{$func}, @_ ) )
-        and ref $func eq 'CODE';
-    #printlog 'everyE';
+    #printlog('dev','everyR', Dumper($p, $schedule{$p->{'id'}} ), time, $func ),
+    $func->(@_), $schedule{ $p->{'id'} }{'last'} = time
+      if ( $schedule{ $p->{'id'} }{'last'} + $p->{'every'} < time )
+      and ( !$p->{'runs'} or $schedule{ $p->{'id'} }{'runs'}++ < $p->{'runs'} )
+      and ( !( ref $p->{'cond'} eq 'CODE' ) or $p->{'cond'}->( $p, $schedule{ $p->{'id'} }, @_ ) )
+      and ref $func eq 'CODE';
   }
 }
 {
@@ -1374,9 +1388,9 @@ sub save_list {
   sub lock (;$@) {
     my $name = shift;
     my %p = ref $_[0] eq 'HASH' ? %{ $_[0] } : @_;
-    $p{'sleep'}   ||= 1;
-    $p{'timeout'} ||= 600;
-    $p{'old'}     ||= 3600;
+    $p{'sleep'}   ||= $config{'lock_sleep'}   || 1;
+    $p{'timeout'} ||= $config{'lock_timeout'} || 600;
+    $p{'old'}     ||= $config{'lock_old'}     || 3600;
     my $waitstart = time();
     my $waits;
   LOCKWAIT:
@@ -1389,7 +1403,6 @@ sub save_list {
       sleep $p{'sleep'};
     }
     printlog( 'lock', 'unlocked', $name, 'per', int( time() - $waitstart ) ) if $waits;
-    push @locks, $name;
     local $_ = "pid=$$ time=" . int( time() );
     file_rewrite lockfile $name, $_;
     file_rewrite;    #flush
@@ -1403,23 +1416,35 @@ sub save_list {
       printlog( 'err', 'lock open err', $name, lockfile $name);
       return 0;
     }
+    push @locks, lockfile $name;
     return 1;
   }
 
   sub unlock (;$) {
     my $name = shift;
     local $_ = unshift @locks;
-    push @locks, $_ if length $name and $name ne $_;
+    push @locks, $_ if length $name and lockfile($name) ne $_;
     #$name ||= $_;
-    #printlog 'lock', 'unlocking', $name, lockfile $name;
-    unlink lockfile( $name ||= $_ );
+    printlog 'lock', 'unlocking', $name, lockfile $name;
+    #unlink lockfile( $name ||= $_ );
+    unlink $name ? lockfile($name) : $_;
   }
-  sub unlock_all () { unlock $_ for reverse @locks; }
+
+  sub unlock_all () {
+    #unlink $_ for reverse @locks;
+    unlink $_ while $_ = pop @locks;
+  }
 
   END {
-    #printlog( 'lock', 'END locked unlock', $_ ),
+    printlog( 'lock', 'END locked unlock', @locks ) if @locks;
     unlock_all();
   }
+  $SIG{$_} ||= sub {
+    printlog( 'lock', 'SIG locked unlock', @locks ) if @locks;
+    unlock_all();
+    exit;
+    }
+    for qw(HUP INT QUIT KILL TERM);
 }
 {
   my ( $current, $order );

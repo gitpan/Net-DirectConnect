@@ -1,4 +1,4 @@
-# $Id: TODO 463 2009-01-25 19:12:33Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/TODO $
+# $Id: TODO 531 2010-01-11 00:40:18Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/TODO $
 
 
 better nick-port-ip-lists
@@ -13,3 +13,15 @@ check socket->send ret
 
 libevent http://paste.org.ru/?nt15er
 
+
+
+
+
+
+inlib:
+
+collect search results [n]
+
+make connection-listener
+
+examples/stat : finish adc

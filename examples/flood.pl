@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: flood.pl 473 2009-10-07 20:35:21Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/flood.pl $
+#$Id: flood.pl 531 2010-01-11 00:40:18Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/flood.pl $
 
 =copyright
 flood tests
@@ -78,7 +78,7 @@ sub handler {
 }
 require 'flooddef.pl';
 do 'floodmy.pl';
-print("usage: flood.pl [dchub://]host[:port] [bot_nick]\n"), exit if !$ARGV[0];
+print("usage: $1 [dchub://]host[:port] [bot_nick]\n"), exit if !$ARGV[0];
 handler( 'mail_loop_bef', @ARGV );
 
 sub createbot {
@@ -100,7 +100,7 @@ sub createbot {
 }
 TRY: for ( 0 .. $config{'flood_tries'} ) {
   print("try $_\n"), handler( 'create_bef', $_ );
-  $ARGV[0] =~ m|^(?:dchub\://)?(.+?)(?:\:(\d+))?$|i;
+  $ARGV[0] =~ m|^(?:\w+\://)?(.+?)(?:\:(\d+))?$|i;
   #print("host=$1; port=$2;\n");
   my $dc = createbot( $1, $2 );
   #=c

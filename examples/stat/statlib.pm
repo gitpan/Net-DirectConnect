@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: statlib.pm 473 2009-10-07 20:35:21Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
+#$Id: statlib.pm 530 2010-01-10 23:05:39Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
 package statlib;
 use strict;
 use Time::HiRes qw(time sleep);
@@ -12,9 +12,10 @@ use psmisc;
 use Exporter 'import';
 our @EXPORT = qw(%config  $param   $db );
 our ( %config, $param, $db, );
-$config{'log_trace'} ||= $config{'log_dmpbef'} = 0;
-$config{'log_dmp'}   ||= 0;
-$config{'log_dcdmp'} ||= 0;
+$config{'log_trace'}  ||= 0;
+$config{'log_dmpbef'} ||= 0;
+$config{'log_dmp'}    ||= 0;
+$config{'log_dcdmp'}  ||= 0;
 $config{'hit_to_ask'} ||= 2;
 $config{'ask_retry'}  ||= 3600;
 $config{'limit_max'}  ||= 100;
@@ -25,15 +26,26 @@ $config{'periods'}    ||= {
   'd' => 86400,
   'w' => 7 * 86400,    #'m'=>31*86400, 'y'=>366*86400
 };
-$config{'purge'}          ||= 31 * 86400;    #366*86400;
+$config{'purge'}          ||= 31 * 86400;                          #366*86400;
 $config{'default_period'} ||= 'd';
-$config{'sql'}            ||= {
-  'driver'       => 'mysql',
-  'dbname'       => 'dcstat',
-  'auto_connect' => 1,
-  'log'          => sub { shift; psmisc::printlog(@_) },
-  'cp_in'        => 'cp1251',
-  'table'        => {
+$config{'browsers'}       ||= [qw(opera firefox chrome safari)];
+my $browsers = join '|', @{ $config{'browsers'} };
+#$config{'client'} = 'ie',
+$config{'browser_ie'} = 1 if $ENV{'HTTP_USER_AGENT'} =~ /MSIE/ and $ENV{'HTTP_USER_AGENT'} !~ /$browsers/i;
+#$config{'client'} = $_,
+$config{ 'browser_' . $_ } = 1 for grep { $ENV{'HTTP_USER_AGENT'} =~ /$_/i } @{ $config{'browsers'} };
+$config{'use_graph'} ||= 1 if $config{browser_firefox} or $config{browser_safari} or $config{browser_chrome};
+$config{'sql'} ||= {
+  'driver'              => 'mysql',
+  'dbname'              => 'dcstat',
+  'auto_connect'        => 1,
+  'log'                 => sub { shift; psmisc::printlog(@_) },
+  'cp_in'               => 'cp1251',
+  'connect_tries'       => 0,
+  'connect_chain_tries' => 0,
+  'error_tries'         => 0,
+  'error_chain_tries'   => 0,
+  'table'               => {
     'queries' => {
       'time' => pssql::row( 'time', 'index' => 1,         'purge'  => 1, ),
       'hub'  => pssql::row( undef,  'type'  => 'VARCHAR', 'length' => 64, 'index' => 1, 'default' => '', ),
@@ -85,6 +97,25 @@ $config{'sql'}            ||= {
       'online' => pssql::row( 'time', 'index' => 1,        'default'      => 0, ),
       'info'   => pssql::row( undef,  'type'  => 'VARCHAR', ), #'dumper' => 1,
     },
+    'queries_top_string_daily' => {
+      'date' => pssql::row( undef, 'type' => 'VARCHAR',  'length'  => 10, 'default' => '', 'index' => 1, primary => 1 ),
+      n      => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0,  primary   => 1 ),
+      cnt    => pssql::row( undef, 'type' => 'INT',      'default' => 0, ),
+      string => pssql::row( undef, 'type' => 'VARCHAR',  'index'   => 1, ),
+    },
+    'queries_top_tth_daily' => {
+      #queries_top_tth_daily
+      'date' => pssql::row( undef, 'type' => 'VARCHAR',  'length'  => 10, 'default' => '', primary => 1, 'index' => 1, ),
+      n      => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0,  primary   => 1 ),
+      cnt    => pssql::row( undef, 'type' => 'INT',      'default' => 0, ),
+      tth    => pssql::row( undef, 'type' => 'VARCHAR',, 'index'   => 1, ),
+    },
+    'results_top_daily' => {
+      'date' => pssql::row( undef, 'type' => 'VARCHAR',  'length'  => 10, 'default' => '', primary => 1, 'index' => 1, ),
+      n      => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0,  primary   => 1 ),
+      cnt    => pssql::row( undef, 'type' => 'INT',      'default' => 0, ),
+      tth    => pssql::row( undef, 'type' => 'VARCHAR',, 'index'   => 1, ),
+    },
   },
   'table_param' => {
     'queries' => { 'big'       => 1, },
@@ -98,12 +129,12 @@ my $order;
 $config{'queries'}{'queries top string'} ||= {
   'main'    => 1,
   'periods' => 1,
-  'class'   => 'half',
-  'show'    => [qw(cnt string)],
-  'desc'    => { 'ru' => 'Чаще всего ищут', 'en' => 'Most searched' },
-  'SELECT'  => 'string, COUNT(*) as cnt',
-  'FROM'    => 'queries',
-  'WHERE'   => ['string != ""'],
+  ( !$config{'use_graph'} ? ( 'class' => 'half' ) : ( 'graph' => 1 ) ),
+  'show'   => [qw(cnt string)],
+  'desc'   => { 'ru' => 'Чаще всего ищут', 'en' => 'Most searched' },
+  'SELECT' => 'string, COUNT(*) as cnt',
+  'FROM'   => 'queries',
+  'WHERE'  => ['string != ""'],
   #todo: show time last
   'GROUP BY' => 'string',
   'ORDER BY' => 'cnt DESC',
@@ -122,8 +153,9 @@ $config{'queries'}{'queries string last'} ||= {
   'order'     => ++$order,
 };
 $config{'queries'}{'results top'} ||= {
-  'main'     => 1,
-  'periods'  => 1,
+  'main'    => 1,
+  'periods' => 1,
+  ( !$config{'use_graph'} ? () : ( 'graph' => 1 ) ),
   'show'     => [qw(cnt string filename size tth)],                                                 #time
   'desc'     => { 'ru' => 'Распространенные файлы', 'en' => 'Most stored' },
   'SELECT'   => '*, COUNT(*) as cnt',
@@ -134,9 +166,9 @@ $config{'queries'}{'results top'} ||= {
   'order'    => ++$order,
 };
 $config{'queries'}{'queries top tth'} ||= {
-  'main'      => 1,
-  'periods'   => 1,
-  'class'     => 'half',
+  'main'    => 1,
+  'periods' => 1,
+  ( !$config{'use_graph'} ? ( 'class' => 'half' ) : ( 'graph' => 1 ) ),
   'desc'      => { 'ru' => 'Чаще всего скачивают', 'en' => 'Most downloaded' },
   'show'      => [qw(cnt string filename size tth )],
   'SELECT'    => '*, COUNT(*) as cnt',
@@ -363,7 +395,8 @@ sub make_query {
         "SELECT * FROM slow WHERE name = "
       . $db->quote($query)
       . ( ( $config{'queries'}{$query}{'periods'} ? ' AND period=' . $db->quote($period) : '' )
-      . " LIMIT $config{'query_default'}{'LIMIT'}" );
+      . " ORDER BY n"
+        . " LIMIT $config{'query_default'}{'LIMIT'}" );
     my $res = $db->query($sql);
     #print Dumper $res if $param->{'debug'};
     my @ret;
@@ -379,5 +412,5 @@ sub make_query {
     'LEFT JOIN', 'USING', 'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT', 'UNION';
   return $db->query($sql);
 }
-$db ||= pssql->new( %{ $config{'sql'} or {} }, );
+$db ||= pssql->new( %{ $config{'sql'} || {} }, );
 1;

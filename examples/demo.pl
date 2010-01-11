@@ -1,13 +1,14 @@
 #!/usr/bin/perl -w
-#$Id: demo.pl 473 2009-10-07 20:35:21Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/demo.pl $
+#$Id: demo.pl 535 2010-01-11 02:42:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/demo.pl $
 use strict;
 no warnings qw(uninitialized);
 use Data::Dumper;    #dev only
 $Data::Dumper::Sortkeys = 1;
 use lib '../lib';
-use Net::DirectConnect::clihub;
-my $dc = Net::DirectConnect::clihub->new(
-  'M'            => 'P',
+use Net::DirectConnect;
+my $dc = Net::DirectConnect->new(
+  'host'         => $ARGV[0],
+  'M'            => 'P',               #passive mode
   'sharesize'    => 10_000_000_000,    # 10G
   'auto_connect' => 0,                 # dont connect in ->new
 );
@@ -26,14 +27,14 @@ $dc->{'handler'}{'chatline'} = sub {
     $dc->To( $nick, 'woof!' );          # private msg, can be written as $dc->cmd('To', $nick, ...
   }
 };
-$dc->connect( $ARGV[0] );               # connect can parse dchub://hub:port/
+#$dc->connect( $ARGV[0] );               # connect can parse dchub://hub:port/
 $dc->wait_connect();
 $dc->work(10);                          # seconds
 $dc->chatline('hello world');
 {                                       # fine tuned getinfo with send buffer
   local $dc->{'sendbuf'} = 1;           #enable buffer
   $dc->sendcmd( 'GetINFO', $_, $dc->{'Nick'} )
-    for grep { $dc->{'NickList'}{$_}{'online'} and !$dc->{'NickList'}{$_}{'info'} } keys $dc->{'NickList'};
+    for grep { $dc->{'NickList'}{$_}{'online'} and !$dc->{'NickList'}{$_}{'info'} } keys %{ $dc->{'NickList'} };
   $dc->sendcmd();                       #flush buffer (actual send)
 }
 $dc->sendcmd('GetINFO');

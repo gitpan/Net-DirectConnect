@@ -1,6 +1,7 @@
-#$Id: psconn.pm 4323 2009-08-25 05:43:42Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psconn.pm $
+#$Id: psconn.pm 4384 2010-01-10 11:38:05Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psconn.pm $
 package psconn;
 use strict;
+our $VERSION = ( split( ' ', '$Revision: 4384 $' ) )[1];
 #use psmisc;
 #sub connection {
 sub new {
@@ -14,7 +15,8 @@ sub new {
 
 sub init {
   my $self = shift;
-  local %_ = ( 'connected' => 0, 'connect_auto' => 1, 'connect_tries' => 10, 'error_sleep' => 5, @_ );
+  local %_ =
+    ( 'connected' => 0, 'connect_auto' => 1, 'connect_tries' => 100, 'connect_chain_tries' => 10, 'error_sleep' => 5, @_ );
   @{$self}{ keys %_ } = values %_;
   #printlog('dev', 'conn init error_sleep', $self->{'error_sleep'});
   $self->connect() if $self->{'auto_connect'};
@@ -46,7 +48,10 @@ sub connect {
   return $self->keep() if $self->{'connected'};
   #printlog( 'dev', "conn::connect[$self->{'connect_tried'} <= $self->{'connect_tries'}]" );
   #if (!$self->_connect()) {   #ok
-  while ( !$self->{'die'} and $self->{'connect_tried'}++ <= $self->{'connect_tries'} ) {
+  while ( !$self->{'die'}
+    and ( $self->{'connect_tried'}++ <= $self->{'connect_tries'} or !$self->{'connect_tries'} )
+    and ( $self->{'connect_chain_tried'}++ <= $self->{'connect_chain_tries'} or !$self->{'connect_chain_tries'} ) )
+  {
     #do {    {    #ok
     $self->{'in_connect'} = 1;
     if ( !$self->_connect() ) {
@@ -54,6 +59,7 @@ sub connect {
       $self->{'in_connect'} = 0;
       ++$self->{'connected'};
       ++$self->{'connects'};
+      $self->{'connect_chain_tried'} = 0;
       #printlog( 'dev', 'oncon', $_ ),
       $self->{ 'on_connect' . $_ }->($self) for grep { ref $self->{ 'on_connect' . $_ } eq 'CODE' } ( '', 1 .. 10 );
       return 0;
@@ -61,11 +67,11 @@ sub connect {
     $self->{'in_connect'} = 0;
     $self->dropconnect();
     $self->log(
-      'dev',
-      'psconn::connect run sleep',
-      $self->{'error_sleep'},
-      $self->{'connect_tried'},
-      '/', $self->{'connect_tries'}
+      'dev',                          'psconn::connect run sleep',
+      $self->{'error_sleep'},         $self->{'connect_tried'},
+      '/',                            $self->{'connect_tries'},
+      $self->{'connect_chain_tried'}, '/',
+      $self->{'connect_chain_tries'}
     );
     $self->sleep( $self->{'error_sleep'} );
   }

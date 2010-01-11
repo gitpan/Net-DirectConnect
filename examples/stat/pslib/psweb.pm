@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: psweb.pm 4323 2009-08-25 05:43:42Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
+#$Id: psweb.pm 4386 2010-01-10 20:07:01Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
 
 =copyright
 PRO-search web shared library
@@ -21,6 +21,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #print "Content-type: text/html\n\n" if defined($ENV{'SERVER_PORT'}); # for web dev debug
 package psweb;
+use strict;
+our $VERSION = ( split( ' ', '$Revision: 4386 $' ) )[1];
 use locale;
 use Encode;
 #use utf8;
@@ -50,7 +52,6 @@ require Exporter;
   is_img
   %work %config %stat %static $param
 );
-use strict;
 use Socket;
 #use Time::HiRes qw(time);
 no warnings qw(uninitialized);
@@ -80,8 +81,8 @@ sub config_init {
       $config{'result'} ||= $config{'rewrite'} || grep { defined( $param->{$_} ) } @{ $config{'user_param_founded'} };
       $config{'gotopage_bb'} ||= 5;    #gotopage buttons before current
       $config{'gotopage_ba'} ||= 5;    #      --//--     after  --//--
-      $config{'jscript_open'}  ||= "<script type=\"text/javascript\" language=\"JavaScript\"><!--\n";
-      $config{'jscript_close'} ||= "\n//--></script>";
+      $config{'jscript_open'}  ||= qq{<script type="text/javascript" language="JavaScript"><![CDATA[};
+      $config{'jscript_close'} ||= "]]></script>";
       $config{'lang_default'} ||= '';    # empty = autodetect, en or ru or...
       #$config{'lng_default_auto'}           ||= 'en';               # if autodetect fail
       $config{'lng'}{'en'}{'language-code'} ||= 'en';
@@ -102,9 +103,11 @@ sub config_init {
       $config{'http-header-default'}  ||= "http-header: text/plain\n\n";    #'text/html'
       $config{'post_init_every'}{'psweb'} = sub {
         my ($param) = @_;
-        local %_;
-        @_{ @{ $config{'param_cookie'} or [] } } = (1) x @{ $config{'param_cookie'} or [] };
-        delete $param->{$_} for grep { !$_{$_} } keys %{ get_params_one( undef, split( /;\s*/, $ENV{'HTTP_COOKIE'} ) ) };
+        if ( $config{'param_cookie'} ) {
+          local %_;
+          @_{ @{ $config{'param_cookie'} || [] } } = (1) x @{ $config{'param_cookie'} || [] };
+          delete $param->{$_} for grep { !$_{$_} } keys %{ get_params_one( undef, split( /;\s*/, $ENV{'HTTP_COOKIE'} ) ) };
+        }
         %$param = ( %{ $param || {} }, %{ $config{'force_param'} || {} } );
         $param->{ $config{'param_trans'}{$_} } = $param->{$_} for ( grep $config{'param_trans'}{$_}, keys %$param );
         $config{'view'} ||= ( $param->{'view'} || ( defined( $ENV{'SERVER_PORT'} ) ? 'html' : 'text' ) );
@@ -1190,9 +1193,9 @@ setup_event(obj[i], 'change', function(e){var el=my_getbyid('page');if(el.value>
           local $static{'db'}->{'limit'} = check_int( $param->{'results'}, 1, $config{'top_query_max'}, $config{'top_query'} );
           $param->{'order'}      = 'top' unless defined $param->{'order'};
           $param->{'order_mode'} = '!'   unless defined $param->{'order_mode'};
-          local $static{'db'}->{'disable_slow'} = 0;                        #!
-          local $config{'sql'}{'database'}      = $config{'sql_base_up'};
-          local $config{'allow_null_count'}     = 1;
+          local $static{'db'}->{'disable_slow'} = 0;    #!
+#?          local $config{'sql'}{'database'} =            ref $config{'sql_base_up'} eq 'HASH' ? $config{'sql_base_up'}{'database'} : $config{'sql_base_up'};
+          local $config{'allow_null_count'} = 1;
           $static{'db'}->count( $param, $table ),
             $stat{'top_founded_max'} = max( $stat{'top_founded_max'}, $stat{'found'}{'files'} ),
             $stat{'top_pages_max'}   = max( $stat{'top_pages_max'},   $static{'db'}->{'page_last'} )
@@ -1694,7 +1697,7 @@ sub part {
 #onpage limit -> size
 #dbirows -> actual
 #maxpage -> last
-sub gotopage {    # $Id: psweb.pm 4323 2009-08-25 05:43:42Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
+sub gotopage {    # $Id: psweb.pm 4386 2010-01-10 20:07:01Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
   my ($fparam) = @_;    #$param,
   my (%ret);
   #$fparam->{'total'} : total results, usually COUNT(*) as total
@@ -1899,7 +1902,7 @@ sub update_query_stat {
   #local $static{'db'}->{'cp_in'} = $config{'cp_db'};
   for my $word ( grep { $_ =~ /\w/ } keys %{ $work{'word'} } ) {
     #map {scalar cp_trans( $self->{'cp_in'}, $self->{'codepage'}, $_ )}
-    $static{'db'}->update(
+    $_->update(
       $config{'sql_twordstat'},
       ['word'], {
         #'word'   => $word,
@@ -1909,14 +1912,14 @@ sub update_query_stat {
       },
       '',
       '',
-      ", " . $static{'db'}->rquote('top') . " = " . $static{'db'}->rquote('top') . "+" . $static{'db'}->quote(1)
-    );
+      ", " . $_->rquote('top') . " = " . $_->rquote('top') . "+" . $_->quote(1)
+    ) for $static{'dbs_up_all'} ? @{ $static{'dbs_up_all'} } : $static{'db'};
   }
   #$static{'db'}->dump_cp();
   for my $query ( grep $_ =~ /\w/, keys %{ $work{'query'} } ) {
 #$query =~ s/\W+/ /g ,    $query =~ s/(^\s+)|(\s+$)//g if $config{'cp_db'} ne 'utf-8';
 #printlog( 'dev', 'update_query_stat' , $work{'codepage'}, $config{'cp_db'}, keys %{ $work{'word'} }, keys %{ $work{'query'} });
-    $static{'db'}->update(
+    $_->update(
       $config{'sql_tquerystat'},
       ['query'], {
         #'query'  => $query, #scalar cp_trans( $work{'zcodepage'}, $config{'cp_db'}, $query ),
@@ -1927,8 +1930,8 @@ sub update_query_stat {
       '',
       '',
       #", `top` = `top`+'1'"
-      ", " . $static{'db'}->rquote('top') . " = " . $static{'db'}->rquote('top') . "+" . $static{'db'}->quote(1)
-    );
+      ", " . $_->rquote('top') . " = " . $_->rquote('top') . "+" . $_->quote(1)
+    ) for $static{'dbs_up_all'} ? @{ $static{'dbs_up_all'} } : $static{'db'};
   }
 }
 

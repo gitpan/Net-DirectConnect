@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#my $Id = '$Id: ddltest.pl 473 2009-10-07 20:35:21Z pro $';
+#my $Id = '$Id: ddltest.pl 535 2010-01-11 02:42:50Z pro $';
 
 =copyright
 test direct downloading (without hub)
@@ -9,17 +9,16 @@ use strict;
 #use Time::HiRes;
 eval { use Time::HiRes qw(time sleep); };
 use lib '../lib';
-use Net::DirectConnect::clihub;
-print("usage: ddltest.pl [dchub://]hub[:port]/nick[/path]/file [bot_nick] [fileas]\n"), exit if !$ARGV[0];
+use Net::DirectConnect;
+print("usage: $0 [dchub://]hub[:port]/nick[/path]/file [bot_nick] [fileas]\n"), exit if !$ARGV[0];
 #$ARGV[0] =~ m|^([^:]+):((?:\w+\.?)+)(?:\:(\d+))(/.+)$|;
-$ARGV[0] =~ m|^(?:dchub\://)?(.+?)(?:\:(\d+))?/(.+?)/(.+)$|;
+$ARGV[0] =~ m|^(?:\w+\://)?(.+?)(?:\:(\d+))?/(.+?)/(.+)$|;
 #print"[$ARGV[0]] 1=$1 2=$2 3=$3 4=$4 ; \n";
 my ( $user_nick, $file ) = ( $3, $4 );
-my $dc = Net::DirectConnect::clihub->new(
-  'host' => $1,
-  ( $2 ? ( 'port' => $2 ) : () ),
-  'Nick' => ( $ARGV[1] or 'dcpppDl' . int( rand(100) ) ),
-  'log' => sub { },    # no logging
+my $dc = Net::DirectConnect->new(
+  #'host' => $1,
+  #( $2 ? ( 'port' => $2 ) : () ),
+  'host' => $ARGV[0], 'Nick' => ( $ARGV[1] or 'dcpppDl' . int( rand(100) ) ), 'log' => sub { },    # no logging
 );
-$dc->get( $user_nick, $file, ( $ARGV[2] or $file ) );    #.get
+$dc->get( $user_nick, $file, $ARGV[2] || $file );                                                  #.get
 #$dc->recv(); sleep(5); $dc->recv();

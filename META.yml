@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Net-DirectConnect
-version:            0.03
+version:            0.04
 abstract:           ~
 author:  []
 license:            unknown
@@ -10,7 +10,8 @@ configure_requires:
 build_requires:
     ExtUtils::MakeMaker:  0
 requires:
-    Time::HiRes:  0
+    MIME::Base32:  0
+    Time::HiRes:   0
 no_index:
     directory:
         - t
