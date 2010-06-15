@@ -1,96 +1,117 @@
 #!/usr/bin/perl
-#$Id: share.pl 531 2010-01-11 00:40:18Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/share.pl $
+#$Id: share.pl 621 2010-02-09 01:06:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/share.pl $
 
-=readme
+=head1 NAME
 
-chat watch 
+run dc client with file sharing
+
+=head1 SYNOPSIS
+
+ ./share.pl hub hub dir dir ...
+
+ unix adc:
+ ./share.pl adc://dc.hub.com:412 /share
+ win nmdc:
+ ./share.pl dc.hub.com c:/pub c:/distr
+
+ build filelist:
+ ./share.pl adc://dc.hub.com:412 filelist /share
+
+
+=head1 INSTALL
+
+recommended module: Sys::Sendfile
+
+=head1 CONFIGURE 
+
+ echo '$config{dc}{'share'} = [qw(/usr/ports/distfiles c:\distr c:\pub\ )];' >> config.pl
+
+ also useful:
+ $config{dc}{host} = 'myhub.net';
+
+
+=head1 TUNING
+
+freebsd:
+speedup: sysctl net.inet.tcp.sendspace=200000
+or: sysctl kern.ipc.maxsockbuf=8388608 net.inet.tcp.sendspace=3217968 
+
+=head1 TODO
+
+filelist xml escape chars
 
 =cut
 
+use 5.10.0;
 use strict;
-eval { use Time::HiRes qw(time sleep); };
+use Data::Dumper;
+$Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = 1;
+use Time::HiRes qw(time sleep);
+#use Encode;
 use lib '../lib';
-#use Net::DirectConnect::clihub;
-#use Net::DirectConnect::adc;
-use Net::DirectConnect;
-#use Net::DirectConnect::TigerHash qw(tthfile);
-use lib '../lib';
+#use lib '../TigerHash/lib';
 use lib './stat/pslib';
+our ( %config, $db );
 use psmisc;
-psmisc::config();
-print("usage: $1 [adc|dchub://]host[:port] [bot_nick]\n"), exit if !$ARGV[0];
-my $filelist = 'C:\Program Files\ApexDC++\Settings\HashIndex.xml';
-my %tth = ( 'files.xml.bz2' => 'C:\Program Files\ApexDC++\Settings\files.xml.bz2' );    # = (tthash=>'/path', ...);
-
-if ( open my $f, '<', $filelist ) {
-  print "loading filelist..";
-  local $/ = '<';
-  while (<$f>) {
-    if ( my ( $file, $time, $tiger ) = /^File Name="([^"]+)" TimeStamp="(\d+)" Root="([^"]+)"/i ) {
-      #$self->{'share_tth'}{ $params->{TR} }
-      $file =~ tr{\\}{/};
-      $tth{$tiger} = $file;
-    }
-    #<File Name="c:\distr\neo\tmp" TimeStamp="1242907656" Root="3OPSFH2JD2UPBV4KIZAPLMP65DSTMNZRTJCYR4A"/>
-  }
-  close $f;
-  print ".done:", ( scalar keys %tth ), "\n";
+#use pssql;
+use Net::DirectConnect;
+use Net::DirectConnect::filelist;
+#psmisc::use_try 'Sys::Sendfile';
+$config{ 'log_' . $_ } //= 0 for qw (dmp dcdmp dcdbg);
+$config{'log_pid'} //= 1;
+psmisc::config();    #psmisc::lib_init();
+psmisc::lib_init(); #for die handler
+printlog("usage: $1 [adc|dchub://]host[:port] [dir ...]\n"), exit if !$ARGV[0] and !$config{dc}{host};
+printlog( 'info', 'started:', $^X, $0, join ' ', @ARGV );
+my $log = sub (@) {
+  my $dc = ref $_[0] ? shift : {};
+  psmisc::printlog shift(), "[$dc->{'number'}]", @_,;
+};
+my @dirs = grep { -d } @ARGV;
+#printlog('dev', 'started', @ARGV),
+Net::DirectConnect::filelist->new( log => $log, %{ $config{dc} || {} } )->filelist_make(@dirs), exit
+  if $ARGV[0] ~~ 'filelist' and !caller;
+@ARGV = grep { !-d } @ARGV;
+#use Net::DirectConnect::adc;
+#my $dc =
+my @dc;
+@dc = map {
+  Net::DirectConnect->new(
+    modules            => ['filelist'],
+    'filelist_builder' => ( join ' ', $^X, $0, 'filelist' ),
+    dev_http           => 1,
+    'log'              => $log,
+    'handler'          => {
+      map {
+        my $msg = $_;
+        $msg => sub {
+          my $dc = shift;
+          say join ' ', $msg, @_;
+          },
+        } qw(welcome chatline To)
+    },
+    auto_connect => 1,
+    #auto_work    => 1,
+    worker => sub {
+      my $dc = shift;
+      psmisc::schedule(
+        [ 20, 100 ],
+        our $dump_sub__ ||= sub {
+          printlog "Writing dump";
+          psmisc::file_rewrite( $0 . '.dump', Dumper @dc );
+        }
+      ) if $config{debug};
+    },
+    %{ $config{dc} || {} },
+    #( $ARGV[0] ? ( 'host' => $ARGV[0] ) : () ),
+    'host' => $_,
+    )
+  } (
+  grep {
+    $_
+    } ref $config{dc}{host} eq 'ARRAY' ? @{ $config{dc}{host} } : $config{dc}{host},
+  @ARGV
+  );
+while ( @dc = grep { $_ and $_->active() } @dc ) {
+  $_->work() for @dc;
 }
-#print "Arg=",$ARGV[0],"\n";
-#$ARGV[0] =~ m|^(?:\w+\://)?(.+?)(?:\:(\d+))?$|;
-#my $dc = Net::DirectConnect::clihub->new(
-my $dc = Net::DirectConnect
-  #::adc
-  ->new(
-  #'host' => $1,
-  'host' => $ARGV[0],
-  #( $2 ? ( 'port' => $2 ) : () ),
-  #'Nick' => ( $ARGV[1] or int( rand(100000000) ) ),
-  #'Nick'		=>	'xxxx',
-  'sharesize' => int( rand 10000000000 ) + int( rand 10000000000 ) * int( rand 100 ),
-  #'log'		=>	sub {},	# no logging
-  #'client'      => '++',
-  #'V'           => '0.698',
-  #'description' => '',
-  #'M'           => 'P',
-  'share_tth' => \%tth,
-  dev_http    => 1,
-  'log'       => sub {
-    my $dc = ref $_[0] ? shift : {};
-    #psmisc::printlog shift(), $dc->{'number'}, join ' ', psmisc::human('time'), @_, "\n";
-    psmisc::printlog shift(), "[$dc->{'number'}]", @_,;
-  },
-  'handler' => {
-    map {
-      my $msg = $_;
-      $msg => sub {
-        my $dc = shift;
-        print join ' ', $msg, @_, "\n";
-        },
-      } qw(welcome chatline To)
-  },
-  );
-$dc->work(10);
-#$dc->get( $_, 'files.xml.bz2', $_ . '.xml.bz2' ), $dc->work() for grep $_ ne $dc->{'Nick'}, keys %{ $dc->{'NickList'} };
-while ( $dc->active() ) {
-  $dc->work();
-  psmisc::schedule(
-    [ 30, 10000 ],
-    our $search_sub__ ||= sub {
-      #print "Writing dump\n";
-      #psmisc::file_rewrite( 'dump', Dumper $dc);
-      #$dc->search('house');
-    }
-  );
-  #}while ( $dc->active() ) {
-  #$dc->work();
-  psmisc::schedule(
-    [ 20, 100 ],
-    our $dump_sub__ ||= sub {
-      print "Writing dump\n";
-      psmisc::file_rewrite( 'dump', Dumper $dc);
-    }
-  );
-}
-$dc->destroy();
-sleep(1);

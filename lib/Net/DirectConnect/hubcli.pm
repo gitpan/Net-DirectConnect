@@ -1,4 +1,4 @@
-#$Id: hubcli.pm 505 2009-11-22 03:52:21Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/hubcli.pm $
+#$Id: hubcli.pm 593 2010-01-30 11:11:27Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/hubcli.pm $
 #reserved for future 8), but something works
 package    #hide from cpan
   Net::DirectConnect::hubcli;
@@ -7,13 +7,13 @@ use Net::DirectConnect;
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 505 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 593 $' ) )[1];
 use base 'Net::DirectConnect';
 
 sub init {
   my $self = shift;
   %$self = ( %$self,, @_ );
-  $self->baseinit();
+  #$self->baseinit();
   $self->get_peer_addr();
   $self->log( 'info', "[$self->{'number'}] Incoming client $self->{'host'}:$self->{'port'}" ) if $self->{'incoming'};
   $self->{'parse'} ||= {

@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: stat.cgi 530 2010-01-10 23:05:39Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.cgi $
+#$Id: stat.cgi 550 2010-01-12 22:28:27Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.cgi $
 package statcgi;
 use strict;
 eval { use Time::HiRes qw(time sleep); };
@@ -19,6 +19,7 @@ BEGIN {
   print( "Content-type: text/html\n\n", " lib load error rp=$root_path o=$0 sf=$ENV{'SCRIPT_FILENAME'}; ", $@ ), exit if $@;
 }
 $param = get_params();
+delete $param->{'period'} unless exists $config{'periods'}{ $param->{'period'} };
 use statlib;
 print "Content-type: text/xml; charset=utf-8\n\n" if $ENV{'SERVER_PORT'};
 print '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
@@ -57,7 +58,7 @@ print ' days ', (
   ) or ( $param->{'query'} and !$config{'queries'}{ $param->{'query'} }{'periods'} );
 print '<br/>';
 print
-qq{<div class="main-top-info">Для скачивания файлов по ссылке <a class="magnet-darr">[&dArr;]</a> необходим dc клиент, например <a href="http://www.apexdc.net/download/">apexdc</a>.</div>};
+qq{<div class="main-top-info">Для скачивания файлов по ссылке <a class="magnet-darr">[&dArr;]</a> необходим dc клиент, например <a href="http://www.apexdc.net/download/">apexdc</a> <a href="http://wikipedia.org/wiki/Direct_Connect_(file_sharing)#Client_software">или</a></div>};
 $config{'human'}{'magnet-dl'} = sub {
   my ($row) = @_;
   $row = { 'tth' => $row } unless ref $row eq 'HASH';
@@ -81,8 +82,7 @@ $config{'human'}{'dchub-dl'} = sub {
     . '">[&dArr;]</a>'
     if length $row->{'hub'};
 };
-print '<a>', psmisc::html_chars( $param->{'tth'} ), '</a>', psmisc::human( 'magnet-dl', $param->{'tth'} ), '<br/>'
-  if $param->{'tth'};
+#print '<a>', psmisc::html_chars( $param->{'tth'} ), '</a>', psmisc::human( 'magnet-dl', $param->{'tth'} ), '<br/>'  if $param->{'tth'};
 my @ask;
 $config{'queries'}{'string'}{'desc'} = psmisc::html_chars( $param->{'string'} ), @ask = ('string') if $param->{'string'};
 @ask = ('tth')      if $param->{'tth'};
@@ -97,16 +97,21 @@ for my $query ( @ask ? @ask : sort { $config{'queries'}{$a}{'order'} <=> $config
 {
   my $q = { %{ $config{'queries'}{$query} || next } };
   next if $q->{'disabled'};
-  $q->{'desc'} = $q->{'desc'}->{ $config{'lang'} } if ref $q->{'desc'} eq 'HASH';
-  print '<div class="onetable ' . $q->{'class'} . '">',
-    $q->{'no_query_link'}
+  $q->{'desc'} = $q->{'desc'}{ $config{'lang'} } if ref $q->{'desc'} eq 'HASH';
+  print '<div class="onetable ' . $q->{'class'} . '">', $q->{'no_query_link'}
     ? $query
+    . join( '',
+     !( $query eq 'tth' and $param->{'tth'} )
+    ? ( !( $param->{$query} ) ? () : "= " . psmisc::html_chars( $param->{$query} ) )
+    : ( '= <a>', psmisc::html_chars( $param->{'tth'} ), '</a>', psmisc::human( 'magnet-dl', $param->{'tth'} ), '<br/>' ) )
     : '<a href="?query=' . ( psmisc::encode_url($query) ) . '">' . ( $q->{'desc'} || $query ) . '</a>';
   #print " ($q->{'desc'}):" if $q->{'desc'};
   print "<br\n/>";
   my $res = statlib::make_query( $q, $query, $param->{'period'} );
-  print psmisc::human( 'time_period', time - $param->{'time'} ) . "<table>";
-  print '<th>', $query, '</th>' for 'n', @{ $q->{'show'} };
+  print psmisc::human( 'time_period', time - $param->{'time'} ) 
+    . "<table"
+    . ( !$config{'use_graph'} ? () : ' class="graph"' ) . ">";
+  print '<th>', $_, '</th>' for 'n', @{ $q->{'show'} };
   my $n;
   for my $row (@$res) {
     print '<tr><td>', ++$n, '</td>';
@@ -144,7 +149,7 @@ for my $query ( @ask ? @ask : sort { $config{'queries'}{$a}{'order'} <=> $config
     print '<td>', $row->{$_}, '</td>' for @{ $q->{'show'} };
     if ( $q->{'graph'} ) {
       print qq{<td style="background-color:$graphcolor;">&nbsp;</td>} if $config{'use_graph'};
-      print qq{<td class='graph' id='$query' rowspan='100'></td>}     if $n == 1;
+      print qq{<td class='graph' id='$query' rowspan='100'> </td>}    if $n == 1;
       print qq{<td style="background-color:$graphcolor;">&nbsp;</td>} if $config{'use_graph'};
     }
     print '</tr>';
@@ -161,7 +166,7 @@ for my $query ( sort keys %makegraph ) {
   my %graph;
   my %dates;
   $table =~ s/\s/_/g;
-  $table .= '_daily';
+  $table .= '_' . $param->{'period'};
   my ($by) = values %{ $makegraph{$query} };
   for my $row (
     $db->query( "SELECT * FROM $table WHERE " . join ' OR ', map { "$by=" . $db->quote($_) } keys %{ $makegraph{$query} } ) )
@@ -183,7 +188,7 @@ for my $query ( sort keys %makegraph ) {
   my $yn = 10;
   my $ys = $yl / $yn;
   print qq{<script type="text/javascript" language="JavaScript"><![CDATA[},
-qq{gid('$query').innerHTML='  <svg:svg version="1.1" baseProfile="full" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 $xl $yl">},
+qq{gid('$query').innerHTML='<svg:svg version="1.1" baseProfile="full" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 $xl $yl">},
 #qq{<svg:circle cx="150px" cy="100px" r="50px" fill="#ff0000" stroke="#000000" stroke-width="5px"/>},
 #qq{<g fill="none" stroke="red" stroke-width="3">},
 #qq{<path d="M100,100 Q200,400,300,100"/>},
@@ -193,8 +198,8 @@ qq{gid('$query').innerHTML='  <svg:svg version="1.1" baseProfile="full" xmlns="h
   #my $color = 0;
   for my $line ( sort keys %graph ) {
     my $n;
-    #$colors[$color]
-    print qq{ <!-- $line : --><polyline fill="none" stroke="$graphcolors{$line}" stroke-width="3" points="}, (
+    #$colors[$color] <!-- $line : -->
+    print qq{ <polyline fill="none" stroke="$graphcolors{$line}" stroke-width="3" points="}, (
       join ' ',
       map {
         ( $n++ * $xs ) . ',' . (
@@ -218,7 +223,7 @@ print
   '<div>graph per ', psmisc::human( 'time_period', time - $graphtime ), '</div>' if $config{'use_graph'};
 print
 qq{<div class="version"><a href="http://svn.setun.net/dcppp/trac.cgi/browser/trunk/examples/stat">dcstat</a> from <a href="http://search.cpan.org/dist/Net-DirectConnect/">Net::DirectConnect</a> vr}
-  . ( split( ' ', '$Revision: 530 $' ) )[1]
+  . ( split( ' ', '$Revision: 550 $' ) )[1]
   . qq{</div>};
 print '<script type="text/javascript" src="http://iekill.proisk.ru/iekill.js"></script>';
 print '</body></html>';

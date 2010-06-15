@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-#$Id: hub.pl 498 2009-11-16 08:37:21Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/hub.pl $
+#$Id: hub.pl 593 2010-01-30 11:11:27Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/hub.pl $
 
 =r
 
@@ -13,6 +13,7 @@ $Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = 1;
 use lib '../lib';
 use Net::DirectConnect::hub;
 use lib '../lib';
+use lib '../TigerHash/lib';
 use lib './stat/pslib';
 use psmisc;
 psmisc::config();
@@ -30,12 +31,13 @@ my $dc = Net::DirectConnect->new(
   'auto_work' => sub {
     my $dc = shift;
     psmisc::schedule(
-      [ 20, 10 ],
-      our $dump_sub__ ||= sub {
+      [ 20, 300 ],
+      #our $dump_sub__ ||=
+      sub {
         print "Writing dump\n";
-        psmisc::file_rewrite( 'dump.hub', Dumper $dc);
+        psmisc::file_rewrite( $0 . '.dump', Dumper $dc);
       }
-    );
+    ) if $config{debug};
   }
 );
 #$dc->work(100);      #seconds

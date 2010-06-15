@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: statlib.pm 530 2010-01-10 23:05:39Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
+#$Id: statlib.pm 620 2010-02-09 01:02:20Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
 package statlib;
 use strict;
 use Time::HiRes qw(time sleep);
@@ -97,25 +97,6 @@ $config{'sql'} ||= {
       'online' => pssql::row( 'time', 'index' => 1,        'default'      => 0, ),
       'info'   => pssql::row( undef,  'type'  => 'VARCHAR', ), #'dumper' => 1,
     },
-    'queries_top_string_daily' => {
-      'date' => pssql::row( undef, 'type' => 'VARCHAR',  'length'  => 10, 'default' => '', 'index' => 1, primary => 1 ),
-      n      => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0,  primary   => 1 ),
-      cnt    => pssql::row( undef, 'type' => 'INT',      'default' => 0, ),
-      string => pssql::row( undef, 'type' => 'VARCHAR',  'index'   => 1, ),
-    },
-    'queries_top_tth_daily' => {
-      #queries_top_tth_daily
-      'date' => pssql::row( undef, 'type' => 'VARCHAR',  'length'  => 10, 'default' => '', primary => 1, 'index' => 1, ),
-      n      => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0,  primary   => 1 ),
-      cnt    => pssql::row( undef, 'type' => 'INT',      'default' => 0, ),
-      tth    => pssql::row( undef, 'type' => 'VARCHAR',, 'index'   => 1, ),
-    },
-    'results_top_daily' => {
-      'date' => pssql::row( undef, 'type' => 'VARCHAR',  'length'  => 10, 'default' => '', primary => 1, 'index' => 1, ),
-      n      => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0,  primary   => 1 ),
-      cnt    => pssql::row( undef, 'type' => 'INT',      'default' => 0, ),
-      tth    => pssql::row( undef, 'type' => 'VARCHAR',, 'index'   => 1, ),
-    },
   },
   'table_param' => {
     'queries' => { 'big'       => 1, },
@@ -124,6 +105,29 @@ $config{'sql'} ||= {
     'hubs'    => { 'no_counts' => 1, },
   },
 };
+$config{'sql'}{'table'}{ 'queries_top_string_' . $_ } = {
+  'date' => pssql::row( undef,  'type'  => 'VARCHAR', 'length'      => 10, 'default' => '', 'index' => 1, primary => 1 ),
+  'time' => pssql::row( 'time', 'index' => 1, ),      #'purge' => 1,
+  n      => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0, primary => 1 ),
+  cnt    => pssql::row( undef, 'type' => 'INT',      'default' => 0, ),
+  string => pssql::row( undef, 'type' => 'VARCHAR',  'index'   => 1, ),
+  },
+  $config{'sql'}{'table'}{ 'queries_top_tth_' . $_ } = {
+  #queries_top_tth_daily
+  'date' => pssql::row( undef,  'type'  => 'VARCHAR', 'length'      => 10, 'default' => '', primary => 1, 'index' => 1, ),
+  'time' => pssql::row( 'time', 'index' => 1, ),      #'purge' => 1,
+  n   => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0, primary => 1 ),
+  cnt => pssql::row( undef, 'type' => 'INT',      'default' => 0, ),
+  tth => pssql::row( undef, 'type' => 'VARCHAR',, 'index'   => 1, ),
+  },
+  $config{'sql'}{'table'}{ 'results_top_' . $_ } = {
+  'date' => pssql::row( undef,  'type'  => 'VARCHAR', 'length'      => 10, 'default' => '', primary => 1, 'index' => 1, ),
+  'time' => pssql::row( 'time', 'index' => 1, ),      #'purge' => 1,
+  n   => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0, primary => 1 ),
+  cnt => pssql::row( undef, 'type' => 'INT',      'default' => 0, ),
+  tth => pssql::row( undef, 'type' => 'VARCHAR',, 'index'   => 1, ),
+  },
+  for sort keys %{ $config{'periods'} };
 $config{'query_default'}{'LIMIT'} ||= 100;
 my $order;
 $config{'queries'}{'queries top string'} ||= {
@@ -146,7 +150,7 @@ $config{'queries'}{'queries string last'} ||= {
   'group_end' => 1,
   'desc'      => { 'ru' => 'Сейчас ищут', 'en' => 'last searches' },
   'FROM'      => 'queries',
-  'show'      => [qw(time hub nick string )],
+  'show'      => [qw(time hub nick ip string )],
   'SELECT'    => '*',
   'WHERE'     => ['queries.string != ""'],
   'ORDER BY'  => 'queries.time DESC',
@@ -155,7 +159,7 @@ $config{'queries'}{'queries string last'} ||= {
 $config{'queries'}{'results top'} ||= {
   'main'    => 1,
   'periods' => 1,
-  ( !$config{'use_graph'} ? () : ( 'graph' => 1 ) ),
+  #( !$config{'use_graph'} ? () : ( 'graph' => 1 ) ),
   'show'     => [qw(cnt string filename size tth)],                                                 #time
   'desc'     => { 'ru' => 'Распространенные файлы', 'en' => 'Most stored' },
   'SELECT'   => '*, COUNT(*) as cnt',
@@ -185,7 +189,7 @@ $config{'queries'}{'queries tth last'} ||= {
   'desc'      => { 'ru' => 'Сейчас скачивают', 'en' => 'last downloads' },
   'class'     => 'half',
   'group_end' => 1,
-  'show'      => [qw(time hub nick filename size tth)],
+  'show'      => [qw(time hub nick ip filename size tth)],
   'SELECT' =>
 '*, (SELECT string FROM results WHERE queries.tth=results.tth LIMIT 1) AS string, (SELECT filename FROM results WHERE queries.tth=results.tth LIMIT 1) AS filename, (SELECT size FROM results WHERE queries.tth=results.tth LIMIT 1) AS size',
   'WHERE'    => ['tth != ""'],

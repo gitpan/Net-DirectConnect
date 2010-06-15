@@ -1,4 +1,4 @@
-# $Id: TODO 531 2010-01-11 00:40:18Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/TODO $
+# $Id: TODO 619 2010-02-09 00:58:32Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/TODO $
 
 
 better nick-port-ip-lists
@@ -20,8 +20,43 @@ libevent http://paste.org.ru/?nt15er
 
 inlib:
 
+connect-listen ip range
+
 collect search results [n]
 
 make connection-listener
 
 examples/stat : finish adc
+
+lang:
+founded -> found
+sended -> sent
+
+tigerhash: mmap, speed limit, win32 build, ttfile raw,
+
+filelist.pm: 
+ standalone @ARGV -> config parse
+ file mask
+
+
+remove  psmisc and pssql
+
+
+
+downloader:
+ files 
+  users    
+
+
+add finished file to share hashes and db
+
+
+search results via sqlite
+
+
+fix wait_clients array
+
+good named incoming clients
+
+
+

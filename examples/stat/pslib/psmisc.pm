@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: psmisc.pm 4378 2009-12-29 19:34:51Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+#$Id: psmisc.pm 4412 2010-03-15 00:13:51Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
 
 =copyright
 PRO-search shared library
@@ -24,7 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #=pac
 package psmisc;
 use strict;
-our $VERSION = ( split( ' ', '$Revision: 4378 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4412 $' ) )[1];
 use locale;
 use Encode;
 use POSIX qw(strftime);
@@ -491,8 +491,30 @@ sub printprog($;$$) {    #v1
   return $ret;
 }
 
-sub startme(;$) {
-  my ($start) = @_;
+sub start(;$@) {
+  my ($cmd) = shift;
+  if ($cmd) {
+    #$processor{'out'}{'array'}->();
+    if ( $^O =~ /^(?:(ms)?(dos|win(32|nt)?))/i and $^O !~ /^cygwin/i ) {
+      $config{'starter'}      ||= 'cmd /c';
+      $config{'spawn_prefix'} ||= 'start /min /low';
+    } else {
+      $config{'spawn_postfix'} ||= '&';
+    }
+#"$config{'starter'} $config{'spawn_prefix'} $config{'perl'} $config{'root_path'}crawler.pl $force $start $config{'spawn_postfix'}";
+    my $com = join ' ', $config{'starter'}, $config{'spawn_prefix'}, $cmd, @_, $config{'spawn_postfix'};
+    printlog( 'dbg', "starting with $cmd:", $com );
+    #printlog( 'dbg', $com );
+    return system($com);
+  }
+}
+
+sub startme(;$@) {
+  my ($start) = shift;
+  if ($start) {
+
+=old
+  my ($start) = shift;
   if ($start) {
     #$processor{'out'}{'array'}->();
     if ( $^O =~ /^(?:(ms)?(dos|win(32|nt)?))/i and $^O !~ /^cygwin/i ) {
@@ -503,10 +525,14 @@ sub startme(;$) {
     }
     my $com =
 #"$config{'starter'} $config{'spawn_prefix'} $config{'perl'} $config{'root_path'}crawler.pl $force $start $config{'spawn_postfix'}";
-      join ' ', $config{'starter'}, $config{'spawn_prefix'}, $^X, $work{'$0'} || $0, $start, $config{'spawn_postfix'};
+      join ' ', $config{'starter'}, $config{'spawn_prefix'}, $^X, $work{'$0'} || $0, $start, @_, $config{'spawn_postfix'};
     printlog( 'dbg', "starting with $start:", $com );
     #printlog( 'dbg', $com );
     system($com);
+  }
+=cut
+
+    return start( $^X, $work{'$0'} || $0, $start, @_ );
   }
 }
 
@@ -975,7 +1001,7 @@ sub check_int($;$$$) {
     $work{'current_name_work'} = $current_name = '';
   }
 }
-sub caller_trace(;$) { printlog( 'caller', $_, caller($_) ) for 0 .. $_[0] || 5 }
+sub caller_trace(;$) { printlog( 'caller', $_, caller($_) || last ) for 0 .. $_[0] || 5 }
 
 sub lib_init() {
   $SIG{__WARN__} = sub {
@@ -984,8 +1010,8 @@ sub lib_init() {
     caller_trace(15);
     }, $SIG{__DIE__} = sub {
     printlog( 'die', $!, $@, @_ );
-    printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
-    caller_trace(15);
+    printlog( 'die', 'caller', $_, caller($_) || last ) for ( 0 .. 15 );
+    #caller_trace(15);
     }
     unless $static{'no_sig_log'};    #die $!;
   unless ( $static{'port2prot'} ) {
@@ -1016,7 +1042,7 @@ sub sleeper($;$$) {
   return $work{'sleeper'}{$where};
 }
 
-sub shuffle(@) {
+sub shuffle(@) { #@$deck = map{ splice @$deck, rand(@$deck),  1 }  0..$#$deck;
   my $deck = shift;
   $deck = [ $deck, @_ ] unless ref $deck eq 'ARRAY';
   my $i = @$deck;
@@ -1357,29 +1383,23 @@ sub save_list {
 }
 =cut
 
-{
-  my %schedule;
-
-  sub schedule($$;@) {
-    #for (1..100000000) { psmisc::schedule(10, our $my_every_10sec_sub__ ||= sub { print "every 10 sec"})};
-    my ( $every, $func ) = ( shift, shift );
-    #printlog 'everyS1', Dumper([ $every, $func,  $schedule{$func} ]);
-    my $p;
-    ( $p->{'wait'}, $p->{'every'}, $p->{'runs'}, $p->{'cond'}, $p->{'id'} ) = @$every if ref $every eq 'ARRAY';
-    $p = $every if ref $every eq 'HASH';
-    $p->{'every'} ||= $every if !ref $every;
-    $p->{'id'} ||= $func;
-    $schedule{ $p->{'id'} }{'last'} = time - $p->{'every'} + $p->{'wait'} if $p->{'wait'} and !$schedule{ $p->{'id'} }{'last'};
-    #printlog 'everyS4', Dumper([ $every, $func, $p, $schedule{$func} ]), $func;
-    #printlog('dev','everyR', Dumper($p, $schedule{$p->{'id'}} ), time, $func ),
-    $func->(@_), $schedule{ $p->{'id'} }{'last'} = time
-      if ( $schedule{ $p->{'id'} }{'last'} + $p->{'every'} < time )
-      and ( !$p->{'runs'} or $schedule{ $p->{'id'} }{'runs'}++ < $p->{'runs'} )
-      and ( !( ref $p->{'cond'} eq 'CODE' ) or $p->{'cond'}->( $p, $schedule{ $p->{'id'} }, @_ ) )
-      and ref $func eq 'CODE';
-  }
+sub schedule($$;@) {    #$Id: psmisc.pm 4412 2010-03-15 00:13:51Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+  our %schedule;
+  my ( $every, $func ) = ( shift, shift );
+  my $p;
+  ( $p->{'wait'}, $p->{'every'}, $p->{'runs'}, $p->{'cond'}, $p->{'id'} ) = @$every if ref $every eq 'ARRAY';
+  $p = $every if ref $every eq 'HASH';
+  $p->{'every'} ||= $every if !ref $every;
+  $p->{'id'} ||= join ';', caller;
+  $schedule{ $p->{'id'} }{'func'} = $func if !$schedule{ $p->{'id'} }{'func'} or $p->{'update'};
+  $schedule{ $p->{'id'} }{'last'} = time - $p->{'every'} + $p->{'wait'} if $p->{'wait'} and !$schedule{ $p->{'id'} }{'last'};
+  $schedule{ $p->{'id'} }{'func'}->(@_), $schedule{ $p->{'id'} }{'last'} = time
+    if ( $schedule{ $p->{'id'} }{'last'} + $p->{'every'} < time )
+    and ( !$p->{'runs'} or $schedule{ $p->{'id'} }{'runs'}++ < $p->{'runs'} )
+    and ( !( ref $p->{'cond'} eq 'CODE' ) or $p->{'cond'}->( $p, $schedule{ $p->{'id'} }, @_ ) )
+    and ref $schedule{ $p->{'id'} }{'func'} eq 'CODE';
 }
-{
+{    #$Id: psmisc.pm 4412 2010-03-15 00:13:51Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   my (@locks);
   sub lockfile($) {
     return ( $config{'lock_dir'} || './' ) . ( length $_[0] ? $_[0] : 'lock' ) . ( $config{'lock_ext'} || '.lock' );
@@ -1389,20 +1409,22 @@ sub save_list {
     my $name = shift;
     my %p = ref $_[0] eq 'HASH' ? %{ $_[0] } : @_;
     $p{'sleep'}   ||= $config{'lock_sleep'}   || 1;
-    $p{'timeout'} ||= $config{'lock_timeout'} || 600;
+    $p{'timeout'} ||= $config{'lock_timeout'} || 600 unless length $p{'timeout'};
     $p{'old'}     ||= $config{'lock_old'}     || 3600;
+    #$p{'readonly'} ||= 0; #dont write lock file, only wait
     my $waitstart = time();
     my $waits;
   LOCKWAIT:
-
     while ( -e lockfile $name) {
-      printlog( 'lock', 'ignore too old', -M lockfile $name, time() - $^T + 86400 * -M lockfile $name), last
+#printlog( 'lockdev', 'locktime', -M lockfile $name, time() - $^T + 86400 * -M lockfile $name,       $^T + 86400 * -M lockfile $name,      86400 * -M lockfile $name,      );
+      printlog( 'lock', $name, 'ignore too old', -M lockfile $name, time() - $^T + 86400 * -M lockfile $name), last
         if time() - $^T + 86400 * -M lockfile $name > $p{'old'};
-      printlog( 'lock', 'fail, timeout', time() - $waitstart ), return 0 if time() - $waitstart > $p{'timeout'};
+      printlog( 'lock', $name, 'fail, timeout', int( time() - $waitstart ) ), return 0 if time() - $waitstart > $p{'timeout'};
       printlog( 'lock', 'locked, wait', $name ) unless $waits++;
       sleep $p{'sleep'};
     }
     printlog( 'lock', 'unlocked', $name, 'per', int( time() - $waitstart ) ) if $waits;
+    return 1 if $p{'readonly'};
     local $_ = "pid=$$ time=" . int( time() );
     file_rewrite lockfile $name, $_;
     file_rewrite;    #flush
@@ -1422,10 +1444,10 @@ sub save_list {
 
   sub unlock (;$) {
     my $name = shift;
-    local $_ = unshift @locks;
+    local $_ = pop @locks;
     push @locks, $_ if length $name and lockfile($name) ne $_;
     #$name ||= $_;
-    printlog 'lock', 'unlocking', $name, lockfile $name;
+    #printlog 'lock', 'unlocking', $name, lockfile $name;
     #unlink lockfile( $name ||= $_ );
     unlink $name ? lockfile($name) : $_;
   }
@@ -1456,6 +1478,11 @@ sub save_list {
     #print "newprog($current, $program{$current}{'order'});" ;
     return $current;
   }    #v2
+}
+
+sub use_try ($;@) {
+  ( my $path = ( my $module = shift ) . '.pm' ) =~ s{::}{/}g;
+  $INC{$path} or eval 'use ' . $module . ' qw(' . ( join ' ', @_ ) . ');1;' and $INC{$path};
 }
 program('params');
 $program{ program() }{'force'} = 1;

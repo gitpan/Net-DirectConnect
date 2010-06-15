@@ -1,22 +1,32 @@
-#$Id: clihub.pm 540 2010-01-11 03:04:20Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clihub.pm $
+#$Id: clihub.pm 627 2010-02-10 23:47:13Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clihub.pm $
 package    #hide from cpan
   Net::DirectConnect::clihub;
 use strict;
 use Time::HiRes qw(time sleep);
 use Data::Dumper;    #dev only
-$Data::Dumper::Sortkeys = 1;
-$Data::Dumper::Indent   = 1;
+$Data::Dumper::Sortkeys = $Data::Dumper::Indent = 1;
 use Net::DirectConnect;
 use Net::DirectConnect::clicli;
 #use Net::DirectConnect::http;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 540 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 627 $' ) )[1];
 use base 'Net::DirectConnect';
+
+sub name_to_ip($) {
+  my ($name) = @_;
+  unless ( $name =~ /^\d+\.\d+\.\d+\.\d+$/ ) {
+    local $_ = ( gethostbyname($name) )[4];
+    return ( $name, 1 ) unless length($_) == 4;
+    $name = inet_ntoa($_);
+  }
+  return $name;
+}
 
 sub init {
   my $self = shift;
-  %$self = (
-    %$self,
+  #%$self = (
+  #%$self,
+  local %_ = (
     'Nick' => 'NetDCBot',
     'port' => 411,
     'host' => 'localhost',
@@ -38,21 +48,33 @@ sub init {
     'search_every'     => 10,
     'search_every_min' => 10,
     'auto_connect'     => 1,
-    'NoGetINFO'        => 1,                                                                                            #test
-    'NoHello'          => 1, 'UserIP2' => 1, 'Version' => '1,0091', 'auto_GetNickList' => 1, 'follow_forcemove' => 1,
+    'auto_bug'         => 1,
+    'reconnects'       => 5,
+    'NoGetINFO'        => 1,    #test
+    'NoHello' => 1, 'UserIP2' => 1, 'TTHSearch' => 1, 'Version' => '1,0091', 'auto_GetNickList' => 1, 'follow_forcemove' => 1,
     #ADC
     #'connect_protocol' => 'ADC/0.10',
     #'message_type'     => 'H',
-    @_,
+    #@_,
     'incomingclass' => 'Net::DirectConnect::clicli',
-    'periodic'      => sub { $self->cmd( 'search_buffer', ) if $self->{'socket'}; },
+    #'periodic'      =>
+    'disconnect_recursive' => 1,
+    charset_protocol       => 'cp1251',    #'utf8'
   );
+  !exists $self->{$_} ?  $self->{$_} ||= $_{$_} : ()  for keys %_;
+  $self->{'periodic'}{ __FILE__ . __LINE__ } = sub { $self->cmd( 'search_buffer', ) if $self->{'socket'}; };
   #$self->log($self, 'inited',"MT:$self->{'message_type'}", ' with', Dumper  \@_);
-  $self->baseinit();
-  #$self->log( $self, 'inited3', "MT:$self->{'message_type'}", ' with' );
-  #You are already in the hub.
+  #$self->baseinit();
+  #share_full share_tth want
+  $self->{$_} ||= $self->{'parent'}{$_} ||= {} for qw(  NickList IpList PortList );    #handler
+                                                                                       #$self->{'NickList'} ||= {};
+                                                                                       #$self->{'IpList'}   ||= {};
+                                                                                       #$self->{'PortList'} ||= {};
+         #$self->log( $self, 'inited3', "MT:$self->{'message_type'}", ' with' );
+         #You are already in the hub.
   $self->{'parse'} ||= {
     'chatline' => sub {
+      my $self = shift if ref $_[0];
       my ( $nick, $text ) = $_[0] =~ /^(?:<|\* )(.+?)>? (.+)$/s;
       #$self->log('dcdev', 'chatline parse', Dumper(\@_,$nick, $text));
       $self->log( 'warn', "[$nick] oper: already in the hub [$self->{'Nick'}]" ), $self->cmd('nick_generate'),
@@ -87,6 +109,7 @@ sub init {
         if $self->{'NickList'}->{$nick}{'oper'} and $text eq 'Sorry Hub is busy now, no search, try later..';
     },
     'welcome' => sub {
+      my $self = shift if ref $_[0];
       my ( $nick, $text ) = $_[0] =~ /^(?:<|\* )(.+?)>? (.+)$/s;
       if ( !keys %{ $self->{'NickList'} } or !exists $self->{'NickList'}->{$nick} or $self->{'NickList'}->{$nick}{'oper'} ) {
         if ( $text =~ /^Bad nickname: unallowed characters, use these (\S+)/ )
@@ -98,103 +121,130 @@ sub init {
           $self->{'Nick'} = $try if length $try;
         } elsif ( $text =~ /Bad nickname: Wait (\d+)sec before reconnecting/i ) {
           sleep $1 + 1;
+        } elsif ( $self->{'auto_bug'} and $nick eq 'VerliHub' and $text =~ /^This Hub Is Running Version 0.9.8d/i ) {    #_RC1
+          ++$self->{'bug_MyINFO_last'};
+          $self->log( 'dev', "possible bug fixed [$self->{'bug_MyINFO_last'}]" );
         }
       }
     },
     'Lock' => sub {
+      my $self = shift if ref $_[0];
       #$self->log( "lockparse", @_ );
       $self->{'sendbuf'} = 1;
       $self->cmd('Supports');
-      $_[0] =~ /^(.+?)(\s+Pk=.+)?\s*$/is;
+      my ($lock) = $_[0] =~ /^(.+?)(\s+Pk=.+)?\s*$/is;
       #print "lock[$1]\n";
-      $self->cmd( 'Key', $self->lock2key($1) );
+      #$self->log( 'dev', "lock from [$_[0]] = [$lock]");
+      $self->cmd( 'Key', $self->lock2key($lock) );
       $self->{'sendbuf'} = 0;
       $self->cmd('ValidateNick');
     },
     'Hello' => sub {
+      my $self = shift if ref $_[0];
       #$self->log('info', "HELLO recieved, connected. me=[$self->{'Nick'}]", @_);
       return unless $_[0] eq $self->{'Nick'};
       $self->{'sendbuf'} = 1;
       $self->cmd('Version');
       $self->{'sendbuf'} = 0 unless $self->{'auto_GetNickList'};
-      $self->cmd('MyINFO');
+      $self->cmd('MyINFO') unless $self->{'bug_MyINFO_last'};
       $self->{'sendbuf'} = 0, $self->cmd('GetNickList') if $self->{'auto_GetNickList'};
-      $self->{'status'} = 'connected';
+      $self->{'sendbuf'} = 0, $self->cmd('MyINFO')      if $self->{'bug_MyINFO_last'};
+      $self->{'status'}  = 'connected';
+      $self->cmd('BotINFO') if $self->{botinfo};
       $self->cmd('make_hub');
     },
     'Supports' => sub {
+      my $self = shift if ref $_[0];
       $self->supports_parse( $_[0], $self );
     },
     'ValidateDenide' => sub {
+      my $self = shift if ref $_[0];
       $self->log( 'warn', "ValidateDenide", $self->{'Nick'}, @_ );
       $self->cmd('nick_generate');
       $self->cmd('ValidateNick');
     },
     'To' => sub {
+      my $self = shift if ref $_[0];
       $self->log( 'msg', "Private message to", @_ );
     },
     'MyINFO' => sub {
+      my $self = shift if ref $_[0];
       my ( $nick, $info ) = $_[0] =~ /\S+\s+(\S+)\s+(.*)/;
       $self->{'NickList'}->{$nick}{'Nick'} = $nick;
       $self->info_parse( $info, $self->{'NickList'}{$nick} );
       $self->{'NickList'}->{$nick}{'online'} = 1;
     },
     'UserIP' => sub {
+      my $self = shift if ref $_[0];
       /(\S+)\s+(\S+)/, $self->{'NickList'}{$1}{'ip'} = $2, $self->{'IpList'}{$2} = $self->{'NickList'}{$1},
         $self->{'IpList'}{$2}{'port'} = $self->{'PortList'}{$2}
         for grep $_, split /\$\$/, $_[0];
     },
     'HubName' => sub {
+      my $self = shift if ref $_[0];
       $self->{'HubName'} = $_[0];
     },
     'HubTopic' => sub {
+      my $self = shift if ref $_[0];
       $self->{'HubTopic'} = $_[0];
     },
     'NickList' => sub {
+      my $self = shift if ref $_[0];
       $self->{'NickList'}->{$_}{'online'} = 1 for grep $_, split /\$\$/, $_[0];
+      $self->GetINFO() if $self->{auto_GetINFO};
     },
     'OpList' => sub {
+      my $self = shift if ref $_[0];
       $self->{'NickList'}->{$_}{'oper'} = 1 for grep $_, split /\$\$/, $_[0];
     },
     'ForceMove' => sub {
+      my $self = shift if ref $_[0];
       $self->log( 'warn', "ForceMove to $_[0]" );
       $self->disconnect();
       sleep(1);
       $self->connect(@_) if $self->{'follow_forcemove'} and @_;
     },
     'Quit' => sub {
+      my $self = shift if ref $_[0];
       $self->{'NickList'}->{ $_[0] }{'online'} = 0;
     },
     'ConnectToMe' => sub {
+      my $self = shift if ref $_[0];
       my ( $nick, $host, $port ) = $_[0] =~ /\s*(\S+)\s+(\S+)\:(\S+)/;
       $self->{'PortList'}->{$host} = $port;
       #$self->log('dev', "portlist: $host = $self->{'PortList'}->{$host} :=$port");
       return if $self->{'clients'}{ $host . ':' . $port }->{'socket'};
       $self->{'clients'}{ $host . ':' . $port } = Net::DirectConnect::clicli->new(
-        %$self, $self->clear(),
-        'host' => $host,
-        'port' => $port,
+        #!        %$self, $self->clear(),
+        parent => $self, 'host' => $host, 'port' => $port,
 #'want'         => \%{ $self->{'want'} },        'NickList'     => \%{ $self->{'NickList'} },        'IpList'       => \%{ $self->{'IpList'} },        'PortList'     => \%{ $self->{'PortList'} },        'handler'      => \%{ $self->{'handler'} },
-        'want'         => $self->{'want'},
-        'NickList'     => $self->{'NickList'},
-        'IpList'       => $self->{'IpList'},
-        'PortList'     => $self->{'PortList'},
-        'handler'      => $self->{'handler'},
+#'want'         => $self->{'want'},
+#'NickList'     => $self->{'NickList'},
+#'IpList'       => $self->{'IpList'},
+#'PortList'     => $self->{'PortList'},
+#'handler'      => $self->{'handler'},
+#'share_tth'      => $self->{'share_tth'},
+#'reconnects'           => 0,
         'auto_connect' => 1,
       );
     },
     'RevConnectToMe' => sub {
+      my $self = shift if ref $_[0];
       my ( $to, $from ) = split /\s+/, $_[0];
       $self->cmd( 'ConnectToMe', $to ) if $from eq $self->{'Nick'};
     },
     'GetPass' => sub {
+      my $self = shift if ref $_[0];
       $self->cmd('MyPass');
     },
     'BadPass' => sub {
+      my $self = shift if ref $_[0];
     },
     'LogedIn' => sub {
+      my $self = shift if ref $_[0];
     },
     'Search' => sub {
+      my $self = shift if ref $_[0];
       my $search = $_[0];
       $self->cmd('make_hub');
       my %s = ( 'time' => int( time() ), 'hub' => $self->{'hub_name'}, );
@@ -205,24 +255,35 @@ sub init {
       if   ( $s{'cmd'}[4] =~ /^TTH:([0-9A-Z]{39})$/ ) { $s{'tth'}    = $1; }
       else                                            { $s{'string'} = $s{'cmd'}[4]; }
       $s{'string'} =~ tr/$/ /;
-      $self->cmd('make_hub');
-
-      if ( $self->{'share_tth'} and $s{'tth'} and $self->{'share_tth'}{ $s{'tth'} } ) {
+      #$self->cmd('make_hub');
+      #r$self->{'share_tth'}
+      my $founded = $self->{'share_full'}{ $s{'tth'} } || $self->{'share_full'}{ $s{'string'} };
+      my $tth = $self->{'share_tth'}{$founded};
+      if (
+        $founded and $tth
+        #$s{'tth'} and $self->{'share_tth'}{ $s{'tth'} }
+        )
+      {
         $self->log(
           'adcdev', 'Search', $s{'who'},
-          $self->{'share_tth'}{ $s{'tth'} },
-          -s $self->{'share_tth'}{ $s{'tth'} },
-          -e $self->{'share_tth'}{ $s{'tth'} }
+          #$self->{'share_tth'}{ $s{'tth'} },
+          $founded, -s $founded, -e $founded,
           ),
-          $self->{'share_tth'}{ $s{'tth'} } =~ tr{\\}{/};
-        $self->{'share_tth'}{ $s{'tth'} } =~ s{^/+}{};
-        my $path;
-        if ( $self->{'adc'} ) { $path = $self->adc_path_encode( $self->{'share_tth'}{ $s{'tth'} } ); }
-        else {
-          $path = $self->{'share_tth'}{ $s{'tth'} };
+          #$self->{'share_tth'}{ $s{'tth'} } =~ tr{\\}{/};
+          #$self->{'share_tth'}{ $s{'tth'} } =~ s{^/+}{};
+          my $path;
+        if ( $self->{'adc'} ) {
+          $path = $self->adc_path_encode(
+            $founded
+              #$self->{'share_tth'}{ $s{'tth'} }
+          );
+        } else {
+          $path = $founded;    #$self->{'share_tth'}{ $s{'tth'} };
           $path =~ s{^\w:}{};
           $path =~ s{^\W+}{};
           $path =~ tr{/}{\\};
+          $path = Encode::encode $self->{charset_protocol}, Encode::decode $self->{charset_fs}, $path
+            if $self->{charset_fs} ne $self->{charset_protocol};
         }
         local @_ = (
           'SR', (
@@ -230,17 +291,24 @@ sub init {
             $self->{'Nick'}
               #: $self->{'myip'} . ':' . $self->{'myport_tcp'}
           ),
-          $path . "\x05" . ( -s $self->{'share_tth'}{ $s{'tth'} } or -1 ),
+          $path . "\x05" . ( -s $founded or -1 ),
           $self->{'S'} . '/'
-            . $self->{'S'} . "\x05" . "TTH:"
-            . $s{'tth'}
+            . $self->{'S'} . "\x05"
+            .
+            #"TTH:"            . $s{'tth'}
+            ( $s{'tth'} ? $s{'cmd'}[4] : "TTH:" . $tth )
             #. ( $self->{'M'} eq 'P' ? " ($self->{'host'}:$self->{'port'})" : '' ),
             #. (  " ($self->{'host'}:$self->{'port'})\x05$s{'nick'}"  ),
-            . ( " ($self->{'host'}:$self->{'port'})" . ( ( $s{'ip'} and $s{'port'} ) ? '' : "\x05$s{'nick'}" ) ),
+            . (
+            #" ($self->{'host'}:$self->{'port'})"
+            #" (".name_to_ip($self->{'host'}).":$self->{'port'})"
+            #" (".inet_ntoa(gethostbyname ($self->{'host'})).":$self->{'port'})"
+            " ($self->{'hostip'}:$self->{'port'})" . ( ( $s{'ip'} and $s{'port'} ) ? '' : "\x05$s{'nick'}" )
+            ),
 #. ( $self->{'M'} eq 'P' ? " ($self->{'host'}:$self->{'port'})\x05$s{'nick'}" : '' ),
 #{ SI => -s $self->{'share_tth'}{ $params->{TR} },SL => $self->{INF}{SL},FN => $self->adc_path_encode( $self->{'share_tth'}{ $params->{TR} } ),=> $params->{TO} || $self->make_token($peerid),TR => $params->{TR}}
         );
-        if ( $s{'ip'} and $s{'port'} ) { $self->send_udp( $s{'ip'}, $s{'port'}, join ' ', @_ ); }
+        if ( $s{'ip'} and $s{'port'} ) { $self->send_udp( $s{'ip'}, $s{'port'}, $self->{'cmd_bef'} . join ' ', @_ ); }
         else                           { $self->cmd(@_); }
       }
 #'SR', ( $self->{'M'} eq 'P' ? "Hub:$self->{'Nick'}" : "$self->{'myip'}:$self->{'myport_udp'}" ),        join '?',
@@ -260,6 +328,8 @@ sub init {
       return \%s;
     },
     'SR' => sub {
+      my $self = shift if ref $_[0];
+#$self->log( 'dev', "SR", @_ , 'parent=>', $self->{parent}, 'h=', $self->{handler}, Dumper($self->{handler}), 'ph=', $self->{parent}{handler}, Dumper($self->{parent}{handler}), ) if $self;
       $self->cmd('make_hub');
       my %s = ( 'time' => int( time() ), 'hub' => $self->{'hub_name'}, );
       ( $s{'nick'}, $s{'str'} ) = split / /, $_[0], 2;
@@ -269,6 +339,7 @@ sub init {
       ( $s{'ext'} )      = $s{'filename'} =~ m{[^.]+\.([^.]+)$};
       ( $s{'size'}, $s{'slots'} )  = split / /, shift @{ $s{'str'} };
       ( $s{'tth'},  $s{'ipport'} ) = split / /, shift @{ $s{'str'} };
+      ( $s{'tth'}, $s{'ipport'} ) = ( $s{'size'}, $s{'slots'} ) unless $s{'tth'};
       ( $s{'target'} ) = shift @{ $s{'str'} };
       $s{'tth'} =~ s/^TTH://;
       ( $s{'ipport'}, $s{'ip'}, $s{'port'} ) = $s{'ipport'} =~ /\(((\S+):(\d+))\)/;
@@ -282,6 +353,7 @@ sub init {
       return \%s;
     },
     'UserCommand' => sub {
+      my $self = shift if ref $_[0];
     },
   };
 
@@ -295,7 +367,6 @@ sub init {
 
 
 =cut  
-
   $self->{'cmd'} = {
     'chatline' => sub {
       my $self = shift if ref $_[0];
@@ -345,6 +416,10 @@ sub init {
       $self->sendcmd( 'GetINFO', $_, $self->{'Nick'} ) for @_;
       $self->sendcmd();
     },
+    'BotINFO' => sub {
+      my $self = shift if ref $_[0];
+      $self->sendcmd( 'BotINFO', $self->{botinfo} );
+    },
     'ConnectToMe' => sub {
       my $self = shift if ref $_[0];
       return if $self->{'M'} eq 'P' and !$self->{'allow_passive_ConnectToMe'};
@@ -362,6 +437,7 @@ sub init {
       $self->sendcmd( 'MyPass', $pass ) if $pass;
     },
     'Supports' => sub {
+      my $self = shift if ref $_[0];
       $self->sendcmd( 'Supports', $self->supports() || return );
     },
     'Quit' => sub {
@@ -375,6 +451,7 @@ sub init {
     },
     'Search' => sub {
       my $self = shift if ref $_[0];
+      #$self->log('devsearch', "mode=[$self->{'M'}]");
       $self->sendcmd( 'Search', ( $self->{'M'} eq 'P' ? "Hub:$self->{'Nick'}" : "$self->{'myip'}:$self->{'myport_udp'}" ),
         join '?', @_ );
     },
@@ -400,26 +477,45 @@ sub init {
     },
     'search_send' => sub {
       my $self = shift if ref $_[0];
-      $self->sendcmd( 'Search',
-        ( ( $self->{'myip'} && $self->{'myport_udp'} ) ? "$self->{'myip'}:$self->{'myport_udp'}" : 'Hub:' . $self->{'Nick'} ),
-        join '?', @{ $_[0] || $self->{'search_last'} } );
+      $self->sendcmd(
+        'Search', (
+          ( $self->{'M'} ne 'P' and $self->{'myip'} and $self->{'myport_udp'} )
+          ? "$self->{'myip'}:$self->{'myport_udp'}"
+          : 'Hub:' . $self->{'Nick'}
+        ),
+        join '?',
+        @{ $_[0] || $self->{'search_last'} }
+      );
     },
     'make_hub' => sub {
       my $self = shift if ref $_[0];
       $self->{'hub_name'} ||= $self->{'host'} . ( ( $self->{'port'} and $self->{'port'} != 411 ) ? ':' . $self->{'port'} : '' );
     },
     #
+    'stat_hub' => sub {
+      my $self = shift if ref $_[0];
+      local %_;
+      #for my $w qw(SS) {
+      #++$_{UC},
+      local @_ = grep { length $_ and $_ ne $self->{'Nick'} } keys %{ $self->{'NickList'} };
+      $_{SS} += $self->{'NickList'}{$_}{'sharesize'} for @_;
+      #}
+      $_{UC} = @_;
+      return \%_;
+    },
   };
-  $self->log( 'dev', "0making listeners [$self->{'M'}]" );
+  #$self->log( 'dev', "0making listeners [$self->{'M'}]" );
   if ( $self->{'M'} eq 'A' or !$self->{'M'} ) {
-    $self->log( 'dev', "making listeners: tcp" );
+    $self->log( 'dev', "making listeners: tcp, class=", $self->{'incomingclass'} );
     $self->{'clients'}{'listener_tcp'} = $self->{'incomingclass'}->new(
-      %$self, $self->clear(),
-      'want'        => \%{ $self->{'want'} },
-      'NickList'    => \%{ $self->{'NickList'} },
-      'IpList'      => \%{ $self->{'IpList'} },
-      'PortList'    => \%{ $self->{'PortList'} },
-      'handler'     => \%{ $self->{'handler'} },
+      #%$self, $self->clear(),
+      #'want'        => \%{ $self->{'want'} },
+      #'NickList'    => \%{ $self->{'NickList'} },
+      #'IpList'      => \%{ $self->{'IpList'} },
+      #'PortList'    => \%{ $self->{'PortList'} },
+      #'handler'     => \%{ $self->{'handler'} },
+      #'share_tth'      => $self->{'share_tth'},
+      'myport' => $self->{myport},
       'auto_listen' => 1,
       'parent'      => $self,
     );
@@ -427,13 +523,15 @@ sub init {
     $self->log( 'err', "cant listen tcp (file transfers)" ) unless $self->{'myport_tcp'};
     $self->log( 'dev', "making listeners: udp" );
     $self->{'clients'}{'listener_udp'} = $self->{'incomingclass'}->new(
-      %$self, $self->clear(),
-      'Proto' => 'udp',
+      #%$self, $self->clear(),
+      'parent' => $self, 'Proto' => 'udp',
+      'myport' => $self->{myport_udp},
       #?    'want'     => \%{ $self->{'want'} },
       #?    'NickList' => \%{ $self->{'NickList'} },
       #?    'IpList'   => \%{ $self->{'IpList'} },
       #?    'PortList' => \%{ $self->{'PortList'} },
-      'handler' => \%{ $self->{'handler'} },
+      #'handler' => \%{ $self->{'handler'} },
+      #'handler' => $self->{'handler'} ,
       #$self->{'clients'}{''} = $self->{'incomingclass'}->new( %$self, $self->clear(),
       #'LocalPort'=>$self->{'myport'},
       #'debug'=>1,
@@ -441,7 +539,18 @@ sub init {
       'parse' => {
         'SR'  => $self->{'parse'}{'SR'},
         'PSR' => sub {                     #U
-          #$self->log( 'dev', "UPSR", @_ );
+          my $self = shift if ref $_[0];
+          #my $self =  ref $_[0] ? shift() : $self;
+          $self->log( 'dev', "PSR", @_ ) if $self;
+        },
+        'UPSR' => sub {
+          my $self = shift if ref $_[0];
+          #my $self =  ref $_[0] ? shift() : $self;
+          $self->log( 'dev', "UPSR", 'udp' ) if $self;
+          for ( split /\n+/, $_[0] ) {
+            return $self->parser($_) if /^\$SR/;
+          }
+          #$self->log( 'dev', "UPSR", @_ ) if $self;
         },
 #2008/12/14-13:30:50 [3] rcv: welcome UPSR FQ2DNFEXG72IK6IXALNSMBAGJ5JAYOQXJGCUZ4A NIsss2911 HI81.9.63.68:4111 U40 TRZ34KN23JX2BQC2USOTJLGZNEWGDFB327RRU3VUQ PC4 PI0,64,92,94,100,128,132,135 RI64,65,66,67,68,68,69,70,71,72
 #UPSR CDARCZ6URO4RAZKK6NDFTVYUQNLMFHS6YAR3RKQ NIAspid HI81.9.63.68:411 U40 TRQ6SHQECTUXWJG5ZHG3L322N5B2IV7YN2FG4YXFI PC2 PI15,17,20,128 RI128,129,130,131
@@ -475,7 +584,6 @@ sub init {
     $self->log( 'err', "cant listen http" )
       unless $self->{'myport_http'};
 =cut
-
   $self->{'handler_int'}{'disconnect_bef'} = sub {
     delete $self->{'sid'};
     #$self->log( 'dev', 'disconnect int' ) if $self and $self->{'log'};

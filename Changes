@@ -1,4 +1,17 @@
-# $Id: Changes 538 2010-01-11 02:50:16Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/Changes $
+# $Id: Changes 619 2010-02-09 00:58:32Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/Changes $
+
+0.05:
+
+bug fixes 
+
+modules
+
+better moduled sharing
+
+examples/share.pl now multihub
+
+examples/get.pl - auto get popular files
+
 
 0.04:
 
@@ -16,4 +29,9 @@ adc hub
 new new
 
 tigerhash module
+
+file sharing with sendfile
+
+filelist create
+
 

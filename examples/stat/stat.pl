@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: stat.pl 531 2010-01-11 00:40:18Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.pl $
+#$Id: stat.pl 591 2010-01-29 17:44:19Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.pl $
 package statpl;
 use strict;
 no warnings qw(uninitialized);
@@ -43,6 +43,7 @@ for my $arg (@ARGV) {
     $ARGV[$n] = undef;
     local $db->{'cp_in'} = 'utf-8';
     #local $config{'log_dmp'}=1;
+    my $nowtime = int time();
     for my $query ( sort keys %{ $config{'queries'} } ) {
       next if $config{'queries'}{$query}{'disabled'};
       next unless statlib::is_slow($query);
@@ -65,11 +66,11 @@ for my $arg (@ARGV) {
           my $dmp = Data::Dumper->new( [$row] )->Indent(0)->Terse(1)->Purity(1)->Dump();
           $db->insert_hash( 'slow', { 'name' => $query, 'n' => $n, 'result' => $dmp, 'period' => $time, 'time' => int(time) } )
             if $config{'use_slow'};
-          if ( $time eq 'd' ) {
-            my $table = $query . '_daily';
-            $table =~ s/\s/_/g;
-            $db->insert_hash( $table, { 'n' => $n, 'date' => psmisc::human('date'), %$row, } );
-          }
+          #if ( $time eq 'd' ) {
+          my $table = $query . '_' . $time;
+          $table =~ s/\s/_/g;
+          $db->insert_hash( $table, { 'n' => $n, 'date' => psmisc::human('date'), %$row, 'time' => $nowtime } );
+          #}
         }
         $db->do( "DELETE FROM slow WHERE name=" . $db->quote($query) . " AND period=" . $db->quote($time) . " AND n>$n " )
           if $config{'use_slow'};
@@ -98,6 +99,26 @@ for my $arg (@ARGV) {
   } elsif ( $arg eq 'upgrade' ) {
     $ARGV[$n] = undef;
     #$db->do( "DROP TABLE $_")       for qw(queries_top_string_daily queries_top_tth_daily results_top_daily);
+    local $db->{'auto_install'} = 0;
+    local $db->{'error_sleep'}  = 0;
+    my ( $tq, $rq, $vq ) = $db->quotes();
+
+=old 
+    $db->do( "DROP TABLE ${_}d")    for qw(queries_top_string_ queries_top_tth_ results_top_);
+    $db->do("ALTER TABLE queries_top_string_daily RENAME TO queries_top_string_d");
+    $db->do("ALTER TABLE queries_top_tth_daily RENAME TO queries_top_tth_d");
+    $db->do("ALTER TABLE results_top_daily RENAME TO results_top_d");
+
+    for my $p ( sort keys %{ $config{'periods'} } ) {
+      0,
+        #$db->do("ALTER TABLE $_$p CHANGE COLUMN ${rq}date${rq} ${rq}time${rq} VARCHAR(10) DEFAULT $vq$vq")
+        #$db->do("ALTER TABLE $_$p CHANGE COLUMN ${rq}time${rq}  ${rq}date${rq} VARCHAR(10) DEFAULT $vq$vq")
+        #$db->do("ALTER TABLE $_$p CHANGE COLUMN ${rq}time${rq}  ${rq}date${rq} VARCHAR(10) DEFAULT $vq$vq")
+        $db->do("ALTER TABLE $_$p ADD COLUMN  `time` INT  UNSIGNED NOT NULL  DEFAULT '0'")
+        for qw(queries_top_string_ queries_top_tth_ results_top_);
+    }
+=cut
+
   } elsif ( $arg eq 'stat' ) {
     $ARGV[$n] = undef;
     $db->table_stat();
@@ -118,7 +139,7 @@ sub flush_all { $db->flush_insert(); }
 
 sub print_info {
   printlog( 'info', "queue len=", scalar @{ $work{'toask'} || [] }, " first hits=", $work{'ask'}{ $work{'toask'}[0] } );
-  local @_ = grep { $_->active() } @dc;
+  local @_ = grep { $_ and $_->active() } @dc;
   printlog 'info', 'active hubs:', map { $_->{'host'} . ':' . $_->{'status'} } @_;
   printlog 'info', 'hashes:',      map { $_ . '=' . scalar %{ $work{$_} || {} } } qw(ask asked ask_db);
   printlog 'info', 'stat:',        map { $_ . '=' . $work{'stat'}{$_} } keys %{ $work{'stat'} || {} };
@@ -157,7 +178,7 @@ for ( grep { length $_ } @ARGV ) {
       #'log'		=>	sub {},	# no logging
       #'log'          => sub { my $dc = shift; psmisc::printlog( "[$dc->{'number'}]($dc)", @_);
       'log' => sub {
-        my $dc = shift;
+        my $dc = shift if ref $_[0];
         local $_ = shift;
         psmisc::printlog( $_, "[$dc->{'number'}]", @_ );
         #psmisc::caller_trace(5)
@@ -169,7 +190,7 @@ for ( grep { length $_ } @ARGV ) {
       'handler'    => {
         'Search_parse_aft' => sub {
           my $dc = shift;
-          printlog 'sch', Dumper @_;
+          printlog 'sch', Dumper @_ if $dc->{adc};
           my $who    = shift if $dc->{adc};
           my $search = shift if $dc->{nmdc};
           my $s = $_[0] || {};
@@ -186,7 +207,8 @@ for ( grep { length $_ } @ARGV ) {
                   'tth'    => $s->{TR},
                   'string' => $s->{AN},                                 #!!!
                 )
-                ) % $s
+              ),
+              %$s
             }
           );
           my $q = $s->{'tth'} || $s->{'string'} || $s->{'TR'} || $s->{'AN'} || return;

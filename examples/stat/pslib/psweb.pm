@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: psweb.pm 4386 2010-01-10 20:07:01Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
+#$Id: psweb.pm 4413 2010-03-25 22:48:48Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
 
 =copyright
 PRO-search web shared library
@@ -22,7 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #print "Content-type: text/html\n\n" if defined($ENV{'SERVER_PORT'}); # for web dev debug
 package psweb;
 use strict;
-our $VERSION = ( split( ' ', '$Revision: 4386 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4413 $' ) )[1];
 use locale;
 use Encode;
 #use utf8;
@@ -81,8 +81,8 @@ sub config_init {
       $config{'result'} ||= $config{'rewrite'} || grep { defined( $param->{$_} ) } @{ $config{'user_param_founded'} };
       $config{'gotopage_bb'} ||= 5;    #gotopage buttons before current
       $config{'gotopage_ba'} ||= 5;    #      --//--     after  --//--
-      $config{'jscript_open'}  ||= qq{<script type="text/javascript" language="JavaScript"><![CDATA[};
-      $config{'jscript_close'} ||= "]]></script>";
+      $config{'jscript_open'}  ||= qq{<script type="text/javascript" language="JavaScript">/*<![CDATA[*/};
+      $config{'jscript_close'} ||= "/*]]>*/</script>";
       $config{'lang_default'} ||= '';    # empty = autodetect, en or ru or...
       #$config{'lng_default_auto'}           ||= 'en';               # if autodetect fail
       $config{'lng'}{'en'}{'language-code'} ||= 'en';
@@ -1697,7 +1697,7 @@ sub part {
 #onpage limit -> size
 #dbirows -> actual
 #maxpage -> last
-sub gotopage {    # $Id: psweb.pm 4386 2010-01-10 20:07:01Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
+sub gotopage {    # $Id: psweb.pm 4413 2010-03-25 22:48:48Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
   my ($fparam) = @_;    #$param,
   my (%ret);
   #$fparam->{'total'} : total results, usually COUNT(*) as total

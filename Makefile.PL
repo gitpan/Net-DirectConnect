@@ -3,43 +3,37 @@ use ExtUtils::MakeMaker;
 #the contents of the Makefile that is written.
 %_ = (
   NAME         => 'Net::DirectConnect',
-  VERSION_FROM => 'lib/Net/DirectConnect.pm',    # finds $VERSION
+  VERSION_FROM => 'lib/Net/DirectConnect.pm',
   INSTALLDIRS  => 'site',
   PREREQ_PM    => {
-    'Time::HiRes'  => 0,
-    'MIME::Base32' => 0,                         #for adc only
+    'Time::HiRes'         => 0,
+    'MIME::Base32'        => 0,    #for adc only
+    'Sys::Sendfile'       => 0,    #faster file sending
+    'IO::Compress::Bzip2' => 0,    #preparing filelists
+    'DBI'                 => 0,
+    'DBD::SQLite'         => 0,
   },
-  #($] >= 5.005 ?     ## Add these new keywords supported since 5.005
-  #(ABSTRACT_FROM  => 'lib/Net/DirectConnect.pm', # retrieve abstract from module
-  #AUTHOR         => 'A. U. Thor <a.u.thor@a.galaxy.far.far.away>') : ()    ),
-  #MYEXTLIB => 'lib/Net/DirectConnect/TigerHash/TigerHash$(LIB_EXT)',
-  #MYEXTLIB => 'lib/Net/DirectConnect/TigerHash/Makefile',
-  #PL_FILES => {'lib/Net/DirectConnect/TigerHash/Makefile.PL' => ''},
 );
+$_{dist} = {
+  PREOP    => "pod2text $_{VERSION_FROM} | tee README >\$(DISTVNAME)/README; chmod -R u=rwX,go=rX . ;",
+  COMPRESS => 'gzip -9v',
+  SUFFIX   => '.gz',
+};
+$_{PREREQ_PM}{'Net::DirectConnect::TigerHash'} = 0,    #for sharing and adc
+  $_{NORECURS} = 1, if $^O =~ /win32/i or $^O =~ /mswin/ or $^O =~ /freebsd/i;
 WriteMakefile(%_);
 
 sub MY::postamble {
   qq{
-#lib/Net/DirectConnect/TigerHash/makefile:
-#cd lib/Net/DirectConnect/TigerHash && perl Makefile.PL 
 
+#docs: README
 
-#lib/Net/DirectConnect/TigerHash/TigerHash.o: lib/Net/DirectConnect/TigerHash/makefile
-	
+#README: $_{VERSION_FROM}
+#pod2text $_{VERSION_FROM} > README
 
-#\$(MYEXTLIB): lib/Net/DirectConnect/TigerHash/makefile
-#pwd
-#cd lib/Net/DirectConnect/TigerHash && perl Makefile.PL && \$(MAKE) \$(PASSTHRU)
-#cd lib/Net/DirectConnect/TigerHash && \$(MAKE) \$(PASSTHRU)
+fullclean: distclean veryclean
+	rm -f \$(DISTNAME)-*.tar.gz *.bak *.old *.core MANIFEST README
 
-docs: README
-
-README: $_{VERSION_FROM}
-	pod2text $_{VERSION_FROM} > README
-
-fullclean: distclean clean
-	rm -f \$(DISTNAME)-*.tar.gz *.bak *.old MANIFEST README
-
-release: fullclean docs manifest metafile dist
+release: fullclean manifest metafile dist
 }
 }

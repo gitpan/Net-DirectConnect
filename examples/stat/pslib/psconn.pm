@@ -1,7 +1,7 @@
-#$Id: psconn.pm 4384 2010-01-10 11:38:05Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psconn.pm $
+#$Id: psconn.pm 4400 2010-01-20 21:31:13Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psconn.pm $
 package psconn;
 use strict;
-our $VERSION = ( split( ' ', '$Revision: 4384 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4400 $' ) )[1];
 #use psmisc;
 #sub connection {
 sub new {
