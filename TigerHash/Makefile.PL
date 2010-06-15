@@ -39,8 +39,8 @@ sub MY::postamble {
 #pod2text $_{VERSION_FROM} > README
 
 fullclean: distclean veryclean
-	rm -f \$(DISTNAME)-*.tar.gz MANIFEST README
-
+	rm -f \$(DISTNAME)-*.tar.gz *.bak *.old *.core MANIFEST README
+    
 release: test fullclean manifest metafile dist
 
 }

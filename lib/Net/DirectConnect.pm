@@ -1,7 +1,7 @@
-#$Id: DirectConnect.pm 623 2010-02-09 01:43:22Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect.pm $
+#$Id: DirectConnect.pm 631 2010-06-15 11:19:59Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect.pm $
 package Net::DirectConnect;
 use strict;
-our $VERSION = '0.05'; # . '_' . ( split( ' ', '$Revision: 623 $' ) )[1];
+our $VERSION = '0.06'; # . '_' . ( split( ' ', '$Revision: 631 $' ) )[1];
 no warnings qw(uninitialized);
 use Socket;
 use IO::Socket;
@@ -58,7 +58,7 @@ sub send_udp ($$;@) {
 }
 
 sub schedule($$;@)
-{    #$Id: DirectConnect.pm 623 2010-02-09 01:43:22Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect.pm $
+{    #$Id: DirectConnect.pm 631 2010-06-15 11:19:59Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect.pm $
   our %schedule;
   #for (1..100000000) { psmisc::schedule(10, our $my_every_10sec_sub__ ||= sub { print "every 10 sec"})};
   my ( $every, $func ) = ( shift, shift );
@@ -137,7 +137,7 @@ sub new {
     'email' => 'billgates@microsoft.com', 'sharesize' => 10 * 1024 * 1024 * 1024 + int rand( 1024 * 1024 ),    #10GB
     'client' => 'perl',    #'dcp++',                                                              #++: indicates the client
     #'protocol' => 'nmdc',    # or 'adc'
-    'V' => $VERSION,       #. '_' . ( split( ' ', '$Revision: 623 $' ) )[1],    #V: tells you the version number
+    'V' => $VERSION,       #. '_' . ( split( ' ', '$Revision: 631 $' ) )[1],    #V: tells you the version number
     #'M' => 'A',      #M: tells if the user is in active (A), passive (P), or SOCKS5 (5) mode
     'H' => '0/1/0'
     , #H: tells how many hubs the user is on and what is his status on the hubs. The first number means a normal user, second means VIP/registered hubs and the last one operator hubs (separated by the forward slash ['/']).
@@ -1134,7 +1134,7 @@ sub func {
 # #$self->{'file_send_left'}
 #
 #    $self->log(      'dev','sendfile1',  $self->{'file_send_offset'}, $read, 'left', $self->{'file_send_left'}, '=', $sended);
-$self->{'file_send_offset'} += $sended;
+#$self->{'file_send_offset'} += $sended;
 #$self->{'file_send_offset'} += $read, $sended = $read,if $sended == 12;
 #} 
 
