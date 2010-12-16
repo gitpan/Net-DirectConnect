@@ -1,15 +1,14 @@
 #!/usr/bin/perl
-#$Id: watch.pl 535 2010-01-11 02:42:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/watch.pl $
+#$Id: watch.pl 686 2010-12-16 00:02:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/watch.pl $
 
 =readme
 
 chat watch 
 
 =cut
-
 use strict;
 eval { use Time::HiRes qw(time sleep); };
-use lib '../lib';
+use lib::abs '../lib';
 use Net::DirectConnect;    #::clihub;
 print("usage: $0 [adc|dchub://]host[:port] [bot_nick]\n"), exit if !$ARGV[0];
 #print "Arg=",$ARGV[0],"\n";
@@ -31,7 +30,8 @@ my $dc = Net::DirectConnect->new(
       my $msg = $_;
       $msg => sub {
         my $dc = shift;
-        print join ' ', $msg, @_, "\n";
+        #print join ' ', $msg, @_, "\n";
+        $dc->say( $msg, @_ );    #print with console encoding
         },
       } qw(welcome chatline To)
   },

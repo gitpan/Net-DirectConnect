@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: flooddef.pl 473 2009-10-07 20:35:21Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/flooddef.pl $
+#$Id: flooddef.pl 686 2010-12-16 00:02:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/flooddef.pl $
 #
 #flood.pl default config
 #
@@ -25,10 +25,10 @@ $config{'dcbot_param'} = sub {
     'Version' => rand_int( 1,           1000 ),
     'V'       => rand_int( 1,           1000 ),
     'M'       => 'P',                   #mode - passive
-    #'log'		=>	sub {},	# no logging
-    #'log'		=>	sub {return if $_[0] =~ /dbg|dmp/},	# no logging
-    #'min_chat_delay'	=> 0.401,
-    #'min_cmd_delay'	=> 0.401,
+                                                                                                 #'log'		=>	sub {},	# no logging
+           #'log'		=>	sub {return if $_[0] =~ /dbg|dmp/},	# no logging
+           #'min_chat_delay'	=> 0.401,
+           #'min_cmd_delay'	=> 0.401,
   };
 };
 $config{'handler'}{'create_aft'} = sub {

@@ -1,12 +1,11 @@
 #!/usr/bin/perl
-#my $Id = '$Id: countub.pl 594 2010-01-30 23:10:17Z pro $';
+#my $Id = '$Id: countub.pl 686 2010-12-16 00:02:50Z pro $';
 
 =copyright
 counting users-bytes from dchub for mrtg or cacti (snmpd)
 =cut
-
 use strict;
-use lib '../lib';
+use lib::abs '../lib';
 use Net::DirectConnect;
 print("usage: $0 [adc|dchub://]host[:port] [bot_nick] [share_delim]\n"), exit if !$ARGV[0];
 $ARGV[0] =~ m|^(?:\w+\://)?(.+?)(?:\:(\d+))?$|;

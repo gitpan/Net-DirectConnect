@@ -1,17 +1,35 @@
 #!/usr/bin/perl
-#$Id: statlib.pm 620 2010-02-09 01:02:20Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
+#$Id: statlib.pm 686 2010-12-16 00:02:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
 package statlib;
 use strict;
 use Time::HiRes qw(time sleep);
 our $root_path;
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
-use lib $root_path. './pslib';
-use pssql;
-use psmisc;
+#use lib $root_path. './pslib';
+#use Net::DirectConnect::pslib::psmisc;
+#use Net::DirectConnect;
+#warn Dumper \%INC;
+#BEGIN {
+#$INC{'Net/DirectConnect.pm'} =~ m{(.*/)};
+#warn $1 . 'DirectConnect/pslib';
+#use lib $1 . 'DirectConnect/pslib/';
+use Net::DirectConnect::pslib::pssql;
+#psmisc->import qw(:log);
+#use Net::DirectConnect::pslib::pssql;
+#eval q{
+#Net::DirectConnect::use_try 'pssql';
+#Net::DirectConnect::use_try 'psmisc';
+#use pssql;
+#use psmisc;
+#};
+#}
+#warn $@;
 use Exporter 'import';
 our @EXPORT = qw(%config  $param   $db );
 our ( %config, $param, $db, );
+*statlib::config = *main::config;
+our ( $tq, $rq, $vq );
 $config{'log_trace'}  ||= 0;
 $config{'log_dmpbef'} ||= 0;
 $config{'log_dmp'}    ||= 0;
@@ -34,13 +52,15 @@ my $browsers = join '|', @{ $config{'browsers'} };
 $config{'browser_ie'} = 1 if $ENV{'HTTP_USER_AGENT'} =~ /MSIE/ and $ENV{'HTTP_USER_AGENT'} !~ /$browsers/i;
 #$config{'client'} = $_,
 $config{ 'browser_' . $_ } = 1 for grep { $ENV{'HTTP_USER_AGENT'} =~ /$_/i } @{ $config{'browsers'} };
-$config{'use_graph'} ||= 1 if $config{browser_firefox} or $config{browser_safari} or $config{browser_chrome};
+$config{'use_graph'} ||= 1;    #  if grep {$config{'browser_'. $_}} qw(firefox safari chrome opera);
+$config{'graph_inner'} ||= 1 if grep { $config{ 'browser_' . $_ } } qw(firefox safari chrome);
 $config{'sql'} ||= {
-  'driver'              => 'mysql',
-  'dbname'              => 'dcstat',
-  'auto_connect'        => 1,
-  'log'                 => sub { shift; psmisc::printlog(@_) },
-  'cp_in'               => 'cp1251',
+  #'driver'              => 'mysql',
+  'driver'       => 'sqlite',
+  'dbname'       => 'dcstat',
+  'auto_connect' => 1,
+  'log'          => sub { shift; psmisc::printlog(@_) },
+  #'cp_in'               => 'cp1251',
   'connect_tries'       => 0,
   'connect_chain_tries' => 0,
   'error_tries'         => 0,
@@ -106,69 +126,34 @@ $config{'sql'} ||= {
   },
 };
 $config{'sql'}{'table'}{ 'queries_top_string_' . $_ } = {
-  'date' => pssql::row( undef,  'type'  => 'VARCHAR', 'length'      => 10, 'default' => '', 'index' => 1, primary => 1 ),
+  'date' => pssql::row( undef,  'type'  => 'VARCHAR', 'length'      => 15, 'default' => '', 'index' => 1, primary => 1 ),
   'time' => pssql::row( 'time', 'index' => 1, ),      #'purge' => 1,
-  n      => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0, primary => 1 ),
+  n      => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0,    primary => 1 ),
   cnt    => pssql::row( undef, 'type' => 'INT',      'default' => 0, ),
-  string => pssql::row( undef, 'type' => 'VARCHAR',  'index'   => 1, ),
+  string => pssql::row( undef, 'type' => 'VARCHAR',  'length'  => 1000, 'index' => 1, ),
   },
   $config{'sql'}{'table'}{ 'queries_top_tth_' . $_ } = {
   #queries_top_tth_daily
-  'date' => pssql::row( undef,  'type'  => 'VARCHAR', 'length'      => 10, 'default' => '', primary => 1, 'index' => 1, ),
+  'date' => pssql::row( undef,  'type'  => 'VARCHAR', 'length'      => 15, 'default' => '', primary => 1, 'index' => 1, ),
   'time' => pssql::row( 'time', 'index' => 1, ),      #'purge' => 1,
-  n   => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0, primary => 1 ),
+  n   => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0,  primary => 1 ),
   cnt => pssql::row( undef, 'type' => 'INT',      'default' => 0, ),
-  tth => pssql::row( undef, 'type' => 'VARCHAR',, 'index'   => 1, ),
+  tth => pssql::row( undef, 'type' => 'VARCHAR',  'length'  => 40, 'index' => 1, ),
   },
   $config{'sql'}{'table'}{ 'results_top_' . $_ } = {
-  'date' => pssql::row( undef,  'type'  => 'VARCHAR', 'length'      => 10, 'default' => '', primary => 1, 'index' => 1, ),
+  'date' => pssql::row( undef,  'type'  => 'VARCHAR', 'length'      => 15, 'default' => '', primary => 1, 'index' => 1, ),
   'time' => pssql::row( 'time', 'index' => 1, ),      #'purge' => 1,
-  n   => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0, primary => 1 ),
+  n   => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0,  primary => 1 ),
   cnt => pssql::row( undef, 'type' => 'INT',      'default' => 0, ),
-  tth => pssql::row( undef, 'type' => 'VARCHAR',, 'index'   => 1, ),
+  tth => pssql::row( undef, 'type' => 'VARCHAR',  'length'  => 40, 'index' => 1, ),
   },
   for sort keys %{ $config{'periods'} };
+unless ( $ENV{'SERVER_PORT'} ) {
+  $config{'sql'}{'auto_repair'}  = 1;
+  $config{'sql'}{'force_repair'} = 1;
+}
 $config{'query_default'}{'LIMIT'} ||= 100;
 my $order;
-$config{'queries'}{'queries top string'} ||= {
-  'main'    => 1,
-  'periods' => 1,
-  ( !$config{'use_graph'} ? ( 'class' => 'half' ) : ( 'graph' => 1 ) ),
-  'show'   => [qw(cnt string)],
-  'desc'   => { 'ru' => 'Чаще всего ищут', 'en' => 'Most searched' },
-  'SELECT' => 'string, COUNT(*) as cnt',
-  'FROM'   => 'queries',
-  'WHERE'  => ['string != ""'],
-  #todo: show time last
-  'GROUP BY' => 'string',
-  'ORDER BY' => 'cnt DESC',
-  'order'    => ++$order,
-};
-$config{'queries'}{'queries string last'} ||= {
-  'main'      => 1,
-  'class'     => 'half',
-  'group_end' => 1,
-  'desc'      => { 'ru' => 'Сейчас ищут', 'en' => 'last searches' },
-  'FROM'      => 'queries',
-  'show'      => [qw(time hub nick ip string )],
-  'SELECT'    => '*',
-  'WHERE'     => ['queries.string != ""'],
-  'ORDER BY'  => 'queries.time DESC',
-  'order'     => ++$order,
-};
-$config{'queries'}{'results top'} ||= {
-  'main'    => 1,
-  'periods' => 1,
-  #( !$config{'use_graph'} ? () : ( 'graph' => 1 ) ),
-  'show'     => [qw(cnt string filename size tth)],                                                 #time
-  'desc'     => { 'ru' => 'Распространенные файлы', 'en' => 'Most stored' },
-  'SELECT'   => '*, COUNT(*) as cnt',
-  'FROM'     => 'results',
-  'WHERE'    => ['tth != ""'],
-  'GROUP BY' => 'tth',
-  'ORDER BY' => 'cnt DESC',
-  'order'    => ++$order,
-};
 $config{'queries'}{'queries top tth'} ||= {
   'main'    => 1,
   'periods' => 1,
@@ -183,7 +168,32 @@ $config{'queries'}{'queries top tth'} ||= {
   'ORDER BY'  => 'cnt DESC',
   'order'     => ++$order,
 };
-#
+$config{'queries'}{'queries top string'} ||= {
+  'main'    => 1,
+  'periods' => 1,
+  ( !$config{'use_graph'} ? ( 'class' => 'half' ) : ( 'graph' => 1 ) ),
+  'group_end' => 1,
+  'show'      => [qw(cnt string)],
+  'desc'      => { 'ru' => 'Чаще всего ищут', 'en' => 'Most searched' },
+  'SELECT'    => 'string, COUNT(*) as cnt',
+  'FROM'      => 'queries',
+  'WHERE'     => ['string != ""'],
+  #todo: show time last
+  'GROUP BY' => 'string',
+  'ORDER BY' => 'cnt DESC',
+  'order'    => ++$order,
+};
+$config{'queries'}{'queries string last'} ||= {
+  'main'     => 1,
+  'class'    => 'half',
+  'desc'     => { 'ru' => 'Сейчас ищут', 'en' => 'last searches' },
+  'FROM'     => 'queries',
+  'show'     => [qw(time hub nick ip string )],
+  'SELECT'   => '*',
+  'WHERE'    => ['queries.string != ""'],
+  'ORDER BY' => 'queries.time DESC',
+  'order'    => ++$order,
+};
 $config{'queries'}{'queries tth last'} ||= {
   %{ $config{'queries'}{'queries string last'} },
   'desc'      => { 'ru' => 'Сейчас скачивают', 'en' => 'last downloads' },
@@ -194,6 +204,19 @@ $config{'queries'}{'queries tth last'} ||= {
 '*, (SELECT string FROM results WHERE queries.tth=results.tth LIMIT 1) AS string, (SELECT filename FROM results WHERE queries.tth=results.tth LIMIT 1) AS filename, (SELECT size FROM results WHERE queries.tth=results.tth LIMIT 1) AS size',
   'WHERE'    => ['tth != ""'],
   'ORDER BY' => 'queries.time DESC',
+  'order'    => ++$order,
+};
+$config{'queries'}{'results top'} ||= {
+  'main'    => 1,
+  'periods' => 1,
+  #( !$config{'use_graph'} ? () : ( 'graph' => 1 ) ),
+  'show'     => [qw(cnt string filename size tth)],                                                 #time
+  'desc'     => { 'ru' => 'Распространенные файлы', 'en' => 'Most stored' },
+  'SELECT'   => '*, COUNT(*) as cnt',
+  'FROM'     => 'results',
+  'WHERE'    => ['tth != ""'],
+  'GROUP BY' => 'tth',
+  'ORDER BY' => 'cnt DESC',
   'order'    => ++$order,
 };
 $config{'queries'}{'users top'} ||= {
@@ -277,11 +300,13 @@ $config{'queries'}{'hubs top'} ||= {
   'main'  => 1,
   'class' => 'half',
   'show'  => [qw(time hub users size )],    #time
-  #'SELECT'         => 'DISTINCT hub , MAX(size), h2.*', # DISTINCT hub,size,time
-  'SELECT' => '*, hub as h1'
+                                            #'SELECT'         => 'DISTINCT hub , MAX(size), h2.*', # DISTINCT hub,size,time
+                                            #!'SELECT' => '*, hub as h1'
   , #DISTINCT DISTINCT hub,size,time                                                    'FROM'     => 'hubs',  'LEFT JOIN' => 'hubs as h2 USING (hub,size)','GROUP BY' => 'hubs.hub',  'ORDER BY' => 'h2.size DESC',
-  #'WHERE'    => ['time = (SELECT time FROM hubs WHERE hub=h ORDER BY size DESC LIMIT 1)'],
-  'WHERE' => ['time = (SELECT time FROM hubs WHERE hub=h1 ORDER BY size DESC LIMIT 1)'],
+    #'WHERE'    => ['time = (SELECT time FROM hubs WHERE hub=h ORDER BY size DESC LIMIT 1)'],
+    #!'WHERE' => ['time = (SELECT time FROM hubs WHERE hub=h1 ORDER BY size DESC LIMIT 1)'],
+  'SELECT' => '*',
+  'WHERE'  => ['time = (SELECT time FROM hubs /*WHERE hub=h1*/ ORDER BY size DESC LIMIT 1)'],
   #'GROUP BY' => 'hubs.hub',
   #'ORDER BY' => 'size DESC',
   #'SELECT' => '*',
@@ -336,6 +361,7 @@ $config{'queries'}{'counts'} ||= {
 };
 $config{'queries'}{'chat top'} ||= {
   'main'     => 1,
+  'periods'  => 1,
   'class'    => 'half',
   'show'     => [qw(cnt hub nick)],
   'desc'     => { 'ru' => 'Находки для шпиона', 'en' => 'top flooders' },
@@ -344,6 +370,7 @@ $config{'queries'}{'chat top'} ||= {
   'GROUP BY' => 'nick',
   'ORDER BY' => 'cnt DESC',
   'order'    => ++$order,
+  'slow'     => 1,
 };
 $config{'queries'}{'chat last'} ||= {
   'main'           => 1,
@@ -378,7 +405,7 @@ $config{'queries'}{'filename'} ||= {
   'show'     => [qw(cnt string filename size tth)],
   'GROUP BY' => 'tth',
 };
-psmisc::config( 0, 0, 0, 1 );
+psmisc::configure( 0, 0, 0, 1 );
 
 sub is_slow {
   my ($query) = @_;
@@ -396,7 +423,7 @@ sub make_query {
   my $sql;
   if ( is_slow($query) and $ENV{'SERVER_PORT'} and $config{'use_slow'} ) {
     $sql =
-        "SELECT * FROM slow WHERE name = "
+        "SELECT * FROM ${tq}slow${tq} WHERE name = "
       . $db->quote($query)
       . ( ( $config{'queries'}{$query}{'periods'} ? ' AND period=' . $db->quote($period) : '' )
       . " ORDER BY n"
@@ -417,4 +444,5 @@ sub make_query {
   return $db->query($sql);
 }
 $db ||= pssql->new( %{ $config{'sql'} || {} }, );
+( $tq, $rq, $vq ) = $db->quotes();
 1;

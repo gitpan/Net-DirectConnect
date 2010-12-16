@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-#$Id: hub.pl 593 2010-01-30 11:11:27Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/hub.pl $
+#$Id: dchub 677 2010-12-13 22:44:31Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dchub $
 
 =r
 
@@ -10,13 +10,16 @@ dev hub test
 use strict;
 use Data::Dumper;    #dev only
 $Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = 1;
-use lib '../lib';
+use lib::abs '../lib';
 use Net::DirectConnect::hub;
-use lib '../lib';
-use lib '../TigerHash/lib';
-use lib './stat/pslib';
-use psmisc;
-psmisc::config();
+#use lib::abs '../lib';
+#use lib::abs '../TigerHash/lib';
+#use lib './stat/pslib';
+#use psmisc;
+our %config;
+use Net::DirectConnect::pslib::psmisc;
+psmisc->import qw(:log);
+psmisc::configure();
 #my $dc = Net::DirectConnect::hub->new( no_print => undef, );
 my $dc = Net::DirectConnect->new(
   'protocol' => 'adc',

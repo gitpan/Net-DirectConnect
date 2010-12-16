@@ -1,10 +1,10 @@
 #!/usr/bin/perl -w
-#$Id: demo.pl 535 2010-01-11 02:42:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/demo.pl $
+#$Id: demo.pl 674 2010-12-10 01:05:34Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/demo.pl $
 use strict;
 no warnings qw(uninitialized);
 use Data::Dumper;    #dev only
 $Data::Dumper::Sortkeys = 1;
-use lib '../lib';
+use lib::abs '../lib';
 use Net::DirectConnect;
 my $dc = Net::DirectConnect->new(
   'host'         => $ARGV[0],

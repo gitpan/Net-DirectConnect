@@ -1,9 +1,9 @@
 #!/usr/bin/perl
-#$Id: psmisc.pm 4412 2010-03-15 00:13:51Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+#$Id: psmisc.pm 4441 2010-12-16 00:02:27Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
 
 =copyright
 PRO-search shared library
-Copyright (C) 2003-2007 Oleg Alexeenkov http://pro.setun.net/search/ proler@gmail.com icq#89088275
+Copyright (C) 2003-2010 Oleg Alexeenkov http://pro.setun.net/search/ proler@gmail.com
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,27 +22,45 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #print "Content-type: text/html\n\n" if defined($ENV{'SERVER_PORT'}); # for web dev debug
 #print "misc execute " , $mi++;
 #=pac
-package psmisc;
+#local *config = *main::config;
+#%config
+#our ( %config );
+package    #not ready for cpan
+  psmisc;
 use strict;
-our $VERSION = ( split( ' ', '$Revision: 4412 $' ) )[1];
+no warnings qw(uninitialized);
+use Socket;
+use Time::HiRes qw(time);
 use locale;
 use Encode;
 use POSIX qw(strftime);
+our $VERSION = ( split( ' ', '$Revision: 4441 $' ) )[1];
+our (%config);
+#my ( %config );
+#local *config = *main::config;
+#local
+*psmisc::config = *main::config;
 use Data::Dumper;    #dev only
-$Data::Dumper::Sortkeys = 1;
+$Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = 1;
 #use vars qw( %config %work %stat %static $param %processor %program %out );    #%human,
-#our ( @ISA, @EXPORT, @EXPORT_OK );
-#our ( @ISA, @EXPORT, @EXPORT_OK );
-use vars qw( @ISA @EXPORT @EXPORT_OK );
-require Exporter;
+#our ( @ISA, @EXPORT, @EXPORT_OK ,%EXPORT_TAGS);
+our ( @EXPORT, @EXPORT_OK, %EXPORT_TAGS );
+#use vars qw( @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS);
+#require Exporter;
+use Exporter 'import';
 #our
 #@
-@ISA = qw(Exporter);
-#our
-#@
+#@ISA = qw(Exporter);
+#    @EXPORT      = qw(A1 A2 A3 A4 A5);
+#    @EXPORT_OK   = qw(B1 B2 B3 B4 B5);
+#    %EXPORT_TAGS = (T1 => [qw(A1 A2 B1 B2)], T2 => [qw(A1 A2 B3 B4)]);
+#our  %config;
 @EXPORT = qw(
+);
+@EXPORT_OK = qw(
   get_params_one
   get_params
+  array
   encode_url
   encode_url_link
   decode_url
@@ -70,8 +88,6 @@ require Exporter;
   max
   alarmed
   mkdir_rec
-  open_out_file
-  close_out_file
   sleeper
   mysleep
   check_int
@@ -82,14 +98,20 @@ require Exporter;
   http_get_code
   loadlist
   shelldata
-  %work %config %stat %static $param
-  %processor %program
-  );    #%human %out
+  %work  %stat %static $param
+  %program
+  %config
+);
+%EXPORT_TAGS = ( log => [qw(  printlog)], config => [qw(%config)], all => \@EXPORT_OK, );    #%human %out %processor
+
+=no
+  open_out_file
+  close_out_file
+=cut
+
 #flush
-our ( %config, %work, %stat, %static, $param, %processor, %program, $root_path, %human );    #%human, %out,
-use Socket;
-use Time::HiRes qw(time);
-no warnings qw(uninitialized);
+#our ( %config, %work, %stat, %static, $param, %program, $root_path,  );    #%human, %out, %processor,
+our ( %work, %stat, %static, $param, %program, $root_path, );                                #%human, %out, %processor,
 #my %human;
 #sub conf_once {
 sub config_init {
@@ -312,6 +334,21 @@ sub get_params(;$$) {      #v7
   wantarray ? %_ : \%_;
 }
 
+sub array (@) {
+  local @_ = map { ref $_ eq 'ARRAY' ? @$_ : $_ } @_;
+  wantarray ? @_ : \@_;
+}
+
+sub array_any (@) {
+  local @_ = map { ref $_ eq 'ARRAY' ? @$_ : ref $_ eq 'HASH' ? sort keys %$_ : ref $_ eq 'CODE' ? $_->() : $_ } @_;
+  wantarray ? @_ : \@_;
+}
+
+sub in ($@) {
+  my $v = shift;
+  grep { $v eq $_ } &array_any;
+}
+
 =todo
 ------------jCZJhSDkEEg0Avf4h2hejC
 Content-Disposition: form-data; name="n1"
@@ -356,7 +393,7 @@ sub decode_url($) {    #v1
 }
 {
   my %fh;
-  my $savetime;
+  my $savetime = 0;
 
   sub file_append(;$@) {
     #print( 'append', @_, "\n" );
@@ -368,7 +405,7 @@ sub decode_url($) {    #v1
       close( $fh{$_} ), delete( $fh{$_} ) if $fh{$_} and !@_;
     }
     return if !@_;
-    unless ( $fh{$_} ) { return unless open( $fh{$_}, '>>', $_ ); }
+    unless ( $fh{$_} ) { return unless open $fh{$_}, '>>', $_; return unless $fh{$_}; }
     print { $fh{$_} } @_;
     if ( time() > $savetime + 5 ) {
       #printlog('dev', 'closing file', $_),
@@ -946,17 +983,10 @@ sub alarmed {
   return $ret;
 }
 
-sub mkdir_rec($;$) {
-  #mkdir $` while m,/,g;
-  my ( $name, $mask ) = @_;
-  my $ret;
-  $name =~ s|/+\s*$||;
-  $name =~ s|\\|/|g;
-  local @_ = ($name);
-  push( @_, $name ) while $name =~ s|^(.+)/([^/]+)$|$1|;
-  #$ret += mkdir( $_, $mask ? $mask : () ) for grep { !-d } reverse @_;
-  $ret += ( $mask ? mkdir $_, $mask : mkdir $_ ) for grep { !-d } reverse @_;
-  return $ret;
+sub mkdir_rec(;$$) {
+  local $_ = shift // $_;
+  $_ .= '/' unless m{/$};
+  while (m,/,g) { @_ ? mkdir $`, $_[0] : mkdir $` if length $` }
 }
 
 sub check_int($;$$$) {
@@ -976,6 +1006,8 @@ sub check_int($;$$$) {
   #printlog('dev', 'int4',$int);
   return $int;
 }
+
+=old trash
 {
   my $current_name;
 
@@ -1001,7 +1033,11 @@ sub check_int($;$$$) {
     $work{'current_name_work'} = $current_name = '';
   }
 }
-sub caller_trace(;$) { printlog( 'caller', $_, caller($_) || last ) for 0 .. $_[0] || 5 }
+=cut
+
+sub caller_trace(;$) {
+  for ( 0 .. $_[0] || 5 ) { local @_ = caller $_; last unless @_; printlog( 'caller', $_, @_ ); }
+}
 
 sub lib_init() {
   $SIG{__WARN__} = sub {
@@ -1010,8 +1046,8 @@ sub lib_init() {
     caller_trace(15);
     }, $SIG{__DIE__} = sub {
     printlog( 'die', $!, $@, @_ );
-    printlog( 'die', 'caller', $_, caller($_) || last ) for ( 0 .. 15 );
-    #caller_trace(15);
+    #printlog( 'die', 'caller', $_, caller($_) || last ) for ( 0 .. 15 );
+    caller_trace(15);
     }
     unless $static{'no_sig_log'};    #die $!;
   unless ( $static{'port2prot'} ) {
@@ -1042,7 +1078,7 @@ sub sleeper($;$$) {
   return $work{'sleeper'}{$where};
 }
 
-sub shuffle(@) { #@$deck = map{ splice @$deck, rand(@$deck),  1 }  0..$#$deck;
+sub shuffle(@) {    #@$deck = map{ splice @$deck, rand(@$deck),  1 }  0..$#$deck;
   my $deck = shift;
   $deck = [ $deck, @_ ] unless ref $deck eq 'ARRAY';
   my $i = @$deck;
@@ -1077,14 +1113,19 @@ sub paintdots_onreload {
 }
 =cut
 
+sub count(@) { local %_; ++$_{$_} for @_; \%_ }
+sub uniq(@) { keys %{ count @_ } }
+
 sub config_read {
+  #warn Dumper \@_;
+  my @files;
+  @files = @{ shift(@_) } if ref $_[0] eq 'ARRAY';
+  #warn Dumper \@files;
+  #warn Dumper \@_;
   #print "config_read($ENV{'SCRIPT_FILENAME'}, $_[0]);\n";
   #print ("config_read NOREAD!;\n");
-  my $file = $config{'config_file'} || 'config.pl';
-  return if $static{'config_read'}{
-        $ENV{'SCRIPT_FILENAME'} . $file
-          #$ENV{'PROSEARCH_PATH'}
-      }++ and !$_[0];
+  #my $file = ;
+  #return if $static{'config_read'}{            $ENV{'SCRIPT_FILENAME'} . $file      }++ and !$_[0];
   #print " [$file] config_read($_[0])";
   #do $ENV{'PROSEARCH_PATH'} . './config.pl' or do '../config.pl';
   #print "config_readb(); root_path = $root_path\n";
@@ -1093,18 +1134,31 @@ sub config_read {
     ( $1 ? $1 . '/' : undef );
   #$root_path||=  $1 . '/' if $1;
   $root_path =~ s|\\|/|g;
+  $root_path //= './';
   #do $ENV{'PROSEARCH_PATH'} . './config.pl' or
   #print "pa=". ( $ENV{'SCRIPT_FILENAME'} ,';', $0),"\n";
-  #print "config_read(); root_path = $root_path ; file = $file\n";
+  unless (@files) {
+    @files = (
+      $root_path . ( $config{'config_file'} // 'config.pl' )    #, $root_path . 'confdef.pl'
+    );
+  }
+  #warn "config_read(); root_path = $root_path ; file = @files\n";
   my @errs;
-  local $_ = do $root_path . $file;
-  #print( ' do1:',$_,',', $!, ' eval=', $@, "\n" ) if !$_ or $! or $@;
-  #MAKE ARRAY
-  push @errs, grep { $_ } $!, $@, $_ += do $root_path . 'confdef.pl',   push @errs, grep { $_ } $!, $@ unless $_;
-  push @errs, grep { $_ } $!, $@, $_ += do $root_path . '../config.pl', push @errs, grep { $_ } $!, $@ unless $_;
+  local $_;                                                     #= do ;
+  #use lib::abs;
+  for my $file ( uniq @files ) {
+    last if $static{'config_read'}{ $ENV{'SCRIPT_FILENAME'} . $file }++ and !$_[0];
+    #warn "reading [$file]", -s $file, ;# lib::abs::path($file);
+    #print( ' do1:',$_,',', $!, ' eval=', $@, "\n" ) if !$_ or $! or $@;
+    #MAKE ARRAY
+    $_ += do $file and last;                                    #and warn("read [$file] ok $! $@;")
+    push @errs, map { "config [$file] not found: " . $_ } grep { $_ } $!, $@, unless $_;
+    #push @errs, grep { $_ } $!, $@ unless $_;
+    #push @errs, grep { $_ } $!, $@, $_ += do $root_path . '../config.pl', push @errs, grep { $_ } $!, $@ unless $_;
+  }
   if ( !$_ and !$_[1] ) {
     print "Content-type: text/html\n\n" if defined( $ENV{'SERVER_PORT'} );
-    print "config not found in $root_path$file and ../config.pl\nReason:\n", join ";\n", @errs;
+    print map "$_;\n", @errs;
   }
   #print"rp set1 to [$root_path]\n";
   conf(
@@ -1143,8 +1197,9 @@ sub pre_calc {
 sub config_reload {
   #print "config_reload(clear=$_[0];; $config{'root_path'})";
   #print "config_reload(clear!=$_[0])\n";
+  my $files = shift if ref $_[0] eq 'ARRAY';
   %config = () if $_[0];
-  config_read( $_[1], $_[3] );
+  config_read( ( $files || () ), $_[1], $_[3] );
   #print "read end;";
   $_[2]->() if ref $_[2] eq 'CODE';
   conf();
@@ -1159,10 +1214,9 @@ sub config_reload {
   #print('config_reload',Dumper (\%config ));
 }
 sub configure { &config_reload; }
-sub config    { &configure; }       #to del
-
+#sub config    { &configure; }       #to del
 sub reload_lib {
-  %human = ();
+  #%human = ();
   my $redef = 0;
   for my $file (@_) {
     printlog( 'dbg', "reloading $file: $INC{$file}" );
@@ -1383,7 +1437,7 @@ sub save_list {
 }
 =cut
 
-sub schedule($$;@) {    #$Id: psmisc.pm 4412 2010-03-15 00:13:51Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+sub schedule($$;@) {    #$Id: psmisc.pm 4441 2010-12-16 00:02:27Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   our %schedule;
   my ( $every, $func ) = ( shift, shift );
   my $p;
@@ -1399,7 +1453,7 @@ sub schedule($$;@) {    #$Id: psmisc.pm 4412 2010-03-15 00:13:51Z pro $ $URL: sv
     and ( !( ref $p->{'cond'} eq 'CODE' ) or $p->{'cond'}->( $p, $schedule{ $p->{'id'} }, @_ ) )
     and ref $schedule{ $p->{'id'} }{'func'} eq 'CODE';
 }
-{    #$Id: psmisc.pm 4412 2010-03-15 00:13:51Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+{    #$Id: psmisc.pm 4441 2010-12-16 00:02:27Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   my (@locks);
   sub lockfile($) {
     return ( $config{'lock_dir'} || './' ) . ( length $_[0] ? $_[0] : 'lock' ) . ( $config{'lock_ext'} || '.lock' );
@@ -1408,9 +1462,9 @@ sub schedule($$;@) {    #$Id: psmisc.pm 4412 2010-03-15 00:13:51Z pro $ $URL: sv
   sub lock (;$@) {
     my $name = shift;
     my %p = ref $_[0] eq 'HASH' ? %{ $_[0] } : @_;
-    $p{'sleep'}   ||= $config{'lock_sleep'}   || 1;
-    $p{'timeout'} ||= $config{'lock_timeout'} || 600 unless length $p{'timeout'};
-    $p{'old'}     ||= $config{'lock_old'}     || 3600;
+    $p{'sleep'}   //= $config{'lock_sleep'}   // 1;
+    $p{'timeout'} //= $config{'lock_timeout'} // 600 unless length $p{'timeout'};
+    $p{'old'}     //= $config{'lock_old'}     // 3600;
     #$p{'readonly'} ||= 0; #dont write lock file, only wait
     my $waitstart = time();
     my $waits;
@@ -1563,7 +1617,7 @@ sub program_run(;$) {
           )
         {
           local @_ = (
-            ( defined( $param->{$par} ) and $param->{$par} ne '' ? $param->{$par} : () ),
+            ( ( defined( $param->{$par} ) and $param->{$par} ne '' ) ? $param->{$par} : () ),
             ( $program{$current}{'param_name'} ? $par : () )
           );
           state( 'program:', $current, @_ );
@@ -1580,4 +1634,178 @@ sub program_run(;$) {
 }
 #BEGIN { config_init(); }
 config_init();
+
+package psconn;
+use strict;
+our $VERSION = ( split( ' ', '$Revision: 4441 $' ) )[1];
+#use psmisc;
+#sub connection {
+sub new {
+  my $class = shift;
+  my $self  = {};
+  bless( $self, $class );
+  $self->init(@_);
+  #printlog( 'conn', 'new', $self, $class, 'deb:', $self->{'error_sleep'} );
+  return $self;
+}
+
+sub init {
+  my $self = shift;
+  local %_ =
+    ( 'connected' => 0, 'connect_auto' => 1, 'connect_tries' => 100, 'connect_chain_tries' => 10, 'error_sleep' => 5, @_ );
+  @{$self}{ keys %_ } = values %_;
+  #printlog('dev', 'conn init error_sleep', $self->{'error_sleep'});
+  $self->connect() if $self->{'auto_connect'};
+  return $self;
+}
+##methods
+#connect
+#reconnect
+#disconnect
+#dropconnect
+#keep
+##child can do
+#_connect
+#_disconnect
+#_dropconnect
+#check_error
+#parse_error
+#_keep
+##vars
+#tries
+#error_sleep
+#auto_connect
+##vars status
+#connected
+sub connect {
+  my $self = shift;
+  #return ($self->{'connect_check'} ? $self->keep() : 0) if $self->{'connected'};
+  return 1 if $self->{'in_connect'} or $self->{'in_disconnect'};
+  return $self->keep() if $self->{'connected'};
+  #printlog( 'dev', "conn::connect[$self->{'connect_tried'} <= $self->{'connect_tries'}]" );
+  #if (!$self->_connect()) {   #ok
+  my $aftersleep = 1;
+  while ( !$self->{'die'} ) {
+    if (  ( $self->{'connect_tried'}++ <= $self->{'connect_tries'} or !$self->{'connect_tries'} )
+      and ( $self->{'connect_chain_tried'}++ <= $self->{'connect_chain_tries'} or !$self->{'connect_chain_tries'} ) )
+    {
+      #do {    {    #ok
+      $self->{'in_connect'} = 1;
+      if ( !$self->_connect() ) {
+        #printlog('CONNECTED!?');
+        $self->{'in_connect'} = 0;
+        ++$self->{'connected'};
+        ++$self->{'connects'};
+        $self->{'connect_chain_tried'} = 0;
+        #printlog( 'dev', 'oncon', $_ ),
+        $self->{ 'on_connect' . $_ }->($self) for grep { ref $self->{ 'on_connect' . $_ } eq 'CODE' } ( '', 1 .. 10 );
+        return 0;
+      }
+      $self->{'in_connect'} = 0;
+      $self->dropconnect();
+      $self->log(
+        'dev',                          'psconn::connect run sleep',
+        $self->{'error_sleep'},         $self->{'connect_tried'},
+        '/',                            $self->{'connect_tries'},
+        $self->{'connect_chain_tried'}, '/',
+        $self->{'connect_chain_tries'}
+      );
+      $self->sleep( $self->{'error_sleep'} );
+      $aftersleep = 0;
+    } else {
+      $self->log( 'dev',
+" if (( $self->{'connect_tried'}++ <= $self->{'connect_tries'} or !$self->{'connect_tries'} ) and ( $self->{'connect_chain_tried'}++ <= $self->{'connect_chain_tries'} or !$self->{'connect_chain_tries'} ) )"
+      );
+      last;
+    }
+  }
+  #} while ( ++$self->{'connect_tried'} <= $self->{'connect_tries'} );
+  $self->sleep($aftersleep) if $aftersleep;
+  return 1;
+}
+
+sub reconnect {
+  my $self = shift;
+  $self->disconnect(@_);
+  return $self->connect(@_);
+  #++$self->{'reconnects'};
+}
+
+sub disconnect {
+  my $self = shift;
+  return 0 unless $self->{'connected'};
+  #printlog('trace', 'psconn::disconnect');
+  $self->_disconnect(@_);
+  $self->dropconnect(@_);
+}
+
+sub dropconnect {
+  my $self = shift;
+  return 0 unless $self->{'connected'};
+  $self->_dropconnect(@_);
+  $self->{'connected'} = 0;
+}
+
+sub keep {
+  my $self = shift;
+  #print("psconn::keep\n");
+  #print("psconn::keep:R1=0\n"),
+  return 0 if $self->{'connected'} and !$self->{'connect_check'};
+  #local $_ =$self->_check();
+  #print("keep:preR2[$_]\n");
+  #print("keep:R2=0[$_]\n"),
+  #return 0 if !$_;
+  return 0 if !$self->_check();
+  #print("keep:postR2[$_]\n");
+  #print('keep:R3=rc'),
+  return $self->reconnect();
+}
+
+sub _connect {
+  my $self = shift;
+  #printlog('NEWER');
+  return 0;
+}
+
+sub _disconnect {
+  my $self = shift;
+  return 0;
+}
+
+sub _dropconnect {
+  my $self = shift;
+  return 0;
+}
+
+sub _check {
+  my $self = shift;
+  #printlog('DONT');
+  return 0;
+}
+
+sub check_error {
+  my $self = shift;
+  return 0;
+}
+
+sub parse_error {
+  my $self = shift;
+  return 0;
+}
+
+sub DESTROY {
+  my $self = shift;
+  #printlog('trace', 'psconn::DESTROY');
+  $self->disconnect();
+}
+
+sub sleep {
+  my $self = shift;
+  #$self->log( 'dev', 'psconn::sleep', @_ );
+  #local $_ = $work{'sql_locked'};
+  #sql_unlock_tables() if $work{'sql_locked'} and $_[0];
+  sleep(@_);
+  #return psmisc::sleeper(@_);
+  #sql_lock_tables($_) if $_ and $_[0];
+}
 1;

@@ -1,4 +1,4 @@
-#$Id: clicli.pm 627 2010-02-10 23:47:13Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clicli.pm $
+#$Id: clicli.pm 686 2010-12-16 00:02:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clicli.pm $
 package    #hide from cpan
   Net::DirectConnect::clicli;
 use strict;
@@ -6,7 +6,7 @@ use Net::DirectConnect;
 use Data::Dumper;    #dev only
 $Data::Dumper::Sortkeys = 1;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 627 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 686 $' ) )[1];
 use base 'Net::DirectConnect';
 
 sub init {
@@ -41,9 +41,9 @@ sub init {
     #'Direction' => 'Upload', #rand here
     'incomingclass' => __PACKAGE__, 'reconnects' => 0, inactive_timeout => 60, charset_protocol => 'cp1251',    #'utf8'
   );
-#  $self->{$_} ||= $_{$_} for keys %_;
-    !exists $self->{$_} ?  $self->{$_} ||= $_{$_} : ()  for keys %_;
-
+  #$self->{$_} ||= $_{$_} for keys %_;
+  !exists $self->{$_} ? $self->{$_} ||= $_{$_} : () for keys %_;
+  $self->{'modules'}{'nmdc'} = 1;
   $self->{'auto_connect'} = 1 if !$self->{'incoming'} and !defined $self->{'auto_connect'};
   #$self->log($self, 'inited1',"MT:$self->{'message_type'}", ' with', Dumper  \@_);
   #$self->baseinit();
@@ -53,7 +53,7 @@ sub init {
   #$self->{'share_tth'} ||=$self->{'parent'}{'share_tth'};
   #$self->{'share_full'} ||=$self->{'parent'}{'share_tth'};
   #share_full share_tth want
-  $self->{$_} ||= $self->{'parent'}{$_} ||= {} for qw( NickList IpList PortList);                               #handler
+  $self->{$_} ||= $self->{'parent'}{$_} ||= {} for qw( NickList IpList PortList);    #handler
   $self->{$_} ||= $self->{'parent'}{$_} for qw(  Nick  );
   #$self->{'NickList'} ||= {};
   #$self->{'IpList'}   ||= {};
@@ -63,6 +63,7 @@ sub init {
   $self->{'parse'} ||= {
     'Lock' => sub {
       my $self = shift if ref $_[0];
+      #$self->log('dev', 'LOCK:incoming', $self->{'incoming'});
       if ( $self->{'incoming'} ) {
         $self->{'sendbuf'} = 1;
         $self->cmd('MyNick');
@@ -84,6 +85,7 @@ sub init {
       #my ($lock)
       ( $self->{'key'} ) = $_[0] =~ /^(.+?)(\s+Pk=.+)?\s*$/is;
       #$_[0] =~ /^(.+?)(\s+Pk=.+)?\s*$/is;
+      #$self->log('dev', 'keycmd', $self->{'key'},$self->{'incoming'});
       $self->cmd( 'Key', $self->{'key'} ) if ( $self->{'incoming'} );
     },
     'Direction' => sub {
@@ -101,6 +103,7 @@ sub init {
       my $self = shift if ref $_[0];
       if ( $self->{'incoming'} ) { }
       else {
+        #$self->log('dev', 'outk',);
         $self->{'sendbuf'} = 1;
         $self->cmd('Supports');
         $self->cmd('Direction');
@@ -162,12 +165,13 @@ sub init {
     },
     'ADCGET' => sub {
       my $self = shift if ref $_[0];
-#$self->log('dev', 'ADCGET', @_);
+      #$self->log('dev', 'ADCGET', @_);
       $self->file_send_parse( map { split /\s/, $_ } @_ );
     },
   };
   #$self->log ( 'dev', "del empty cmd", ),
   $self->{'cmd'} = undef if $self->{'cmd'} and !keys %{ $self->{'cmd'} };
+  #$self->log('PRECMD',Dumper $self->{'cmd'});
   $self->{'cmd'} ||= {
     'connect_aft' => sub {
       my $self = shift if ref $_[0];
@@ -185,7 +189,8 @@ sub init {
     },
     'Lock' => sub {
       my $self = shift if ref $_[0];
-      $self->sendcmd( 'Lock', $self->{'lock'} );
+      #$self->log('dev', 'cmdLOCK', $_[0],$self->{'lock'});
+      $self->sendcmd( 'Lock', $_[0] || $self->{'lock'} );
     },
     'Supports' => sub {
       my $self = shift if ref $_[0];
@@ -197,6 +202,7 @@ sub init {
     },
     'Key' => sub {
       my $self = shift if ref $_[0];
+      #$self->log('dev', 'cmdKEY', $_[0],$self->{'incoming'});
       $self->sendcmd( 'Key', $_[0] );
     },
     'Get' => sub {

@@ -1,4 +1,11 @@
-# $Id: TODO 619 2010-02-09 00:58:32Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/TODO $
+# $Id: TODO 675 2010-12-10 01:50:27Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/TODO $
+
+0.07:
+
+all codepages-> utf8
+
+
+other:
 
 
 better nick-port-ip-lists
@@ -32,7 +39,7 @@ lang:
 founded -> found
 sended -> sent
 
-tigerhash: mmap, speed limit, win32 build, ttfile raw,
+tigerhash: mmap, speed limit, ttfile raw,
 
 filelist.pm: 
  standalone @ARGV -> config parse
@@ -48,7 +55,7 @@ downloader:
   users    
 
 
-add finished file to share hashes and db
+?add finished file to share hashes and db
 
 
 search results via sqlite
@@ -58,5 +65,8 @@ fix wait_clients array
 
 good named incoming clients
 
+adjustable: delete user from hash when quit
+
+?Сейчас метод "get" загружает файл полностью, было бы неплохо реализовать частичную загрузку с указанного места в файле и указанное кол-во байт. Такая возможность нужна для получения информации о видео, аудио файле и т.д. Скачал первые 10 Кб - и все стало ясно))
 
 
