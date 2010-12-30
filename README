@@ -22,11 +22,8 @@ SYNOPSIS
 
 DESCRIPTION
      Currently NOT supported:
-     self filelist making 
      segmented, multisource download;
      async connect;
-
-      BROKEN: in freebsd8 tigerhash compile
 
 INSTALLATION
      To install this module type the following:
@@ -34,7 +31,8 @@ INSTALLATION
        perl Makefile.PL && make install clean
 
 SEE ALSO
-    #pro http://pro.setun.net/dcppp/ http://sourceforge.net/projects/dcppp
+     http://pro.setun.net/dcppp/
+     http://sourceforge.net/projects/dcppp
 
      http://svn.setun.net/dcppp/timeline/browser/trunk
 
@@ -64,7 +62,7 @@ AUTHOR
     Oleg Alexeenkov, <pro@cpan.org>
 
 COPYRIGHT AND LICENSE
-    Copyright (C) 2005-2009 Oleg Alexeenkov
+    Copyright (C) 2005-2010 Oleg Alexeenkov
 
     This library is free software; you can redistribute it and/or modify it
     under the same terms as Perl itself, either Perl version 5.10.0 or, at

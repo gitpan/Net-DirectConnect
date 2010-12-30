@@ -1,4 +1,4 @@
-#$Id: clihub.pm 686 2010-12-16 00:02:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clihub.pm $
+#$Id: clihub.pm 706 2010-12-29 19:07:01Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clihub.pm $
 package    #hide from cpan
   Net::DirectConnect::clihub;
 use strict;
@@ -9,7 +9,7 @@ use Net::DirectConnect;
 use Net::DirectConnect::clicli;
 #use Net::DirectConnect::http;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 686 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 706 $' ) )[1];
 use base 'Net::DirectConnect';
 
 sub name_to_ip($) {
@@ -58,7 +58,8 @@ sub init {
     #@_,
     'incomingclass' => 'Net::DirectConnect::clicli',
     #'periodic'      =>
-    'disconnect_recursive' => 1, charset_protocol => 'cp1251',    #'utf8'
+    'disconnect_recursive' => 1, 
+    #charset_protocol => 'cp1251',    #'utf8'
   );
   !exists $self->{$_} ? $self->{$_} ||= $_{$_} : () for keys %_;
   $self->{'periodic'}{ __FILE__ . __LINE__ } = sub { $self->cmd( 'search_buffer', ) if $self->{'socket'}; };
@@ -600,7 +601,7 @@ sub init {
       unless $self->{'myport_http'};
 =cut
   $self->{'handler_int'}{'disconnect_bef'} = sub {
-    delete $self->{'sid'};
+    #delete $self->{'sid'};
     #$self->log( 'dev', 'disconnect int' ) if $self and $self->{'log'};
   };
 }

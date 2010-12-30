@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: stat.cgi 686 2010-12-16 00:02:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.cgi $
+#$Id: stat.cgi 707 2010-12-30 11:39:14Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.cgi $
 package statcgi;
 use strict;
 use MIME::Base64;
@@ -203,14 +203,15 @@ for my $query ( sort keys %makegraph ) {
   my $yl = 700;
   my $xs = int( $xl / ( scalar keys(%dates) - 1 or 1 ) );
   #my $yn = 10;
-  my $yn = $maxy;
+  my $yn = $maxy || 1;
   my $ys = $yl / $yn;
   for my $date (%date_max) {
     $date_step{$date} = $date_max{$date} ? $yl / $date_max{$date} : 1;
+  psmisc::printlog 'dev', "$date: [$date_step{$date}] yn=$yn; ys=$ys $yl<br\n/>";
   }
   #my $ys = int $yl / $maxy;
   #$ys = 1;
-  #printlog 'dev', "yn=$yn; ys=$ys";
+  #psmisc::printlog 'dev', "yn=$yn; ys=$ys<br\n/>";
   my $svgns = $config{'graph_inner'} ? 'svg:' : '';
   my $img =    #join '',
     (
@@ -236,7 +237,7 @@ for my $query ( sort keys %makegraph ) {
                                                                                                   # join ' ',
     for (
       sort
-      #grep {$graph{$line}{$_}}
+      grep {$graph{$line}{$_}}
       keys %dates
       )
     {
@@ -244,8 +245,8 @@ for my $query ( sort keys %makegraph ) {
       if ( $graph{$line}{$_} ) {                                                                  # ? () : (
         $img .= int( $n * $xs ) . ',' . int(
           $yl -
-            ( $graph{$line}{$_} > $yn ? $yl : ( $graph{$line}{$_} || $yn ) * $ys )
-            #( $graph{$line}{$_} > $yn ? $yl : ( $graph{$line}{$_} || $yn ) * $date_step{$_} )
+            #( $graph{$line}{$_} > $yn ? $yl : ( $graph{$line}{$_} || $yn ) * $ys )
+            ( $graph{$line}{$_} > $yn ? $yl : ( $graph{$line}{$_} || $yn ) * $date_step{$_} )
         ) . ' ';
       }
       $n++;
@@ -285,7 +286,7 @@ print
   '<div>graph per ', psmisc::human( 'time_period', time - $graphtime ), '</div>' if $config{'use_graph'} and %makegraph;
 print
 qq{<div class="version"><a href="http://svn.setun.net/dcppp/trac.cgi/browser/trunk/examples/stat">dcstat</a> from <a href="http://search.cpan.org/dist/Net-DirectConnect/">Net::DirectConnect</a> vr}
-  . ( split( ' ', '$Revision: 686 $' ) )[1]
+  . ( split( ' ', '$Revision: 707 $' ) )[1]
   . qq{</div>};
 print '<script type="text/javascript" src="http://iekill.proisk.ru/iekill.js"></script>';
 print '</body></html>';

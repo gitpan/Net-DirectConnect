@@ -25,8 +25,11 @@ $_{dist} = {
 };
 #$_{PREREQ_PM}{'Net::DirectConnect::TigerHash'} = 0,    #for sharing and adc
 #  $_{NORECURS} = 1, if $^O =~ /win32/i or $^O =~ /mswin/ or $^O =~ /freebsd/i;
-if ( $^O !~ /MSWin32/i ) {    #mingw fail
-  $_{PREREQ_PM}{$_} = 0 for qw(MIME::Base32 Sys::Sendfile);
+if ( $^O !~ /MSWin32/i) {    #mingw fail
+  $_{PREREQ_PM}{$_} = 0 for qw(MIME::Base32);
+}
+if ( $^O !~ /MSWin32|cygwin/i) {    #mingw fail
+  $_{PREREQ_PM}{$_} = 0 for qw(Sys::Sendfile);
 }
 WriteMakefile(%_);
 
@@ -40,6 +43,7 @@ sub MY::postamble {
 
 fullclean: distclean veryclean
 	rm -f \$(DISTNAME)-*.tar.gz *.bak *.old *.core MANIFEST README
+	rm -Rf p5-Net-DirectConnect TigerHash lib/Net/DirectConnect/pslib/*.js lib/Net/DirectConnect/pslib/*.css lib/Net/DirectConnect/pslib/psweb.pm
 
 prerelease:
 

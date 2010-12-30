@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: psmisc.pm 4441 2010-12-16 00:02:27Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+#$Id: psmisc.pm 4443 2010-12-28 23:28:00Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
 
 =copyright
 PRO-search shared library
@@ -34,7 +34,7 @@ use Time::HiRes qw(time);
 use locale;
 use Encode;
 use POSIX qw(strftime);
-our $VERSION = ( split( ' ', '$Revision: 4441 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4443 $' ) )[1];
 our (%config);
 #my ( %config );
 #local *config = *main::config;
@@ -122,6 +122,9 @@ sub config_init {
   conf(
     sub {
 #print "  config_init:sub;";
+
+    $config{'stderr_redirect'} ||= '2>&1';    #'2>/dev/null';
+
 #A                                                              |                                                            YA  E   a                                                              |                                                            ya  e   |-ukr------------------|
       $config{'trans'}{'cp1251'} ||=
 "\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF\xA8\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF0\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\xFD\xFE\xFF\xB8\xB2\xB3\xAF\xBF\xAA\xBA";
@@ -211,7 +214,11 @@ sub config_init {
       $config{'lng'}{'en'}{'wdays'} ||= [qw(Sun Mon Tue Wed Thu Fri Sat)];
       $config{'log_screen'}         ||= 1;
       $config{'log_dir'}            ||= $config{'root_path'};
-      $config{'log_default'} ||= 'log.log' unless $ENV{'SERVER_PORT'};
+      unless ($ENV{'SERVER_PORT'}) {
+        $0 =~ m{([^\\/\s]+)\.\w+$};
+#warn "LD[$0:$1]";
+        $config{'log_default'} ||= ($1 // $0 // 'log') . '.log';
+      }
       #$config{'log_all'}     ||= '#book.log';
       #$config{'log_all'}     ||= '1';
       $config{'encode_url_file_mask'} ||= '[^a-zA-Z0-9\-.()_]';                                  #url = '[^a-zA-Z0-9\-.()_!,]';
@@ -396,19 +403,14 @@ sub decode_url($) {    #v1
   my $savetime = 0;
 
   sub file_append(;$@) {
-    #print( 'append', @_, "\n" );
     local $_ = shift;
-    #print "append to [$_]";
     for ( defined $_ ? $_ : keys %fh ) {
-      #print("")
-      #printlog('dev', 'closing file', $_),
       close( $fh{$_} ), delete( $fh{$_} ) if $fh{$_} and !@_;
     }
     return if !@_;
     unless ( $fh{$_} ) { return unless open $fh{$_}, '>>', $_; return unless $fh{$_}; }
     print { $fh{$_} } @_;
     if ( time() > $savetime + 5 ) {
-      #printlog('dev', 'closing file', $_),
       close( $fh{$_} ), delete( $fh{$_} ) for keys %fh;
       $savetime = time();
     }
@@ -416,7 +418,6 @@ sub decode_url($) {    #v1
   }
 
   END {
-    #printlog('dev', 'closing file', $_),
     close( $fh{$_} ) for keys %fh;
   }
 }
@@ -501,8 +502,7 @@ sub file_read ($) {
   return $ret;
 }
 
-sub openproc($) {
-  my ($proc) = @_;
+sub openproc($) {  my ($proc) = @_;
   printlog( 'dbg', 'run ext:', $proc );
   my $handle;
   return $handle if open( $handle, $proc );
@@ -515,13 +515,13 @@ sub printprog($;$$) {    #v1
   my $ret;
   my $tim = timer();
   printlog( 'dbg', "Starting [$proc]:" );
-  system($proc), return if $nologbody;
-  my $h = openproc("$proc $config{'stderr_redirect'}|") or return $ret = 1;
+  system($proc), return if $nologbody and !$handler;
+  my $h = openproc("$proc $config{'stderr_redirect'}|") or return 1;
   while (<$h>) {
     s/\s*[\x0A\x0D]*$//;
-    next unless $_;
-    printlog( 'dbg', $_ );
-    $ret = 2, last if $handler and $handler->($_);
+    next unless length $_;
+    printlog( 'dbg', $_ ) unless $nologbody;
+    last if ref $handler eq 'CODE' and $ret = $handler->($_);
   }
   close($h);
   printlog( 'dbg', 'prog done per', human( 'time_period', $tim->() ) );
@@ -1368,7 +1368,7 @@ sub http_get {    # REWRITE easier
   return undef;
 }
 
-sub http_get_code {
+sub http_get_code ($;$$) {
   my ( $what, $lwpopt, $method ) = @_;
   #printlog('dev', 'http_get_code',$what, $method);
   my $ret = eval {
@@ -1437,7 +1437,7 @@ sub save_list {
 }
 =cut
 
-sub schedule($$;@) {    #$Id: psmisc.pm 4441 2010-12-16 00:02:27Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+sub schedule($$;@) {    #$Id: psmisc.pm 4443 2010-12-28 23:28:00Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   our %schedule;
   my ( $every, $func ) = ( shift, shift );
   my $p;
@@ -1453,7 +1453,7 @@ sub schedule($$;@) {    #$Id: psmisc.pm 4441 2010-12-16 00:02:27Z pro $ $URL: sv
     and ( !( ref $p->{'cond'} eq 'CODE' ) or $p->{'cond'}->( $p, $schedule{ $p->{'id'} }, @_ ) )
     and ref $schedule{ $p->{'id'} }{'func'} eq 'CODE';
 }
-{    #$Id: psmisc.pm 4441 2010-12-16 00:02:27Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+{    #$Id: psmisc.pm 4443 2010-12-28 23:28:00Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   my (@locks);
   sub lockfile($) {
     return ( $config{'lock_dir'} || './' ) . ( length $_[0] ? $_[0] : 'lock' ) . ( $config{'lock_ext'} || '.lock' );
@@ -1637,7 +1637,7 @@ config_init();
 
 package psconn;
 use strict;
-our $VERSION = ( split( ' ', '$Revision: 4441 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4443 $' ) )[1];
 #use psmisc;
 #sub connection {
 sub new {

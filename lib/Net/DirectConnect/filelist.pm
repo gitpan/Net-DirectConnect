@@ -1,4 +1,4 @@
-#$Id: filelist.pm 686 2010-12-16 00:02:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/filelist.pm $
+#$Id: filelist.pm 691 2010-12-16 21:48:49Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/filelist.pm $
 
 =head1 SYNOPSIS
 
@@ -7,12 +7,13 @@ generate dc++ xml filelist
 perl filelist.pm /path/to/dir
 
 =cut
-package Net::DirectConnect::filelist;
+package # no cpan 
+Net::DirectConnect::filelist;
 use 5.10.0;
 use strict;
 use Encode;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 686 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 691 $' ) )[1];
 
 =tofix
 $0 =~ m|^(.+)[/\\].+?$|;                #v0

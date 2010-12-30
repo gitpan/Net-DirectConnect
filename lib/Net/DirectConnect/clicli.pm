@@ -1,4 +1,4 @@
-#$Id: clicli.pm 686 2010-12-16 00:02:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clicli.pm $
+#$Id: clicli.pm 706 2010-12-29 19:07:01Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clicli.pm $
 package    #hide from cpan
   Net::DirectConnect::clicli;
 use strict;
@@ -6,7 +6,7 @@ use Net::DirectConnect;
 use Data::Dumper;    #dev only
 $Data::Dumper::Sortkeys = 1;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 686 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 706 $' ) )[1];
 use base 'Net::DirectConnect';
 
 sub init {
@@ -39,13 +39,15 @@ sub init {
     #@_,
     'direction' => 'Download',
     #'Direction' => 'Upload', #rand here
-    'incomingclass' => __PACKAGE__, 'reconnects' => 0, inactive_timeout => 60, charset_protocol => 'cp1251',    #'utf8'
+    'incomingclass' => __PACKAGE__, 'reconnects' => 0, inactive_timeout => 60, 
+    #charset_protocol => 'cp1251',    #'utf8'
   );
   #$self->{$_} ||= $_{$_} for keys %_;
   !exists $self->{$_} ? $self->{$_} ||= $_{$_} : () for keys %_;
   $self->{'modules'}{'nmdc'} = 1;
   $self->{'auto_connect'} = 1 if !$self->{'incoming'} and !defined $self->{'auto_connect'};
   #$self->log($self, 'inited1',"MT:$self->{'message_type'}", ' with', Dumper  \@_);
+  #$self->log('dev', 'chPROTOcc:',$self->{'charset_protocol'});
   #$self->baseinit();
   #$self->log($self, 'inited2',"MT:$self->{'message_type'}", ' with', Dumper  \@_);
   $self->get_peer_addr();

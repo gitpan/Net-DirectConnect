@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Net-DirectConnect
-version:            0.07
+version:            0.08
 abstract:           ~
 author:  []
 license:            unknown
@@ -16,7 +16,6 @@ requires:
     lib::abs:             0
     MIME::Base32:         0
     Net::DirectConnect::TigerHash:  0
-    Sys::Sendfile:        0
     Time::HiRes:          0
 no_index:
     directory:

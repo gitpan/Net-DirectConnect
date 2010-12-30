@@ -1,4 +1,4 @@
-#$Id: http.pm 593 2010-01-30 11:11:27Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/http.pm $
+#$Id: http.pm 706 2010-12-29 19:07:01Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/http.pm $
 package    #hide from cpan
   Net::DirectConnect::http;
 use Data::Dumper;    #dev only
@@ -8,7 +8,7 @@ use Net::DirectConnect;
 #use Net::DirectConnect::hubcli;
 use strict;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 593 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 706 $' ) )[1];
 #our @ISA = ('Net::DirectConnect');
 use base 'Net::DirectConnect';
 
@@ -25,6 +25,8 @@ sub init {
     #'myport_random' => 99,
     #'myport_tries'  => 5,
     #'HubName'       => 'Net::DirectConnect test hub',
+      'cmd_bef' => undef,
+      'cmd_aft' => "\n",
     @_
   );
   #$self->baseinit();

@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: pssql.pm 4441 2010-12-16 00:02:27Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/pssql.pm $
+#$Id: pssql.pm 4442 2010-12-27 13:41:10Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/pssql.pm $
 
 =copyright
 PRO-search sql library
@@ -51,9 +51,10 @@ $work
 =cut
 
 #our ( %config);
-package pssql;
+package #no cpan
+pssql;
 use strict;
-our $VERSION = ( split( ' ', '$Revision: 4441 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4442 $' ) )[1];
 use locale;
 use DBI;
 use Data::Dumper;    #dev only
@@ -69,7 +70,7 @@ use psmisc;
 use base 'psconn';
 no warnings qw(uninitialized);
 our $AUTOLOAD;
-#our $VERSION = ( split( ' ', '$Revision: 4441 $' ) )[1];
+#our $VERSION = ( split( ' ', '$Revision: 4442 $' ) )[1];
 my ( $tq, $rq, $vq );
 my ( $roworder, $tableorder, );
 our ( %row, %default );
