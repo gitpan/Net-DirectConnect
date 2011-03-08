@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: pinger.pl 686 2010-12-16 00:02:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/pinger.pl $
+#$Id: pinger.pl 754 2011-03-07 01:07:15Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/pinger.pl $
 
 =head1 NAME
 

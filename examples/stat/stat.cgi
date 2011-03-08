@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: stat.cgi 707 2010-12-30 11:39:14Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.cgi $
+#$Id: stat.cgi 745 2011-02-01 13:06:43Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.cgi $
 package statcgi;
 use strict;
 use MIME::Base64;
@@ -47,7 +47,7 @@ $param->{'period'} ||= $config{'default_period'};
 print '<a href="?">home</a>';
 print ' days ', (
   map {
-        '<a '
+    '<a '
       . ( $param->{'period'} eq $_ ? '' : qq{href="?period=$_"} )
       . qq{ onclick="createCookie('period', '$_');window.location.reload(false);">}
       . psmisc::human( 'time_period', $config{'periods'}{$_} ) . '</a> '
@@ -73,7 +73,7 @@ $config{'human'}{'magnet-dl'} = sub {
     ( $row->{'size'} ? 'xl=' . $row->{'size'} : '' ),
     ( $row->{'filename'} ? 'dn=' . psmisc::encode_url( $row->{'filename'} ) : '' ),
     ( $string ? 'kt=' . psmisc::encode_url($string) : '' ), ( $row->{'hub'} ? 'xs=dchub://' . $row->{'hub'} : '' );
-  return '&nbsp;<a class="magnet-darr" href="magnet:?' . $_ . '">[&dArr;]</a>' if $_;
+  return '&nbsp;<a class="magnet-darr" href="magnet:?' . $_ . '">[&dArr;]</a> <a href="http://dc.proisk.ru/?' . ( $row->{'string'} ? "q=".$row->{'string'}: "tiger=$row->{'tth'}").'">P</a>' if $_;
   return '';
 };
 $config{'human'}{'dchub-dl'} = sub {
@@ -96,10 +96,8 @@ $config{'query_default'}{'LIMIT'} = 100 if scalar @ask == 1;
 my %makegraph;
 my %graphcolors;
 
-for my $query (
-  @ask ? @ask : sort { $config{'queries'}{$a}{'order'} <=> $config{'queries'}{$b}{'order'} }
-  grep { $config{'queries'}{$_}{'main'} } keys %{ $config{'queries'} }
-  )
+for my $query ( @ask ? @ask : sort { $config{'queries'}{$a}{'order'} <=> $config{'queries'}{$b}{'order'} }
+  grep { $config{'queries'}{$_}{'main'} } keys %{ $config{'queries'} } )
 {
   my $q = { %{ $config{'queries'}{$query} || next } };
   next if $q->{'disabled'};
@@ -134,18 +132,17 @@ for my $query (
       my ($v) = map { $row->{'orig'}{$_} } grep { $by eq $_ } @{ $q->{'show'} };
       $makegraph{$query}{$v} = $by;
       $graphcolor = $graphcolors{$v} = $colors[ $n - 1 ];    #if length $query;
-                                                             #my $id = $query;
-                                                             #$id =~ tr/ /_/;
+      #my $id = $query;
+      #$id =~ tr/ /_/;
     }
-    $row->{$_} = (
-      $param->{$_}
+    $row->{$_} =
+      ( $param->{$_}
       ? ''
       : qq{<a class="$_" title="}
         . psmisc::html_chars( $row->{$_} )
         . qq{" href="?$_=}
         . psmisc::encode_url( $row->{$_} )
-        . qq{">$row->{$_}</a>}
-      )
+        . qq{">$row->{$_}</a>} )
       . psmisc::human( 'magnet-dl', $row->{'orig'} )
       for grep { length $row->{$_} and !$q->{ 'no_' . $_ . '_link' } }
       grep { $config{'queries'}{$_} } @{ $q->{'show'} };    #qw(string tth);
@@ -207,7 +204,7 @@ for my $query ( sort keys %makegraph ) {
   my $ys = $yl / $yn;
   for my $date (%date_max) {
     $date_step{$date} = $date_max{$date} ? $yl / $date_max{$date} : 1;
-  psmisc::printlog 'dev', "$date: [$date_step{$date}] yn=$yn; ys=$ys $yl<br\n/>";
+    psmisc::printlog 'dev', "$date: [$date_step{$date}] yn=$yn; ys=$ys $yl<br\n/>";
   }
   #my $ys = int $yl / $maxy;
   #$ys = 1;
@@ -234,13 +231,8 @@ for my $query ( sort keys %makegraph ) {
     my $n;
     #$colors[$color] <!-- $line : -->
     $img .= qq{ <polyline fill="none" stroke="$graphcolors{$line}" stroke-width="3" points="};    #. #( #"mc
-                                                                                                  # join ' ',
-    for (
-      sort
-      grep {$graph{$line}{$_}}
-      keys %dates
-      )
-    {
+    # join ' ',
+    for ( sort grep { $graph{$line}{$_} } keys %dates ) {
       #      map {
       if ( $graph{$line}{$_} ) {                                                                  # ? () : (
         $img .= int( $n * $xs ) . ',' . int(
@@ -286,7 +278,7 @@ print
   '<div>graph per ', psmisc::human( 'time_period', time - $graphtime ), '</div>' if $config{'use_graph'} and %makegraph;
 print
 qq{<div class="version"><a href="http://svn.setun.net/dcppp/trac.cgi/browser/trunk/examples/stat">dcstat</a> from <a href="http://search.cpan.org/dist/Net-DirectConnect/">Net::DirectConnect</a> vr}
-  . ( split( ' ', '$Revision: 707 $' ) )[1]
+  . ( split( ' ', '$Revision: 745 $' ) )[1]
   . qq{</div>};
 print '<script type="text/javascript" src="http://iekill.proisk.ru/iekill.js"></script>';
 print '</body></html>';

@@ -1,9 +1,9 @@
 #!/usr/bin/perl
-#$Id: pssql.pm 4442 2010-12-27 13:41:10Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/pssql.pm $
+#$Id: pssql.pm 4548 2011-03-07 01:32:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/pssql.pm $
 
 =copyright
 PRO-search sql library
-Copyright (C) 2003-2007 Oleg Alexeenkov http://pro.setun.net/search/ proler@gmail.com icq#89088275
+Copyright (C) 2003-2011 Oleg Alexeenkov http://pro.setun.net/search/ proler@gmail.com
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -51,26 +51,32 @@ $work
 =cut
 
 #our ( %config);
-package #no cpan
-pssql;
+package    #no cpan
+  pssql;
 use strict;
-our $VERSION = ( split( ' ', '$Revision: 4442 $' ) )[1];
-use locale;
+use utf8;
+no warnings qw(uninitialized);
+our $VERSION = ( split( ' ', '$Revision: 4548 $' ) )[1];
+#use locale;
 use DBI;
 use Data::Dumper;    #dev only
-$Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = 1;
-our ( %work, %stat, %static, $param, );
+$Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = $Data::Dumper::Terse = 1;
+our ( %work, );      #%stat %static, $param,
 our (%config);
 #local *config = *main::config;
-*pssql::config = *main::config;
+#*pssql::config = *main::config;
+#*pssql::work = *main::work;
+#*pssql::stat = *main::stat;
+*config = *main::config;
+*work   = *main::work;
+*stat   = *main::stat;
 use lib::abs './';
 use psmisc;
 #use psconn;
 #our ( %config, %work, %stat, %static, $param, );
 use base 'psconn';
-no warnings qw(uninitialized);
 our $AUTOLOAD;
-#our $VERSION = ( split( ' ', '$Revision: 4442 $' ) )[1];
+#our $VERSION = ( split( ' ', '$Revision: 4548 $' ) )[1];
 my ( $tq, $rq, $vq );
 my ( $roworder, $tableorder, );
 our ( %row, %default );
@@ -134,12 +140,14 @@ BEGIN {
       'IF EXISTS'           => 'IF EXISTS',
       'REPLACE'             => 'REPLACE',
       'AUTO_INCREMENT'      => 'AUTOINCREMENT',
+      'ANALYZE'                 => 'ANALYZE',
+
       'err_ignore'          => [qw( 1 )],
       'error_type'          => sub {                                 #TODO!!!
         my $self = shift;
         my ( $err, $errstr ) = @_;
-        #printlog('dev',"ERRDETECT($err, $errstr)");
-        return 'install' if $errstr =~ /no such table:/i;
+        #$self->log('dev',"ERRDETECT($err, $errstr)");
+        return 'install' if $errstr =~ /no such table:|unable to open database file/i;
         return 'syntax'  if $errstr =~ /syntax|unrecognized token/i or $errstr =~ /misuse of aggregate/;
         return 'retry'   if $errstr =~ /database is locked/i;
         #return 'connection' if $errstr =~ /connect/i;
@@ -172,7 +180,7 @@ BEGIN {
       'err_ignore'       => [qw( 1 7)],
       'error_type'       => sub {
         my $self = shift, my ( $err, $errstr ) = @_;
-        #printlog('dev',"ERRDETECT($err, [$errstr])");
+        #$self->log('dev',"ERRDETECT($err, [$errstr])");
         return 'install_db' if $errstr =~ /FATAL:\s*database ".*?" does not exist/i;
         return 'fatal'      if $errstr =~ /fatal/i;
         return 'syntax'     if $errstr =~ /syntax/i;
@@ -195,20 +203,23 @@ BEGIN {
       'fulltext_word_glue' => '&',
     },
     'sphinx' => {
-      'dbi'                   => 'mysql',
-      'user'                  => 'root',
-      'port'                  => 9306,
-      'params'                => [qw(host port )],    # perldoc DBD::mysql
-      'sphinx'                => 1,
-      'value quote'           => "'",
-      'no_dbirows'            => 1,
-      no_column_prepend_table => 1,
-      no_join                 => 1,
+      'dbi'                     => 'mysql',
+      'user'                    => 'root',
+      'port'                    => 9306,
+      'params'                  => [qw(host port )],    # perldoc DBD::mysql
+      'sphinx'                  => 1,
+      'value quote'             => "'",
+      'no_dbirows'              => 1,
+      'no_column_prepend_table' => 1,
+      'no_join'                 => 1,
+      'OPTION'			=> 'OPTION',
+      'option'			=> {'max_query_time'=>20000, 'cutoff'=>1000},
     },
     'mysql5' => {
       'dbi'            => 'mysql',
       'user'           => 'root',
       'use_drh'        => 1,
+          'mysql_enable_utf8' => 1,
       'varchar_max'    => 65530,
       'unique_max'     => 1000,
       'primary_max'    => 999,
@@ -223,9 +234,9 @@ BEGIN {
       'err_ignore '    => [qw( 2 1264 )],
       'error_type'     => sub {
         my $self = shift, my ( $err, $errstr ) = @_;
-        #printlog('dev',"MYERRDETECT($err, $errstr)");
+        #$self->log('dev',"MYERRDETECT($err, $errstr)");
         for my $errtype (qw(connection retry syntax fatal repair install install_db)) {
-          #printlog('dev',"ERRDETECTED($err, $errstr) = $errtype"),
+          #$self->log('dev',"ERRDETECTED($err, $errstr) = $errtype"),
           return $errtype if grep { $err eq $_ } @{ $self->{ 'err_' . $errtype } };
         }
         return undef;
@@ -272,7 +283,7 @@ BEGIN {
       'params' => [
         qw(host port database mysql_client_found_rows mysql_compression mysql_connect_timeout mysql_read_default_file mysql_read_default_group mysql_socket
           mysql_ssl mysql_ssl_client_key mysql_ssl_client_cert mysql_ssl_ca_file mysql_ssl_ca_path mysql_ssl_cipher
-          mysql_local_infile mysql_embedded_options mysql_embedded_groups)
+          mysql_local_infile mysql_embedded_options mysql_embedded_groups mysql_enable_utf8)
       ],    # perldoc DBD::mysql
       'insert_by' => 1000, ( !$ENV{'SERVER_PORT'} ? ( 'auto_check' => 1 ) : () ), 'unique name' => 1,    # test it
       'match' => sub {
@@ -382,21 +393,25 @@ sub _check {
 
 sub init {
   my $self = shift;
+  #warn Dumper $self, \@_;
   local %_ = (
-    'log' => sub (@_) {
+    'log' => sub (@) {
       shift;
       psmisc::printlog(@_);
     },
-    'driver'            => 'mysql5',
-    'host'              => ( $^O eq 'cygwin' ? '127.0.0.1' : 'localhost' ),
-    'database'          => 'pssqldef',
-    'connect_tries'     => 100,
-    'error_sleep'       => 3600,
-    'error_tries'       => 1000,
-    'error_chain_tries' => 100,
+    'driver'   => 'mysql5',
+    'host'     => ( $^O eq 'cygwin' ? '127.0.0.1' : 'localhost' ),
+    'database' => 'pssqldef',
+    #'connect_tries'     => 100,
+    'error_sleep'       => ( $ENV{'SERVER_PORT'} ? 1 : 3600 ),
+    'error_tries'       => ( $ENV{'SERVER_PORT'} ? 1 : 1000 ),
+    'error_chain_tries' => ( $ENV{'SERVER_PORT'} ? 1 : 100 ),
+    #($ENV{'SERVER_PORT'} ? ('connect_tries'=>1) : ()),
     #'reconnect_tries' => 10,            #look old
-    'connect_auto'   => 0,
-    'connect_params' => {
+    'connect_tries' => ( $ENV{'SERVER_PORT'} ? 1 : 0 ),
+    'connect_chain_tries' => 0,
+    'connect_auto'        => 0,
+    'connect_params'      => {
       'RaiseError'  => 0,
       'AutoCommit'  => 1,
       'PrintError'  => 0,
@@ -431,13 +446,17 @@ sub init {
     'char_type'          => 'VARCHAR',
     'true'               => 1,
     'fulltext_glue'      => 'OR',
-    'retry_vars'         => [qw(auto_repair connect_tries error_sleep error_tries auto_check)],
+    'retry_vars'         => [qw(auto_repair connect_tries connect_chain_tries error_sleep error_tries auto_check)],
     'err'                => 0,
     'insert_cached_time' => 60,
     'auto_repairs_max'   => 2,
-    @_
+
+    @_,
   );
   @{$self}{ keys %_ } = values %_;
+  #$self->{$_} //= $_{$_} for keys %_;
+  #%_ = @_;
+  #$self->{$_} = $_{$_} for keys %_;
   #$self->log( 'dev', 'initdb',  "$self->{'database'},$self->{'dbname'};");
   $self->{'database'} = $self->{'dbname'} if $self->{'dbname'};
   $self->{'dbname'} ||= $self->{'database'};
@@ -450,7 +469,6 @@ sub init {
 
 sub calc {
   my $self = shift;
-  $self->{'dbi'} ||= $self->{'driver'}, $self->{'dbi'} =~ s/\d+$//i unless $self->{'dbi'};
   $self->{'default'} ||= \%default;
   $self->{'default'}{'pgpp'}{'match'} = sub {
     my $self = shift;
@@ -485,8 +503,8 @@ sub calc {
   $self->{'default'}{'mysql3'}{'table options'} = '';
   $self->{'default'}{'mysql3'}{'USE_FRM'}       = '';
   $self->{'default'}{'mysql3'}{'no_boolean'}    = 1;
-  %{ $self->{'default'}{'sqlite2'} } = %{ $self->{'default'}{'sqlite'} };
-  $self->{'default'}{'sqlite2'}{'IF NOT EXISTS'} = $self->{'default'}{'sqlite2'}{'IF EXISTS'} = '';
+  #%{ $self->{'default'}{'sqlite2'} } = %{ $self->{'default'}{'sqlite'} };
+  #$self->{'default'}{'sqlite2'}{'IF NOT EXISTS'} = $self->{'default'}{'sqlite2'}{'IF EXISTS'} = '';
   $self->{'default'}{'pgpp'}{'fulltext_config'} = 'default' if $self->{'old_fulltext'};
   %{ $self->{'default'}{'pg'} } = %{ $self->{'default'}{'pgpp'} };
   $self->{'default'}{'pg'}{'dbi'}    = 'Pg';
@@ -496,7 +514,13 @@ sub calc {
   $self->{'default'}{'sphinx'}{'match'} = $self->{'default'}{'mysql5'}{'match'};
   $self->{'driver'} ||= 'mysql5';
   $self->{'driver'} = 'mysql5' if $self->{'driver'} eq 'mysql';
-  $self->{$_} = $self->{'default'}{ $self->{'driver'} }{$_} for keys %{ $self->{'default'}{ $self->{'driver'} } };
+  #print "U0:", $self->{user};
+  #print "D0:", $self->{dbi};
+  $self->{$_} //= $self->{'default'}{ $self->{'driver'} }{$_} for keys %{ $self->{'default'}{ $self->{'driver'} } };
+  #print "U1:", $self->{user};
+  #print "D1:", $self->{dbi};
+  #$self->log( 'dev', "calc dbi[$self->{'dbi'} ||= $self->{'driver'}]");
+  $self->{'dbi'} ||= $self->{'driver'}, $self->{'dbi'} =~ s/\d+$//i unless $self->{'dbi'};
   $self->{'codepage'} = psmisc::cp_normalize( $self->{'codepage'} );
   local $_ = $self->{ $self->{'codepage'} } || $self->{'codepage'};
   $self->{'cp'} = $_;
@@ -531,6 +555,7 @@ sub _connect {
       . join( ';', map( { $_ . '=' . $self->{$_} } grep { defined( $self->{$_} ) } @{ $self->{'params'} } ) ),
     $self->{'user'}, $self->{'pass'}, $self->{'connect_params'}
   );
+  #$self->log('dmp', "connect_cached = ",$self->{'connect_cached'}, Dumper(\@_));
   $self->{'dbh'} = ( $self->{'connect_cached'} ? DBI->connect_cached(@_) : DBI->connect(@_) );
   local $_ = $self->err_parse( \'Connection', $DBI::err, $DBI::errstr );
   return $_;
@@ -687,7 +712,9 @@ sub functions {
       push( @hash, $_ );
       next unless $self->{'sth'} and keys %{$_};
       my $tim = psmisc::timer();
-      push( @hash, scalar psmisc::cp_trans_hash( $self->{'codepage'}, $self->{'cp_out'}, $_ ) )
+     #$self->log("Db[",%$_,"]($self->{'codepage'}, $self->{'cp_out'})"),
+      push( @hash, scalar psmisc::cp_trans_hash( $self->{'codepage'}, $self->{'cp_out'}, $_ ) ),
+     #$self->log("Da[",%$_,"]"),
         while ( $_ = $self->{'sth'}->fetchrow_hashref() );
       $self->{'queries_time'} += $tim->();
     }
@@ -829,7 +856,7 @@ tries
         $self->log( 'info', 'pre repair sleeping', $sl );
         $self->sleep($sl);
         if ( $sl == 0 or $self->{'force_repair'} ) {
-          $self->log( 'info', 'denied repair', $repair ), next
+          $self->log( 'info', 'denied repair', $repair ), return $self->err(1)
             if $self->{'auto_repair_selected'}
               and ( !$repair or $self->{'auto_repair_selected'} and $self->{'table_param'}{$repair}{'no_auto_repair'} );
           ++$self->{'auto_repairs'}{$repair};
@@ -880,7 +907,7 @@ tries
     my (%table) = %{ $self->{'table'} or {} };
     my @ret;
     for my $tab ( sort keys %table ) {
-      printlog( 'dev', 'creating table', $tab );
+      $self->log( 'dev', 'creating table', $tab );
       push( @ret, $self->{'create_table'}->( $self, $tab, $table{$tab} ) );
       push( @ret, $self->{'create_index'}->( $self, $tab, $table{$tab} ) ) unless $self->{'index in create table'};
     }
@@ -1002,8 +1029,12 @@ tries
             push @maxs, $max;
           }
           push @maxs, $table->{$row}{'length_max'} if $table->{$row}{'length_max'};
-          #$self->log( 'dev', 'maxs:', @maxs );
           push @maxs, $self->{'varchar_max'} if $table->{$row}{'type'} =~ /^varchar$/i;
+          push @maxs, 1000 / 3
+            if $table->{$row}{'type'} =~ /^varchar$/i
+              and $table->{$row}{'primary'}
+              and $self->{'codepage'} eq 'utf-8';
+          #$self->log( 'dev', 'maxs:', @maxs , Dumper $table->{$row});
           #print "mx:",@maxs;
           $length = psmisc::min( grep { $_ > 0 } @maxs );
           #$table->{$row}{'length'} ||= $length if $table->{$row}{'type'} eq 'varchar';
@@ -1031,7 +1062,7 @@ tries
           $length = int($length);
         }
       }
-      #printlog('dev', "$row NN= $table->{$row}{'not null'}");
+      #$self->log('dev', "$row NN= $table->{$row}{'not null'}");
       push(
         @subq,
         $rq 
@@ -1163,7 +1194,7 @@ tries
     return $self->do(@ret);
   };
   $self->{'create_indexes'} ||= sub {
-    #printlog values  %{ $self->{'table'}};
+    #$self->log values  %{ $self->{'table'}};
     $self->create_index( $_, $self->{'table'}{$_} ) for keys %{ $self->{'table'} };
   };
   #$self->{'do'}{'drop_table'} = 1;
@@ -1238,7 +1269,7 @@ tries
     for my $table ( $table ? ($table) : ( keys %{ $self->{'insert_buffer'} } ) ) {
       $self->{'insert_block'}{$table} = ( $self->{'table_param'}{$table}{'insert_by'} or $self->{'insert_by'} )
         unless defined $self->{'insert_block'}{$table};
-      #printlog('ict', $table,int(time() - $self->{'insert_buffer_time'}{$table}));
+      #$self->log('ict', $table,int(time() - $self->{'insert_buffer_time'}{$table}));
       #$self->{'insert_buffer_time'}{$table}||=time();
       if (
         $self->{'insert_block'}{$table}-- <= 1
@@ -1249,7 +1280,7 @@ tries
       {
         $self->{'insert_buffer_time'}{$table} = time();
         $self->{'current_table'} = $table;
-        #printlog('iciii', $table);
+        #$self->log('iciii', $table);
         $self->do(
           join(
             '',
@@ -1343,8 +1374,8 @@ tries
     return unless %{ $self->{'table'}{$table} or {} };
     $self->{'current_table'} = $table;
     #my ( $tq, $rq, $vq ) = sql_quotes();
-    #printlog('dev','HIRUN', $table, $self->{'handler_insert'} ,
-    #printlog( 'filter', 'f2', $self->{'table_param'}{$table}{'filter'} );
+    #$self->log('dev','HIRUN', $table, $self->{'handler_insert'} ,
+    #$self->log( 'filter', 'f2', $self->{'table_param'}{$table}{'filter'} );
     next
       if ref $self->{'table_param'}{$table}{'filter'} eq 'CODE'
         and $self->{'table_param'}{$table}{'filter'}->( $self, $values );
@@ -1364,7 +1395,8 @@ tries
         grep {
           %{ $self->{'table'}{$table}{$_} || {} }
             and ( $self->{'table'}{$table}{$_}{'primary'} or $self->{'table'}{$table}{$_}{'unique'} )
-            and $self->{'table'}{$table}{$_}{'type'} ne 'serial'    #todo mysql
+            and $self->{'table'}{$table}{$_}{'type'} ne 'serial'
+            and !$self->{'table'}{$table}{$_}{'auto_increment'}    #todo mysql
           } @$by )
     );
     $set ||= join(
@@ -1468,7 +1500,7 @@ tries
       #( $self->{'filter_handler'} ? $self->{'filter_handler'}->($hash) : () ), next
       #if grep { $self->{'table'}{$table}{$_}{'skip_mask'} and $hash->{$_} =~ /$self->{'table'}{ $table }{$_}{'skip_mask'}/i }
       #keys %{ $self->{'table'}{$table} };
-      #printlog('filter', 'f1', $self->{'table_param'}{$table}{'filter'});
+      #$self->log('filter', 'f1', $self->{'table_param'}{$table}{'filter'});
       next
         if ref $self->{'table_param'}{$table}{'filter'} eq 'CODE'
           and $self->{'table_param'}{$table}{'filter'}->( $self, $hash );
@@ -1488,13 +1520,13 @@ tries
       #$processor{'out'}{'array'}->
       #$self->log('dev','ic from here=');
       local $self->{'table'}{$table} = $self->{'table'}{$table};
-      #printlog('dev', $self->{'table'}{$table});
+      #$self->log('dev', $self->{'table'}{$table});
       my $chanded;
-      #printlog('dev', 'set array_insert', $table, $_, ),
+      #$self->log('dev', 'set array_insert', $table, $_, ),
       (
         ++$chanded == 1
         ? (
-          #printlog('dev', 'flush on change', $table, $_),
+          #$self->log('dev', 'flush on change', $table, $_),
           $self->flush_insert($table)
           )
         : ()
@@ -1527,6 +1559,18 @@ tries
     my $table = ( shift or $self->{'current_table'} );    #or $self->{'tfile'}
     for my $hash (@_) { $self->insert_hash( $table, values %$hash ); }
     return undef;
+  };
+  $self->{'q_file'} ||= sub {
+    my $self       = shift;
+    my $table      = shift || $self->{'current_table'};
+    my $search_str = shift;
+    my %tparam;
+    if ( $self->{'table'}{$table}{'name'} and $self->{'table'}{$table}{'ext'} and $search_str =~ /^\s*(\S+)\.+(\S+)\s*$/ ) {
+      %tparam = ( 'name' => $1, 'ext' => $2 );
+    } elsif ( $self->{'table'}{$table}{'tiger'} and $search_str =~ /^\s*([A-Z0-9]{39})\s*$/i ) {
+      %tparam = ( 'tiger' => uc $1 );
+    }
+    return %tparam;
   };
   $self->{'where_body'} ||= sub {
     my $self = shift;
@@ -1582,14 +1626,14 @@ tries
       $days = int( time() ) - $days * 24 * 60 * 60;
       $ask .= '= ' . ( $self->{'sphinx'} ? $days : $self->squotes($days) );
     }
-    #printlog('dev', 'online1', Dumper($param));
+    #$self->log('dev', 'online1', Dumper($param));
     if ( !$self->{'no_online'} and defined( $param->{ 'online' . $param_num } ) ) {
       if ( $param->{ 'online' . $param_num } eq 'on' ) { $param->{ 'online' . $param_num } = $config{'online_minutes'}; }
-      #printlog('dev', 'online2', Dumper($param));
+      #$self->log('dev', 'online2', Dumper($param));
       if ( $param->{ 'online' . $param_num } > 0 ) {
         $param->{ 'live' . $param_num } = int( time() ) + $self->{'timediff'} - int( $param->{ 'online' . $param_num } ) * 60;
         $param->{ 'live_mode' . $param_num } = 'g';
-        #printlog('dev', $param->{ 'live' . $param_num });
+        #$self->log('dev', $param->{ 'live' . $param_num });
       }
     }
     if (
@@ -1668,7 +1712,7 @@ tries
         $llask .= ' NOT ' . ( $group_not ? ( ++$group_not_close, ' ( ' ) : '' ) if $not;
         #$self->log('dev', "not1 $llask");
         if ( $self->{'table_param'}{$table}{'name_to_base'}{$item} ) {
-          #printlog('dev', "here", $self->{'table_param'}{$table}{'name_to_base'}{$item});
+          #$self->log('dev', "here", $self->{'table_param'}{$table}{'name_to_base'}{$item});
           #$llask .= ' ' . $tq . $self->{'table_prefix'} . $self->{'table_param'}{$table}{'name_to_base'}{$item} . $tq . ' ';
           $llask .= ' ' . $self->{'table_param'}{$table}{'name_to_base'}{$item} . ' ';
         } else {
@@ -1676,7 +1720,7 @@ tries
             " " . ( $self->{'no_column_prepend_table'} ? () : "$tq$self->{'table_prefix'}$table$tq." ) . "$rq$item" . "$rq ";
         }
         my ($dequote_);    #, $dequotesl
-        #printlog('dev', !$self->{'no_regex'});
+        #$self->log('dev', !$self->{'no_regex'});
         if ( !$self->{'no_regex'}
           and ( $pi =~ s/^\s*reg?e?x?p?:\s*//ig or $param->{ $item . '_mode' . $param_num } =~ /[r~]/i ) )
         {
@@ -1691,7 +1735,7 @@ tries
           $pi =~ s/_/\\_/g and ++$dequote_;
           $pi =~ tr/*?/%_/;
           next if $self->{'no_empty'} and ( $pi !~ /\S/ or $pi =~ /^\s*[%_]+\s*$/ );
-          #printlog('dev', 'pi_:', $pi);
+          #$self->log('dev', 'pi_:', $pi);
           $llask .= ' LIKE ';
         }
         #} else {
@@ -1708,34 +1752,35 @@ tries
           $pi = ( $pi ne 'EMPTY' ? $self->squotes($pi) : $self->squotes('') );
         }
         $pi =~ s|\\_|\_|g if $dequote_;
-        #printlog('dev', '$pi:', $pi, $dequotesl);
+        #$self->log('dev', '$pi:', $pi, $dequotesl);
         #$pi =~ s|\\{2}|\\|g if $dequotesl;
-        #printlog('dev', '$pi a:', $pi);
+        #$self->log('dev', '$pi a:', $pi);
         $llask .= $pi;
-        #printlog('dev', '$llask:', $llask);
+        #$self->log('dev', '$llask:', $llask);
       } while ( $pib and $num_cond < 50 );
-      #printlog('dev', '1 $llask:', $llask);
+      #$self->log('dev', '1 $llask:', $llask);
       $llask .= " ) " x $group_not_close;
       $group_not_close = 0;
       $lask .= ( $num_cond > 1 ? ' ( ' : '' ) . $llask . ( $num_cond > 1 ? ' ) ' : '' );
-      #printlog('dev', '1 $lask:', $lask);
+      #$self->log('dev', '1 $lask:', $lask);
       $ask .=
         ( ( !$self->{'no_slow'} or $self->{'table'}{$table}{$item}{'fast_not'} )
           and $param->{ $item . '_mode' . $param_num } =~ /[n!]/i ? ' NOT ' : ' ' )
         . $lask;
-      #printlog('dev', '1 $ask:', $ask);
+      #$self->log('dev', '1 $ask:', $ask);
     }
     $work{'search_str'} .= ' ' . $search_str . ' ' . $search_str_add;
+    #$self->log('dev', 'Sstr', $work{'search_str'});
     if ( $search_str =~ /\S/ or $search_str_add ) {
-      unless ( $param->{'page'} > 1 or $param->{'order'} ) {
-        #printlog('dev', '2 $ask:', $search_str);
+      unless ( $param->{'page'} > 1 or $param->{'order'} or $param->{'no_querystat'} ) {
+        #$self->log('dev', '2 $ask:', $search_str);
         #$self->dump_cp();
         ++$work{'query'}{$search_str};
-        map { ++$work{'word'}{$_} } grep $_, split /[\W_]+/, $search_str if $self->{'codepage'} ne 'utf-8';
+        map { ++$work{'word'}{$_} } grep $_, split /[\W_]+/, $search_str;    #if $self->{'codepage'} ne 'utf-8';
       }
-      #printlog('dev', '2 $ask:', $ask);
+      #$self->log('dev', '2 $ask:', $ask, Dumper %work);
       ++$local_cond, $ask .= $gluel if $ask;
-      #printlog('dev', '3 $ask:', $ask, $search_str, $search_str_add);
+      #$self->log('dev', '3 $ask:', $ask, $search_str, $search_str_add);
       $param->{ 'adv_query' . $param_num } = 'on'
         if $search_str =~ /\S+\*+\s*/
           or $search_str =~ /(^|\s+)(([+\-><~]+\()|\")[^"()]*\S+\s+\S+[^"()]*[\"\)]($|\s+)/
@@ -1745,8 +1790,9 @@ tries
           and !( $search_str =~ /((^|\s)\W+\S)|\S\W+(\s|$)/ )
           and $search_str =~ /\s/;
       $ask .= ( $search_str =~ s/^\s*\!\s*// ? ' NOT ' : '' );
-      if ( $search_str =~ /^\s*(\S+)\.+(\S+)\s*$/ and $self->{'table'}{$table}{'name'} and $self->{'table'}{$table}{'ext'} ) {
-        my %tparam = ( 'name' => $1, 'ext' => $2 );
+      if ( my %tparam = $self->q_file( $table, $search_str ) ) {
+        #$search_str =~ /^\s*(\S+)\.+(\S+)\s*$/ and $self->{'table'}{$table}{'name'} and $self->{'table'}{$table}{'ext'} ) {
+        #my %tparam = ( 'name' => $1, 'ext' => $2 );
         $ask .= ' ( ' . $self->where_body( \%tparam, undef, $table ) . ' ) ';
       } elsif ( !$self->{'no_slow'}
         and $search_str =~ /^\s*\*+\S+/
@@ -1758,12 +1804,12 @@ tries
         $ask .= ' ( ' . $self->where_body( \%tparam, undef, $table ) . ' ) ';
       } else {
         #my $search_str = $search_str . $search_str_add;
-        #printlog('ss', $search_str);
+        #$self->log('ss', $search_str);
         $search_str .= $search_str_add;
         $self->{'handler_search_str'}->( $table, \$search_str ) if ref $self->{'handler_search_str'} eq 'CODE';
         my $search_str_stem = $self->stem($search_str)
           if grep { $self->{'table'}{$table}{$_}{'stem'} } keys %{ $self->{'table'}{$table} };
-        #printlog('ss1',$param_num, $search_str);
+        #$self->log('ss1',$param_num, $search_str);
         local $param->{ 'adv_query' . $param_num } = 'on'
           if $self->{'ignore_index'}
             or $self->{'table_param'}{$table}{'ignore_index'};
@@ -1877,14 +1923,14 @@ tries
 #$self->log( 'dmp', 'query:[', @_, '] = ', scalar @hash, ' per', psmisc::human( 'time_period', $tim->() ), 'err=',$self->err() );
       @ask = values %{ $self->query($req)->[0] };
       #@ask = values %{ $self->line($req) };
-      $stat{'found'}{'files'} = pop(@ask) if $param->{'count_f'} eq 'on';
+      $self->{'stat'}{'found'}{'files'} = pop(@ask) if $param->{'count_f'} eq 'on';
       for (
         grep( ( $self->{'table'}{$table}{$_}{'allow_count'} and $param->{ 'count_' . $_ } eq 'on' ),
           sort keys %{ $self->{'table'}{$table} } )
         )
       {
         my $t = pop(@ask);
-        $stat{'found'}{$_} = $t if $t;
+        $self->{'stat'}{'found'}{$_} = $t if $t;
       }
     }
     $self->{'calc_count'}->( $self, $param, $table );
@@ -1901,22 +1947,43 @@ tries
 #$self->log( 'dbg',  'q3',  $self->where($param));
     my $select;
     my $ids = [];
-    if ( $self->{'use_sphinx'} and $self->{'sphinx_dbi'} and length $param->{q} ) {
+    if ( $self->{'use_sphinx'} and $self->{'sphinx_dbi'} and length $param->{q} and !$self->q_file( $table, $param->{q} ) ) {
       ( $tq, $rq, $vq ) = $self->quotes();
       $ids = $self->{'sphinx_dbi'}->select( $table, $param );
-      $select = " WHERE ${rq}id${rq} IN (" . ( join ',', map { $_->{id} } @$ids ) . ')' if @$ids;
+      unless (@$ids) {
+        #local $self->{'sphinx_dbi'}->{'select_append'} = ' OPTION ranker=wordcount ';
+      	++$work{'fulltext_fail'};
+        if ( ( local $param->{'q'} = $param->{'q'} ) =~ s/(\w\s+)(\w)/$1 | $2/g ) {
+          local $param->{'no_querystat'} = 1;
+          $ids = $self->{'sphinx_dbi'}->select( $table, $param );
+          #TODO: info about changed query
+      	  unless (@$ids){
+      	    ++$work{'fulltext_fail_or'};
+          }
+        }
+      }
+      if (@$ids) {
+        $select = " WHERE ${rq}id${rq} IN (" . ( join ',', map { $_->{id} } @$ids ) . ')';
+      } 
     }
     local $self->{'limit_body'} = sub { }
       if @$ids;
     ( $tq, $rq, $vq ) = $self->quotes();
-    $select ||= $self->where( $param, undef, $table );
-    my $ret =
-      $self->query( scalar psmisc::cp_trans( $self->{'cp_in'}, $self->{'codepage'}, $self->select_body( $select, $param ) ) );
-    if (@$ids) {
-      my %byid = map { $_->{id} => $_ } @$ret;
-      for my $s (@$ids) { $byid{ $s->{id} }{$_} //= $s->{$_} for keys %$s; }
-      #printlog 'dev', Dumper $ret;
-    }
+    #unless ($select) {
+    #local $self->{'table'}{$table}{$table}{'ext'}{'nav_field'} = 0;
+    #local $self->{'table'}{$table}{'ext'}{'q_skip'} = 1;
+    
+	    $select ||= $self->where( $param, undef, $table ) if !$self->{'use_sphinx'} or !$self->{'no_sphinx_like'};
+    #}
+    my $ret = [];
+    $ret =
+      $self->query( scalar psmisc::cp_trans( $self->{'cp_in'}, $self->{'codepage'}, $self->select_body( $select, $param ) ) )
+      if $select;
+    #if (@$ids) {
+    #my %byid = map { $_->{id} => $_ } @$ret;
+    #for my $s (@$ids) { $byid{ $s->{id} }{$_} //= $s->{$_} for keys %$s; }
+    #$self->log 'dev', Dumper $ret;
+    #}
     return wantarray ? @$ret : $ret;
   };
   $self->{'select_log'} ||= sub {
@@ -1937,7 +2004,7 @@ tries
         grep { $_ and $self->{'table'}{$jt}{$_} } keys %{ $self->{'table_join'}{$table}{$jt}{'on'} }
           #)
       );
-      #printlog('dev','join', %{$self->{'table_join'}});
+      #$self->log('dev','join', %{$self->{'table_join'}});
       #$self->log('dev', "JOd $table -> $jt,",@_,"::", keys %{ $self->{'table_join'}{$table}{$jt}{'on'} });
       #push @join,  " $tq$self->{'table_prefix'}$table$tq LEFT JOIN " .$tq. $self->{'table_prefix'} . $jt . $tq.
       push @join, "  LEFT JOIN " . $tq . $self->{'table_prefix'} . $jt . $tq . ' ON ' . '(' . join(
@@ -2132,7 +2199,7 @@ tries
     $sql = join( ', ', grep { $_ } @what, ) . ' ' . $sql;
     my $priority;
     $priority = $self->{'HIGH_PRIORITY'} unless $config{'client_bot'};
-    $sql = " SELECT $priority " . $sql;    #SQL_CALC_FOUND_ROWS
+    $sql = " SELECT $self->{'SELECT_FLAGS'} $priority " . $sql;    #SQL_CALC_FOUND_ROWS
     $sql .= $self->groupby( $param, $table );
     $sql .= $self->orderby( $param, $table );
     #$work{'on_page'} = 10 unless defined $work{'on_page'};
@@ -2144,6 +2211,10 @@ tries
     #my $limit = psmisc::check_int( ( $param->{'limit'} or $self->{'limit'} ), 0, $self->{'results_max'}, $self->{'on_page'} );
     #$sql .= ' LIMIT ' . ( $param->{'show_from'} ? $param->{'show_from'} . ',' : '' ) . " $limit"      if $param->{'show_from'}
     $sql .= $self->limit_body();
+    if ($self->{'OPTION'} and psmisc::is_hash $self->{'option'})  { #sphinx
+      $sql .= $self->{'OPTION'} . ' '. join ', ', map {"$_=$self->{'option'}{$_}"} keys %{$self->{'option'}};
+    }
+    $sql .= $self->{'select_append'};
     return $sql;
   };
   $self->{'limit_body'} ||= sub {
@@ -2163,16 +2234,16 @@ tries
     my ( $param, $table, $count ) = @_;
     return if $work{'calc_count'}{$table}++;
     $self->{'founded'} = $count
-      || ( ( $self->{'dbirows'} > $stat{'found'}{'files'} and $self->{'dbirows'} < $self->{'limit'} )
+      || ( ( $self->{'dbirows'} > $self->{'stat'}{'found'}{'files'} and $self->{'dbirows'} < $self->{'limit'} )
       ? $self->{'dbirows'} + $self->{'limit_offset'}
-      : $stat{'found'}{'files'} );
+      : $self->{'stat'}{'found'}{'files'} );
     $self->{'founded'} = 0 if $self->{'founded'} < 0 or !$self->{'founded'};    #or !$self->{'dbirows'} !!!experemental!
     $self->{'page_last'} =
       $self->{'limit'} > 0
       ? ( int( $self->{'founded'} / ( $self->{'limit'} or 1 ) ) + ( $self->{'founded'} % ( $self->{'limit'} or 1 ) ? 1 : 0 ) )
       : 0;                                                                      #3
     $self->{'page'} = int( rand( $self->{'page_last'} ) ) if $self->{'page'} eq 'rnd' and $param->{'count_f'} eq 'on';    #4
-#printlog(      'dev', "calc_count : founded=$self->{'founded'}; page=$self->{'page'} page_last=$self->{'page_last'}  dbirows=$self->{'dbirows'}   stat{'found'}{'files'}=$stat{'found'}{'files'} limit=$self->{'limit'}  ",          );
+#$self->log(      'dev', "calc_count : founded=$self->{'founded'}; page=$self->{'page'} page_last=$self->{'page_last'}  dbirows=$self->{'dbirows'}   stat{'found'}{'files'}=$stat{'found'}{'files'} limit=$self->{'limit'}  ",          );
   };
   $self->{'limit_calc'} ||= sub {
     #sub pre_query {
@@ -2185,7 +2256,7 @@ tries
     #$self->{'limit'} ||= psmisc::check_int( $param->{'on_page'},   0, $self->{'results_max'}, $self->{'on_page'} );
     $self->{'limit_offset'} =
       int( $self->{'page'} > 0 ? $self->{'limit'} * ( $self->{'page'} - 1 ) : ( ( $param->{'show_from'} ) or 0 ) );
-    #printlog( 'dev', "limit_calc : limit_offset=$self->{'limit_offset'}; page=$self->{'page'} limit= $self->{'limit'}" );
+    #$self->log( 'dev', "limit_calc : limit_offset=$self->{'limit_offset'}; page=$self->{'page'} limit= $self->{'limit'}" );
     #;    #caller(), caller(1),  caller(2)
     return undef;
   };
@@ -2224,7 +2295,7 @@ tries
     my $self = shift;
     local @_ = sort grep { $_ } keys %{ $self->{'table'} };
     return 0 unless @_;
-    #printlog('dev',@_);
+    #$self->log('dev',@_);
     return 0;
     return $self->query( 'SELECT * FROM ' . ( join ',', map { "$tq$_$tq" } @_ ) . ' WHERE 1 LIMIT 1' );
   };
@@ -2253,10 +2324,11 @@ tries
   $self->{'next_user_prepare'} ||= sub {
     my $self = shift;
     $self->{'queries'} = $self->{'queries_time'} = $self->{'errors_chain'} = $self->{'errors'} = $self->{'connect_tried'} = 0;
-    delete $stat{$_} for qw (found files found_time onpage results top_founded_max top_pages_max);
+    #delete $stat{$_} for qw (found files found_time onpage results top_founded_max top_pages_max);
+    $self->{stat} = {};
     $self->{ 'on_user' . $_ }->($self) for grep { ref $self->{ 'on_user' . $_ } eq 'CODE' } ( '', 1 .. 5 );
     #$self->{ 'on_user' }->($self) for grep { ref $self->{ 'on_user' } eq 'CODE'}('');
-    #printlog('dev', 'nup');
+    #$self->log('dev', 'nup');
   };
   $self->{'next_user'} ||= sub {
     my $self = shift;
@@ -2284,10 +2356,10 @@ http://linguist.nm.ru/stemka/stemka.html
     if ( $self->{'stem_version'} == 2 ) {    #first
       s/(\d)(\D)/$1 $2/g;
       s/(\D)(\d)/$1 $2/g;
-      tr/À-ß/à-ÿ/;
-      s/[úü]//g;
+      tr/Ğ-Ğ¯/Ğ°-Ñ/;
+      s/[ÑŠÑŒ]//g;
       s/kn/n/g;
-      tr/àáâãäå¸æçèéêëìíîïğñòóôõö÷øùûışÿ/abvgdeejsiiklmnoprstufhccssieua/;
+      tr/Ğ°Ğ±Ğ²Ğ³Ğ´ĞµÑ‘Ğ¶Ğ·Ğ¸Ğ¹ĞºĞ»Ğ¼Ğ½Ğ¾Ğ¿Ñ€ÑÑ‚ÑƒÑ„Ñ…Ñ†Ñ‡ÑˆÑ‰Ñ‹ÑÑÑ/abvgdeejsiiklmnoprstufhccssieua/;
       tr/ekouw/acaav/;
       s/'//g;
       s/\W/ /g if $_[1];
@@ -2303,10 +2375,10 @@ http://linguist.nm.ru/stemka/stemka.html
     } elsif ( $self->{'stem_version'} == 3 ) {    #temporary
       s/(\d)(\D)/$1 $2/g;
       s/(\D)(\d)/$1 $2/g;
-      tr/À-ß/à-ÿ/;
-      s/[úü]//g;
+      tr/Ğ-Ğ¯/Ğ°-Ñ/;
+      s/[ÑŠÑŒ]//g;
       s/kn/n/g;
-      tr/àáâãäå¸æçèéêëìíîïğñòóôõö÷øùûışÿ/abvgdeejsiiklmnoprstufhccssieua/;
+      tr/Ğ°Ğ±Ğ²Ğ³Ğ´ĞµÑ‘Ğ¶Ğ·Ğ¸Ğ¹ĞºĞ»Ğ¼Ğ½Ğ¾Ğ¿Ñ€ÑÑ‚ÑƒÑ„Ñ…Ñ†Ñ‡ÑˆÑ‰Ñ‹ÑÑÑ/abvgdeejsiiklmnoprstufhccssieua/;
       s/ks/x/g;                                   #2
       tr/kw/cv/;                                  #3
       s/'//g;
@@ -2323,10 +2395,10 @@ http://linguist.nm.ru/stemka/stemka.html
     } elsif ( $self->{'stem_version'} == 4 ) {                     #release candidate
       s/(\d)(\D)/$1 $2/g;
       s/(\D)(\d)/$1 $2/g;
-      tr/À-ß/à-ÿ/;
+      tr/Ğ-Ğ¯/Ğ°-Ñ/;
       s/kn/n/g;
-      s/[úü]//g;
-      tr{àáâãäå¸æçèéêëìíîïğñòóôõö÷øùûışÿ}
+      s/[ÑŠÑŒ]//g;
+      tr{Ğ°Ğ±Ğ²Ğ³Ğ´ĞµÑ‘Ğ¶Ğ·Ğ¸Ğ¹ĞºĞ»Ğ¼Ğ½Ğ¾Ğ¿Ñ€ÑÑ‚ÑƒÑ„Ñ…Ñ†Ñ‡ÑˆÑ‰Ñ‹ÑÑÑ}
         {abvgdeejziiklmnoprstufhccssieua};                         #4 z
       s/ks/x/g;                                                    #2
       tr/kw/cv/;                                                   #3

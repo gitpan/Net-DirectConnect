@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-#$Id: demo.pl 674 2010-12-10 01:05:34Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/demo.pl $
+#$Id: demo.pl 754 2011-03-07 01:07:15Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/demo.pl $
 use strict;
 no warnings qw(uninitialized);
 use Data::Dumper;    #dev only
@@ -11,6 +11,7 @@ my $dc = Net::DirectConnect->new(
   'M'            => 'P',               #passive mode
   'sharesize'    => 10_000_000_000,    # 10G
   'auto_connect' => 0,                 # dont connect in ->new
+  'auto_say'     => 1,                 # auto print welcome, chat, pvt
 );
 print 'available commands:',      ( join ', ', sort keys %{ $dc->{'cmd'} } ),   "\n";
 print 'some available handlers:', ( join ', ', sort keys %{ $dc->{'parse'} } ), "\n";

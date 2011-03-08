@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: statlib.pm 690 2010-12-16 21:48:18Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
+#$Id: statlib.pm 745 2011-02-01 13:06:43Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
 package statlib;
 use strict;
 use Time::HiRes qw(time sleep);
@@ -56,10 +56,7 @@ $config{'use_graph'} ||= 1;    #  if grep {$config{'browser_'. $_}} qw(firefox s
 $config{'graph_inner'} ||= 1 if grep { $config{ 'browser_' . $_ } } qw(firefox safari chrome);
 $config{'sql'} ||= {
   #'driver'              => 'mysql',
-  'driver'       => 'sqlite',
-  'dbname'       => 'dcstat',
-  'auto_connect' => 1,
-  'log'          => sub { shift; psmisc::printlog(@_) },
+  'driver' => 'sqlite', 'dbname' => 'dcstat', 'auto_connect' => 1, 'log' => sub { shift; psmisc::printlog(@_) },
   #'cp_in'               => 'cp1251',
   'connect_tries'       => 0,
   'connect_chain_tries' => 0,
@@ -76,7 +73,7 @@ $config{'sql'} ||= {
       'string' => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 255, 'default' => '', 'index' => 1 ),
     },
     'results' => {
-      'time'   => pssql::row( 'time', 'index' => 1,         'purge'  => 1, ),
+      'time'   => pssql::row( 'time', 'index' => 1,         'purge'  => 300, ),
       'string' => pssql::row( undef,  'type'  => 'VARCHAR', 'length' => 255, 'index' => 1, 'default' => '', ),
       'hub'    => pssql::row( undef,  'type'  => 'VARCHAR', 'length' => 64, 'index' => 1, 'default' => '', ),
       'nick'   => pssql::row( undef,  'type'  => 'VARCHAR', 'length' => 32, 'index' => 1, 'default' => '', ),
@@ -300,13 +297,12 @@ $config{'queries'}{'hubs top'} ||= {
   'main'  => 1,
   'class' => 'half',
   'show'  => [qw(time hub users size )],    #time
-                                            #'SELECT'         => 'DISTINCT hub , MAX(size), h2.*', # DISTINCT hub,size,time
-                                            #!'SELECT' => '*, hub as h1'
+  #'SELECT'         => 'DISTINCT hub , MAX(size), h2.*', # DISTINCT hub,size,time
+  #!'SELECT' => '*, hub as h1'
   , #DISTINCT DISTINCT hub,size,time                                                    'FROM'     => 'hubs',  'LEFT JOIN' => 'hubs as h2 USING (hub,size)','GROUP BY' => 'hubs.hub',  'ORDER BY' => 'h2.size DESC',
-    #'WHERE'    => ['time = (SELECT time FROM hubs WHERE hub=h ORDER BY size DESC LIMIT 1)'],
-    #!'WHERE' => ['time = (SELECT time FROM hubs WHERE hub=h1 ORDER BY size DESC LIMIT 1)'],
-  'SELECT' => '*',
-  'WHERE'  => ['time = (SELECT time FROM hubs /*WHERE hub=h1*/ ORDER BY size DESC LIMIT 1)'],
+  #'WHERE'    => ['time = (SELECT time FROM hubs WHERE hub=h ORDER BY size DESC LIMIT 1)'],
+  #!'WHERE' => ['time = (SELECT time FROM hubs WHERE hub=h1 ORDER BY size DESC LIMIT 1)'],
+  'SELECT' => '*', 'WHERE' => ['time = (SELECT time FROM hubs /*WHERE hub=h1*/ ORDER BY size DESC LIMIT 1)'],
   #'GROUP BY' => 'hubs.hub',
   #'ORDER BY' => 'size DESC',
   #'SELECT' => '*',
@@ -421,11 +417,11 @@ sub is_slow {
 sub make_query {
   my ( $q, $query, $period ) = @_;
   my $sql;
-#warn Dumper caller(0);
-#(caller(0))[1] eq 'statcgi'
-#return ;
-  if ( is_slow($query) and (caller(0))[0] eq 'statcgi' and $config{'use_slow'} ) {
-#warn "SLOWweb";
+  #warn Dumper caller(0);
+  #(caller(0))[1] eq 'statcgi'
+  #return ;
+  if ( is_slow($query) and ( caller(0) )[0] eq 'statcgi' and $config{'use_slow'} ) {
+    #warn "SLOWweb";
     $sql =
         "SELECT * FROM ${tq}slow${tq} WHERE name = "
       . $db->quote($query)
@@ -439,8 +435,8 @@ sub make_query {
     #print Dumper @ret if $param->{'debug'};
     return \@ret;
   }
-#warn "SLOWcalc";
-#return;
+  #warn "SLOWcalc";
+  #return;
   $q->{'WHERE'} = join ' AND ', grep { $_ } @{ $q->{'WHERE'}, } if ref $q->{'WHERE'} eq 'ARRAY';
   $q->{'WHERE'} = join ' AND ', grep { $_ } $q->{'WHERE'},
     map { $_ . '=' . $db->quote( $param->{$_} ) } grep { length $param->{$_} } keys %{ $config{'queries'} };    #qw(string tth);

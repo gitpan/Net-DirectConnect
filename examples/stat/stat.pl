@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: stat.pl 707 2010-12-30 11:39:14Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.pl $
+#$Id: stat.pl 755 2011-03-07 01:43:07Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.pl $
 package statpl;
 use strict;
 no warnings qw(uninitialized);
@@ -20,7 +20,7 @@ use statlib;
 #warn Dumper \%config, \%psmisc::config, \%statlib::config, \%statpl::config, \%main::config, \%pssql::config,;
 #warn Dumper \%INC, \@INC;
 $config{'queue_recalc_every'} ||= 60;
-$static{'no_sig_log'} = 1;                #test
+$static{'no_sig_log'} = 1;    #test
 print(
   "usage:
  $0 [--configParam=configValue] [adc|dchub://]host[:port] [more params and hubs]\n
@@ -28,17 +28,15 @@ print(
 "
   ),
   exit
-  if !$ARGV[0];
+  if !$ARGV[0] and !$config{dc}{host};
 my $n = -1;
 my ( $tq, $rq, $vq ) = $db->quotes();
-
 #my @dirs = grep { -d } @ARGV;
 ##printlog('dev', 'started', @ARGV),
 #my $filelist = shift @ARGV if $ARGV[0] ~~ 'filelist';
 #@ARGV = grep { !-d } @ARGV;
 #Net::DirectConnect::filelist->new(  %{ $config{dc} || {} } )->filelist_make(@dirs), exit
 #  if ($filelist and !caller); # or (!@ARGV and !$config{dc}{host});
-
 for my $arg (@ARGV) {
   ++$n;
   #print "ar[$arg]";
@@ -117,7 +115,7 @@ for my $arg (@ARGV) {
       next unless $col;
       my $purge = $config{'sql'}{'table'}{$table}{$col}{'purge'};
       #print "t $table c$col p$purge \n";
-      $purge = $config{'purge'} if $purge and $purge <= 1;
+      $purge *= $config{'purge'} if $purge and $purge <= 10000;
       psmisc::printlog 'info', "purge $table $col $purge =",
         $db->do( "DELETE FROM $tq$table$tq WHERE $col < " . int( time - $purge ) );
     }
@@ -149,6 +147,7 @@ for my $arg (@ARGV) {
         for qw(queries_top_string_ queries_top_tth_ results_top_);
     }
 =cut
+
   } elsif ( $arg eq 'stat' ) {
     $ARGV[$n]             = undef;
     $db->{'auto_repair'}  = 1;
@@ -176,7 +175,7 @@ sub close_all {
 sub flush_all { $db->flush_insert(); }
 
 sub print_info {
-  psmisc::printlog( 'info', "queue len=", scalar @{ $work{'toask'} || [] }, " first hits=", $work{'ask'}{ $work{'toask'}[0] } );
+  psmisc::printlog( 'info', "queue len=", scalar @{ $work{'toask'} || [] }, " first hits=", $work{'ask'}{ $work{'toask'}[0] }, ' asks=', scalar keys %{$work{'ask'}});
   local @_ = grep { $_ and $_->active() } @dc;
   psmisc::printlog 'info', 'active hubs:', map { $_->{'host'} . ':' . $_->{'status'} } @_;
   psmisc::printlog 'info', 'hashes:',      map { $_ . '=' . scalar %{ $work{$_} || {} } } qw(ask asked ask_db);
@@ -201,7 +200,8 @@ local $SIG{__DIE__} = sub {
   #printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
   psmisc::caller_trace(5);
 };
-for ( grep { length $_ } @ARGV ) {
+my @hosts = grep { m{^\w+://} } @ARGV;
+for ( grep { length $_ } @ARGV ? @hosts : psmisc::array( $config{dc}{host} ) ) {
   local @_;
   if ( /^-/ and @_ = split '=', $_ ) {
     $config{config_file} = $_[1], psmisc::config() if $_[0] eq '--config';
@@ -210,8 +210,7 @@ for ( grep { length $_ } @ARGV ) {
     my $hub = $_;
     ++$work{'hubs'}{$hub};
     my $dc = Net::DirectConnect->new(
-      modules            => {'filelist' => 1},
-      'host'      => $hub,
+      modules     => { 'filelist' => 1 },
       'Nick'      => 'dcstat',
       'sharesize' => 40_000_000_000 + int( rand 10_000_000_000 ),
       #'log'		=>	sub {},	# no logging
@@ -230,7 +229,7 @@ for ( grep { length $_ } @ARGV ) {
         #'Search_parse_aft' => sub {
         'Search' => sub {
           my $dc = shift;
-          #printlog 'sch', Dumper @_ if $dc->{adc};
+      #$dc->log('sch', Dumper @_ );#if $dc->{adc};
           my $who    = shift if $dc->{adc};
           my $search = shift if $dc->{nmdc};
           my $s = $_[0] || {};
@@ -263,26 +262,26 @@ for ( grep { length $_ } @ARGV ) {
                   grep { $work{'ask'}{$_} >= $config{'hit_to_ask'} and !exists $work{'asked'}{$_} } keys %{ $work{'ask'} }
                 )
               ];
-              psmisc::printlog( 'warn', "reasking" ), $work{'toask'} = [ (
+              $dc->log( 'warn', "reasking" ), $work{'toask'} = [ (
                   sort { $work{'ask'}{$b} <=> $work{'ask'}{$a} } grep {
-                          $work{'ask'}{$_} >= $config{'hit_to_ask'}
+                    $work{'ask'}{$_} >= $config{'hit_to_ask'}
                       and $work{'asked'}{$_}
                       and $work{'asked'}{$_} + $config{'ask_retry'} < $time
                     } keys %{ $work{'ask'} }
                 )
                 ]
                 unless @{ $work{'toask'} };
-              psmisc::printlog( 'info', "queue len=", scalar @{ $work{'toask'} },
-                " first hits=", $work{'ask'}{ $work{'toask'}[0] } );
+              $dc->log( 'info', "queue len=", scalar @{ $work{'toask'} },
+                " first hits=", $work{'ask'}{ $work{'toask'}[0] } , ' asks=', scalar keys %{$work{'ask'}} );
             }
           );
           psmisc::schedule(
             [ 3600, 3600 ],
             our $hashes_cleaner_ ||= sub {
               my $min = scalar keys %{ $work{'hubs'} || {} };
-              psmisc::printlog 'info', "queue clear min[$min] now", scalar %{ $work{'ask'} || {} };
+              $dc->log('info', "queue clear min[$min] now", scalar %{ $work{'ask'} || {} });
               delete $work{'ask'}{$_} for grep { $work{'ask'}{$_} < $min } keys %{ $work{'ask'} || {} };
-              psmisc::printlog 'info', "queue clear ok now", scalar %{ $work{'ask'} || {} };
+              $dc->log('info', "queue clear ok now", scalar %{ $work{'ask'} || {} });
             }
           );
           psmisc::schedule(
@@ -305,7 +304,7 @@ for ( grep { length $_ } @ARGV ) {
               }
               if ( !$dc->{'search_todo'} ) {
                 $work{'asked'}{$q} = int time;
-                psmisc::printlog( 'info', "search", $q, 'on', $dc->{'host'} );
+                $dc->log( 'info', "search", $q, 'on', $dc->{'host'} );
                 $dc->search($q);
               } else {
                 unshift @{ $work{'toask'} }, $q;
@@ -325,6 +324,7 @@ for ( grep { length $_ } @ARGV ) {
         'chatline' => sub {
           my $dc = shift;
           #psmisc::printlog( 'chatline', @_ );
+          #my $s = join ' ', @_;          $dc->say( 'chatline', $s ) if utf8::valid $s;
           $dc->say( 'chatline', @_ );
           my %s;
           ( $s{nick}, $s{string} ) = $_[0] =~
@@ -333,7 +333,7 @@ for ( grep { length $_ } @ARGV ) {
           if ( $s{nick} and $s{string} ) {
             $db->insert_hash( 'chat', { %s, 'time' => int(time), 'hub' => $dc->{'hub_name'}, } );
           } else {
-            psmisc::printlog( 'err', 'wtf chat', @_ );
+            $dc->say( 'err', 'wtf chat', @_ );
           }
         },
         'welcome' => sub {
@@ -417,11 +417,13 @@ for ( grep { length $_ } @ARGV ) {
             }
           );
 =cut
+
           ++$work{'stat'}{'QUI'};
         },
-        'RES' => sub {
+        'RES' => sub { #TODO
+          my $dc = shift;
           #$db->insert_hash( 'results', \%s );
-          psmisc::printlog 'RES:', Dumper @_;
+          $dc->log('RES:', Dumper @_);
           ++$work{'stat'}{'RES'};
         },
         #'FSCH' => sub {
@@ -438,7 +440,8 @@ for ( grep { length $_ } @ARGV ) {
         },
       },
       %config,
-      %{ $config{dc} || {} }
+      %{ $config{dc} || {} },
+      'host' => $hub,
     );
     #$dc->connect($hub);
     #$dc->{'handler'}{'SCH_parse_aft'} = $dc->{'handler'}{'Search_parse_aft'};
@@ -453,10 +456,13 @@ for ( grep { length $_ } @ARGV ) {
       $dc->destroy();
     };
 =cut	
+
     push @dc, $dc;
     $_->work() for @dc;
   }
 }
+$_->{___work} = \%work for @dc;
+
 while ( my @dca = grep { $_ and $_->active() } @dc ) {
   $_->work() for @dca;
   psmisc::schedule(
@@ -476,7 +482,7 @@ while ( my @dca = grep { $_ and $_->active() } @dc ) {
         $dc->work(1);
         if   ( $dc->{nmdc} ) { $share += $dc->{'NickList'}{$_}{'sharesize'} for @users; }
         else                 { $share += $dc->{'peers_sid'}{$_}{INF}{'SS'}  for @users; }
-        psmisc::printlog 'info', "hubsize $dc->{'hub_name'}: bytes = $share users=", scalar @users;
+        $dc->log( 'info', "hubsize $dc->{'hub_name'}: bytes = $share users=", scalar @users);
         $db->insert_hash( 'hubs', { 'time' => $time, 'hub' => $dc->{'hub_name'}, 'size' => $share, 'users' => scalar @users } )
           if $share;
       }
@@ -490,7 +496,7 @@ while ( my @dca = grep { $_ and $_->active() } @dc ) {
     if $config{'use_slow'};
 #psmisc::schedule( [ 60 * 3, 60 * 60 * 24 ], our $hubrunoptimize_ ||= sub { psmisc::startme('calcr'); } )    if $config{'auto_optimize'};
   psmisc::schedule( [ 900, 86400 ], $config{'purge'} / 10, our $hubrunpurge_ ||= sub { psmisc::startme('purge'); } );
-  #=z
+=z
   psmisc::schedule(
     [ 10, 100 ],
     our $dump_sub__ ||= sub {
@@ -498,7 +504,7 @@ while ( my @dca = grep { $_ and $_->active() } @dc ) {
       psmisc::file_rewrite( 'dump', Dumper @dc );
     }
   ) if $config{'debug'};
-  #=cut
+=cut
 }
 psmisc::printlog 'dev', map { $_->{'host'} . ":" . $_->{'status'} } @dc;
 #psmisc::caller_trace(20);

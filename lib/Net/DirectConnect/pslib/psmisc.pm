@@ -1,9 +1,9 @@
 #!/usr/bin/perl
-#$Id: psmisc.pm 4443 2010-12-28 23:28:00Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+#$Id: psmisc.pm 4548 2011-03-07 01:32:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
 
 =copyright
 PRO-search shared library
-Copyright (C) 2003-2010 Oleg Alexeenkov http://pro.setun.net/search/ proler@gmail.com
+Copyright (C) 2003-2011 Oleg Alexeenkov http://pro.setun.net/search/ proler@gmail.com
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,17 +29,22 @@ package    #not ready for cpan
   psmisc;
 use strict;
 no warnings qw(uninitialized);
+use utf8;
 use Socket;
 use Time::HiRes qw(time);
-use locale;
+#use locale;
 use Encode;
 use POSIX qw(strftime);
-our $VERSION = ( split( ' ', '$Revision: 4443 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4548 $' ) )[1];
 our (%config);
 #my ( %config );
 #local *config = *main::config;
 #local
-*psmisc::config = *main::config;
+#*psmisc::config = *main::config;
+*config = *main::config;
+*stat   = *main::stat;
+*work   = *main::work;
+#*psmisc::program = *main::program;
 use Data::Dumper;    #dev only
 $Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = 1;
 #use vars qw( %config %work %stat %static $param %processor %program %out );    #%human,
@@ -98,11 +103,11 @@ use Exporter 'import';
   http_get_code
   loadlist
   shelldata
-  %work  %stat %static $param
+  %work %static $param
   %program
-  %config
 );
-%EXPORT_TAGS = ( log => [qw(  printlog)], config => [qw(%config)], all => \@EXPORT_OK, );    #%human %out %processor
+#  %config
+%EXPORT_TAGS = ( log => [qw(  printlog)], config => [qw(%config)], all => \@EXPORT_OK, );    #%human %out %processor  %stat
 
 =no
   open_out_file
@@ -111,7 +116,7 @@ use Exporter 'import';
 
 #flush
 #our ( %config, %work, %stat, %static, $param, %program, $root_path,  );    #%human, %out, %processor,
-our ( %work, %stat, %static, $param, %program, $root_path, );                                #%human, %out, %processor,
+our ( %work, %static, $param, %program, $root_path, );                                       #%human, %out, %processor, %stat,
 #my %human;
 #sub conf_once {
 sub config_init {
@@ -121,10 +126,8 @@ sub config_init {
   #caller_trace(10);
   conf(
     sub {
-#print "  config_init:sub;";
-
-    $config{'stderr_redirect'} ||= '2>&1';    #'2>/dev/null';
-
+      #print "  config_init:sub;";
+      $config{'stderr_redirect'} ||= '2>&1';                                                 #'2>/dev/null';
 #A                                                              |                                                            YA  E   a                                                              |                                                            ya  e   |-ukr------------------|
       $config{'trans'}{'cp1251'} ||=
 "\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF\xA8\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF0\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\xFD\xFE\xFF\xB8\xB2\xB3\xAF\xBF\xAA\xBA";
@@ -134,7 +137,7 @@ sub config_init {
 "\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\xA1\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF1\xA6\xF6\xA7\xF7\xA4\xF4";
       $config{'trans'}{'cp866'} ||=
 "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xF0\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF1\xF6\xF7\xF8\xF9\xF4\xF5";
-      $config{'trans'}{'utf-8'} ||= "\xD0\xD1";    #JUST TRICK for autodetect
+      $config{'trans'}{'utf-8'} ||= "\xD0\xD1";                                              #JUST TRICK for autodetect
       #$config{'trans_up'}{$_} = (split//, $config{'trans'}{$_})[0..32] for keys %{$config{'trans'}};
       $config{'trans_up'}{$_}   = substr( $config{'trans'}{$_}, 0,  33 ),
         $config{'trans_lo'}{$_} = substr( $config{'trans'}{$_}, 33, 33 ),
@@ -144,37 +147,37 @@ sub config_init {
 
 =with 50% UPPER case
 #cp detect with cp_learn_symbols=10; from 28691 bytes text
-  $config{'trans_detect'}{'cp1251'}	||= '\xCE\xEE\xC0\xE0\xE5\xC5\xD2\xF2\xE8\xC8';	#  [≠çÓûÖ•‡êïÂ] = [≠çÓûÖ•‡êïÂ];	stat:≠[CE]=658; ç[EE]=658; Ó[C0]=578; û[E0]=578; Ö[E5]=503; •[C5]=503; ‡[D2]=434; ê[F2]=434; ï[E8]=422; Â[C8]=422; 
-  $config{'trans_detect'}{'cp866'}	||= '\xAE\x8E\x80\xA0\xA5\x85\x92\xE2\xA8\x88';	#  [R__Õ_:'Åª_] = [ç≠ÓûÖ•‡êïÂ];	stat:ç[AE]=658; ≠[8E]=658; Ó[80]=578; û[A0]=578; Ö[A5]=503; •[85]=503; ‡[92]=434; ê[E2]=434; ï[A8]=422; Â[88]=422; 
-  $config{'trans_detect'}{'koi8-r'}	||= '\xCF\xEF\xC1\xE1\xC5\xE5\xD4\xF4\xC9\xE9';	#  [Æé†Ä•Ö‚í®à] = [ç≠ûÓÖ•ê‡ïÂ];	stat:ç[CF]=658; ≠[EF]=658; û[C1]=578; Ó[E1]=578; Ö[C5]=503; •[E5]=503; ê[D4]=434; ‡[F4]=434; ï[C9]=422; Â[E9]=422; 
-  $config{'trans_detect'}{'utf-8'}	||= '\xD0\xD1\x9E\xBE\xB0\x90\x95\xB5\xA2\x82';	#  [ØÔ__«_Ç’'] = [ØÔÁ_«Ø„ÇÅ°];	stat:Ø[D0]=10542; Ô[D1]=1934; Á[9E]=658; _[BE]=658; «[B0]=578; Ø[90]=578; „[95]=503; Ç[B5]=503; Å[A2]=434; °[82]=434; 
-#$config{'trans_detect'}{'iso8859-5'}	||= '\xDE\xBE\xD0\xB0\xB5\xD5\xC2\xE2\xB8\xD8';	#  [Á_Ø«Ç„°ÅÀÏ] = [ç≠ûÓ•Ö‡êÂï];	stat:ç[DE]=658; ≠[BE]=658; û[D0]=578; Ó[B0]=578; •[B5]=503; Ö[D5]=503; ‡[C2]=434; ê[E2]=434; Â[B8]=422; ï[D8]=422; 
+  $config{'trans_detect'}{'cp1251'}	||= '\xCE\xEE\xC0\xE0\xE5\xC5\xD2\xF2\xE8\xC8';	#  [¬≠–å–æ—õ‚Ä¶“ê–∞—í‚Ä¢–µ] = [¬≠–å–æ—õ‚Ä¶“ê–∞—í‚Ä¢–µ];	stat:¬≠[CE]=658; –å[EE]=658; –æ[C0]=578; —õ[E0]=578; ‚Ä¶[E5]=503; “ê[C5]=503; –∞[D2]=434; —í[F2]=434; ‚Ä¢[E8]=422; –µ[C8]=422; 
+  $config{'trans_detect'}{'cp866'}	||= '\xAE\x8E\x80\xA0\xA5\x85\x92\xE2\xA8\x88';	#  [R__–ù_:'–É¬ª_] = [–å¬≠–æ—õ‚Ä¶“ê–∞—í‚Ä¢–µ];	stat:–å[AE]=658; ¬≠[8E]=658; –æ[80]=578; —õ[A0]=578; ‚Ä¶[A5]=503; “ê[85]=503; –∞[92]=434; —í[E2]=434; ‚Ä¢[A8]=422; –µ[88]=422; 
+  $config{'trans_detect'}{'koi8-r'}	||= '\xCF\xEF\xC1\xE1\xC5\xE5\xD4\xF4\xC9\xE9';	#  [¬Æ–ã¬†–Ç“ê‚Ä¶–≤‚Äô–Å‚Ç¨] = [–å¬≠—õ–æ‚Ä¶“ê—í–∞‚Ä¢–µ];	stat:–å[CF]=658; ¬≠[EF]=658; —õ[C1]=578; –æ[E1]=578; ‚Ä¶[C5]=503; “ê[E5]=503; —í[D4]=434; –∞[F4]=434; ‚Ä¢[C9]=422; –µ[E9]=422; 
+  $config{'trans_detect'}{'utf-8'}	||= '\xD0\xD1\x9E\xBE\xB0\x90\x95\xB5\xA2\x82';	#  [–á–ø__–ó_‚Äö–•'] = [–á–ø–∑_–ó–á–≥‚Äö–É–é];	stat:–á[D0]=10542; –ø[D1]=1934; –∑[9E]=658; _[BE]=658; –ó[B0]=578; –á[90]=578; –≥[95]=503; ‚Äö[B5]=503; –É[A2]=434; –é[82]=434; 
+#$config{'trans_detect'}{'iso8859-5'}	||= '\xDE\xBE\xD0\xB0\xB5\xD5\xC2\xE2\xB8\xD8';	#  [–∑_–á–ó‚Äö–≥–é–É–õ–º] = [–å¬≠—õ–æ“ê‚Ä¶–∞—í–µ‚Ä¢];	stat:–å[DE]=658; ¬≠[BE]=658; —õ[D0]=578; –æ[B0]=578; “ê[B5]=503; ‚Ä¶[D5]=503; –∞[C2]=434; —í[E2]=434; –µ[B8]=422; ‚Ä¢[D8]=422; 
 =cut
 
 =was
 #cp detect with cp_learn_symbols=20; from 14344 bytes text
       $config{'trans_detect'}{'cp1251'} ||= '\xEE\xE0\xE5\xF2\xE8\xED\xF1\xF0\xE2\xEA\xEB\xEF\xE4\xFC\xEC\xE7\xF3\xE1\xFB\xF7'
-        ; #  [çûÖêïåüèÅâäéÑùãÉëÄòÇ] = [çûÖêïåüèÅâäéÑùãÉëÄòÇ];	stat:ç[EE]=649; û[E0]=573; Ö[E5]=489; ê[F2]=425; ï[E8]=416; å[ED]=410; ü[F1]=379; è[F0]=296; Å[E2]=269; â[EA]=256; ä[EB]=221; é[EF]=194; Ñ[E4]=174; ù[FC]=156; ã[EC]=153; É[E7]=152; ë[F3]=141; Ä[E1]=109; ò[FB]=108; Ç[F7]=100;
+        ; #  [–å—õ‚Ä¶—í‚Ä¢–ä—ü–è–É‚Ä∞–â–ã‚Äû—ú‚Äπ—ì‚Äò–Ç¬ò‚Äö] = [–å—õ‚Ä¶—í‚Ä¢–ä—ü–è–É‚Ä∞–â–ã‚Äû—ú‚Äπ—ì‚Äò–Ç¬ò‚Äö];	stat:–å[EE]=649; —õ[E0]=573; ‚Ä¶[E5]=489; —í[F2]=425; ‚Ä¢[E8]=416; –ä[ED]=410; —ü[F1]=379; –è[F0]=296; –É[E2]=269; ‚Ä∞[EA]=256; –â[EB]=221; –ã[EF]=194; ‚Äû[E4]=174; —ú[FC]=156; ‚Äπ[EC]=153; —ì[E7]=152; ‚Äò[F3]=141; –Ç[E1]=109; ¬ò[FB]=108; ‚Äö[F7]=100;
       $config{'trans_detect'}{'cp866'} ||= '\xAE\xA0\xA5\xE2\xA8\xAD\xE1\xE0\xA2\xAA\xAB\xAF\xA4\xEC\xAC\xA7\xE3\xA1\xEB\xE7'
-        ; #  [RÕ_Åª-Äû’”<∆÷ãæ∑ñ∫äÉ] = [çûÖêïåüèÅâäéÑùãÉëÄòÇ];	stat:ç[AE]=649; û[A0]=573; Ö[A5]=489; ê[E2]=425; ï[A8]=416; å[AD]=410; ü[E1]=379; è[E0]=296; Å[A2]=269; â[AA]=256; ä[AB]=221; é[AF]=194; Ñ[A4]=174; ù[EC]=156; ã[AC]=153; É[A7]=152; ë[E3]=141; Ä[A1]=109; ò[EB]=108; Ç[E7]=100;
+        ; #  [R–ù_–É¬ª-–Ç—õ–•–£<–ñ–¶‚Äπ—ï¬∑‚Äì—î–â—ì] = [–å—õ‚Ä¶—í‚Ä¢–ä—ü–è–É‚Ä∞–â–ã‚Äû—ú‚Äπ—ì‚Äò–Ç¬ò‚Äö];	stat:–å[AE]=649; —õ[A0]=573; ‚Ä¶[A5]=489; —í[E2]=425; ‚Ä¢[A8]=416; –ä[AD]=410; —ü[E1]=379; –è[E0]=296; –É[A2]=269; ‚Ä∞[AA]=256; –â[AB]=221; –ã[AF]=194; ‚Äû[A4]=174; —ú[EC]=156; ‚Äπ[AC]=153; —ì[A7]=152; ‚Äò[E3]=141; –Ç[A1]=109; ¬ò[EB]=108; ‚Äö[E7]=100;
       $config{'trans_detect'}{'koi8-r'} ||= '\xCF\xC1\xC5\xD4\xC9\xCE\xD3\xD2\xD7\xCB\xCC\xD0\xC4\xD8\xCD\xDA\xD5\xC2\xD9\xDE'
-        ; #  [Æ†•‚®≠·‡¢™´Ø§Ï¨ß„°ÎÁ] = [çûÖêïåüèÅâäéÑùãÉëÄòÇ];	stat:ç[CF]=649; û[C1]=573; Ö[C5]=489; ê[D4]=425; ï[C9]=416; å[CE]=410; ü[D3]=379; è[D2]=296; Å[D7]=269; â[CB]=256; ä[CC]=221; é[D0]=194; Ñ[C4]=174; ù[D8]=156; ã[CD]=153; É[DA]=152; ë[D5]=141; Ä[C2]=109; ò[D9]=108; Ç[DE]=100;
+        ; #  [¬Æ¬†“ê–≤–Å¬≠–±–∞—û–Ñ¬´–á¬§–º¬¨¬ß–≥–é–ª–∑] = [–å—õ‚Ä¶—í‚Ä¢–ä—ü–è–É‚Ä∞–â–ã‚Äû—ú‚Äπ—ì‚Äò–Ç¬ò‚Äö];	stat:–å[CF]=649; —õ[C1]=573; ‚Ä¶[C5]=489; —í[D4]=425; ‚Ä¢[C9]=416; –ä[CE]=410; —ü[D3]=379; –è[D2]=296; –É[D7]=269; ‚Ä∞[CB]=256; –â[CC]=221; –ã[D0]=194; ‚Äû[C4]=174; —ú[D8]=156; ‚Äπ[CD]=153; —ì[DA]=152; ‚Äò[D5]=141; –Ç[C2]=109; ¬ò[D9]=108; ‚Äö[DE]=100;
       $config{'trans_detect'}{'utf-8'} ||= '\xD0\xD1\xBE\xB0\xB5\x82\xB8\xBD\x81\x80\xB2\xBA\xBB\xBF\xB4\x8C\xBC\xB7\x83\xB1'
-        ; #  [ØÔ_«Ç'À____–>¸___“_+] = [ØÔ_«Ç°À_†Ó_–>¸_´_“Ê+];	stat:Ø[D0]=4352; Ô[D1]=1894; _[BE]=649; «[B0]=573; Ç[B5]=489; °[82]=425; À[B8]=416; _[BD]=410; †[81]=379; Ó[80]=296; _[B2]=269; –[BA]=256; >[BB]=221; ¸[BF]=194; _[B4]=174; ´[8C]=156; _[BC]=153; “[B7]=152; Ê[83]=141; +[B1]=109;
+        ; #  [–á–ø_–ó‚Äö'–õ____–†>—å___–¢_+] = [–á–ø_–ó‚Äö–é–õ_¬†–æ_–†>—å_¬´_–¢–∂+];	stat:–á[D0]=4352; –ø[D1]=1894; _[BE]=649; –ó[B0]=573; ‚Äö[B5]=489; –é[82]=425; –õ[B8]=416; _[BD]=410; ¬†[81]=379; –æ[80]=296; _[B2]=269; –†[BA]=256; >[BB]=221; —å[BF]=194; _[B4]=174; ¬´[8C]=156; _[BC]=153; –¢[B7]=152; –∂[83]=141; +[B1]=109;
 =cut
 
       #cp detect with cp_learn_symbols=20; from 145699 bytes text
       $config{'trans_detect'}{'cp1251'} = '\xEE\xE0\xE5\xE8\xED\xF2\xF1\xF0\xEB\xE2\xEA\xF3\xEF\xEC\xE4\xFF\xFB\xFC\xE7\xE3'
-        ; #  [Ó‡ÂËÌÚÒÎ‚ÍÛÔÏ‰ˇ˚¸Á„] = [Ó‡ÂËÌÚÒÎ‚ÍÛÔÏ‰ˇ˚¸Á„];	stat:Ó[EE]=12122; ‡[E0]=10566; Â[E5]=9827; Ë[E8]=8929; Ì[ED]=7504; Ú[F2]=6931; Ò[F1]=6839; [F0]=6744; Î[EB]=6225; ‚[E2]=5384; Í[EA]=4505; Û[F3]=3912; Ô[EF]=3864; Ï[EC]=3811; ‰[E4]=3497; ˇ[FF]=3047; ˚[FB]=2693; ¸[FC]=2628; Á[E7]=2192; „[E3]=1934;
+        ; #  [–æ–∞–µ–∏–Ω—Ç—Å—Ä–ª–≤–∫—É–ø–º–¥—è—ã—å–∑–≥] = [–æ–∞–µ–∏–Ω—Ç—Å—Ä–ª–≤–∫—É–ø–º–¥—è—ã—å–∑–≥];	stat:–æ[EE]=12122; –∞[E0]=10566; –µ[E5]=9827; –∏[E8]=8929; –Ω[ED]=7504; —Ç[F2]=6931; —Å[F1]=6839; —Ä[F0]=6744; –ª[EB]=6225; –≤[E2]=5384; –∫[EA]=4505; —É[F3]=3912; –ø[EF]=3864; –º[EC]=3811; –¥[E4]=3497; —è[FF]=3047; —ã[FB]=2693; —å[FC]=2628; –∑[E7]=2192; –≥[E3]=1934;
       $config{'trans_detect'}{'utf-8'} = '\xD0\xD1\xBE\xB0\xB5\xB8\xBD\x82\x81\x80\xBB\xB2\xBA\x83\xBF\xBC\xB4\x8F\x8B\x8C'
-        ; #  [–—?∞˜∏?'??>I∫?ø???<?] = [–—?∞˜∏?¬¡¿>I∫√ø??œÀÃ];	stat:–[D0]=88304; —[D1]=39900; ?[BE]=12122; ∞[B0]=10566; ˜[B5]=9827; ∏[B8]=8929; ?[BD]=7504; ¬[82]=6931; ¡[81]=6845; ¿[80]=6744; >[BB]=6225; I[B2]=5384; ∫[BA]=4505; √[83]=3912; ø[BF]=3864; ?[BC]=3811; ?[B4]=3497; œ[8F]=3047; À[8B]=2693; Ã[8C]=2628;
+        ; #  [–†–°?¬∞—á—ë?'??>I—î?—ó???<?] = [–†–°?¬∞—á—ë?–í–ë–ê>I—î–ì—ó??–ü–õ–ú];	stat:–†[D0]=88304; –°[D1]=39900; ?[BE]=12122; ¬∞[B0]=10566; —á[B5]=9827; —ë[B8]=8929; ?[BD]=7504; –í[82]=6931; –ë[81]=6845; –ê[80]=6744; >[BB]=6225; I[B2]=5384; —î[BA]=4505; –ì[83]=3912; —ó[BF]=3864; ?[BC]=3811; ?[B4]=3497; –ü[8F]=3047; –õ[8B]=2693; –ú[8C]=2628;
       $config{'trans_detect'}{'cp866'} = '\xAE\xA0\xA5\xA8\xAD\xE2\xE1\xE0\xAB\xA2\xAA\xE3\xAF\xAC\xA4\xEF\xEB\xEC\xA7\xA3'
-        ; #  [R†?®-‚·‡<¢™„Ø¨§ÔÎÏß?] = [Ó‡ÂËÌÚÒÎ‚ÍÛÔÏ‰ˇ˚¸Á„];	stat:Ó[AE]=12122; ‡[A0]=10566; Â[A5]=9827; Ë[A8]=8929; Ì[AD]=7504; Ú[E2]=6931; Ò[E1]=6839; [E0]=6744; Î[AB]=6225; ‚[A2]=5384; Í[AA]=4505; Û[E3]=3912; Ô[AF]=3864; Ï[AC]=3811; ‰[A4]=3497; ˇ[EF]=3047; ˚[EB]=2693; ¸[EC]=2628; Á[A7]=2192; „[A3]=1934;
+        ; #  [R¬†?–Å-–≤–±–∞<—û–Ñ–≥–á¬¨¬§–ø–ª–º¬ß?] = [–æ–∞–µ–∏–Ω—Ç—Å—Ä–ª–≤–∫—É–ø–º–¥—è—ã—å–∑–≥];	stat:–æ[AE]=12122; –∞[A0]=10566; –µ[A5]=9827; –∏[A8]=8929; –Ω[AD]=7504; —Ç[E2]=6931; —Å[E1]=6839; —Ä[E0]=6744; –ª[AB]=6225; –≤[A2]=5384; –∫[AA]=4505; —É[E3]=3912; –ø[AF]=3864; –º[AC]=3811; –¥[A4]=3497; —è[EF]=3047; —ã[EB]=2693; —å[EC]=2628; –∑[A7]=2192; –≥[A3]=1934;
       $config{'trans_detect'}{'koi8-r'} = '\xCF\xC1\xC5\xC9\xCE\xD4\xD3\xD2\xCC\xD7\xCB\xD5\xD0\xCD\xC4\xD1\xD9\xD8\xDA\xC7'
-        ; #  [œ¡≈…Œ‘”“Ã◊À’–Õƒ—Ÿÿ⁄«] = [Ó‡ÂËÌÚÒÎ‚ÍÛÔÏ‰ˇ˚¸Á„];	stat:Ó[CF]=12122; ‡[C1]=10566; Â[C5]=9827; Ë[C9]=8929; Ì[CE]=7504; Ú[D4]=6931; Ò[D3]=6839; [D2]=6744; Î[CC]=6225; ‚[D7]=5384; Í[CB]=4505; Û[D5]=3912; Ô[D0]=3864; Ï[CD]=3811; ‰[C4]=3497; ˇ[D1]=3047; ˚[D9]=2693; ¸[D8]=2628; Á[DA]=2192; „[C7]=1934;
-#$config{'trans_detect'}{'iso8859-5'}	= '\xDE\xD0\xD5\xD8\xDD\xE2\xE1\xE0\xDB\xD2\xDA\xE3\xDF\xDC\xD4\xEF\xEB\xEC\xD7\xD3';	#  [ﬁ–’ÿ›‚·‡€“⁄„ﬂ‹‘ÔÎÏ◊”] = [Ó‡ÂËÌÚÒÎ‚ÍÛÔÏ‰ˇ˚¸Á„];	stat:Ó[DE]=12122; ‡[D0]=10566; Â[D5]=9827; Ë[D8]=8929; Ì[DD]=7504; Ú[E2]=6931; Ò[E1]=6839; [E0]=6744; Î[DB]=6225; ‚[D2]=5384; Í[DA]=4505; Û[E3]=3912; Ô[DF]=3864; Ï[DC]=3811; ‰[D4]=3497; ˇ[EF]=3047; ˚[EB]=2693; ¸[EC]=2628; Á[D7]=2192; „[D3]=1934;
-#$config{'trans_detect'}{'iso8859-5'}	||= '\xDE\xD0\xD5\xE2\xD8\xDD\xE1\xE0\xD2\xDA\xDB\xDF\xD4\xEC\xDC\xD7\xE3\xD1\xEB\xE7';	#  [ÁØ„ÅÏÈÄû‡ßËÍ‚ãÌ¢ñÔäÉ] = [çûÖêïåüèÅâäéÑùãÉëÄòÇ];	stat:ç[DE]=649; û[D0]=573; Ö[D5]=489; ê[E2]=425; ï[D8]=416; å[DD]=410; ü[E1]=379; è[E0]=296; Å[D2]=269; â[DA]=256; ä[DB]=221; é[DF]=194; Ñ[D4]=174; ù[EC]=156; ã[DC]=153; É[D7]=152; ë[E3]=141; Ä[D1]=109; ò[EB]=108; Ç[E7]=100;
-#$config{'trans_detect'}{'cp1251'}	||= "\xE0\xC0\xEE\xCE"; #ûÓ ç≠
+        ; #  [–ü–ë–ï–ô–û–§–£–¢–ú–ß–õ–•–†–ù–î–°–©–®–™–ó] = [–æ–∞–µ–∏–Ω—Ç—Å—Ä–ª–≤–∫—É–ø–º–¥—è—ã—å–∑–≥];	stat:–æ[CF]=12122; –∞[C1]=10566; –µ[C5]=9827; –∏[C9]=8929; –Ω[CE]=7504; —Ç[D4]=6931; —Å[D3]=6839; —Ä[D2]=6744; –ª[CC]=6225; –≤[D7]=5384; –∫[CB]=4505; —É[D5]=3912; –ø[D0]=3864; –º[CD]=3811; –¥[C4]=3497; —è[D1]=3047; —ã[D9]=2693; —å[D8]=2628; –∑[DA]=2192; –≥[C7]=1934;
+#$config{'trans_detect'}{'iso8859-5'}	= '\xDE\xD0\xD5\xD8\xDD\xE2\xE1\xE0\xDB\xD2\xDA\xE3\xDF\xDC\xD4\xEF\xEB\xEC\xD7\xD3';	#  [–Æ–†–•–®–≠–≤–±–∞–´–¢–™–≥–Ø–¨–§–ø–ª–º–ß–£] = [–æ–∞–µ–∏–Ω—Ç—Å—Ä–ª–≤–∫—É–ø–º–¥—è—ã—å–∑–≥];	stat:–æ[DE]=12122; –∞[D0]=10566; –µ[D5]=9827; –∏[D8]=8929; –Ω[DD]=7504; —Ç[E2]=6931; —Å[E1]=6839; —Ä[E0]=6744; –ª[DB]=6225; –≤[D2]=5384; –∫[DA]=4505; —É[E3]=3912; –ø[DF]=3864; –º[DC]=3811; –¥[D4]=3497; —è[EF]=3047; —ã[EB]=2693; —å[EC]=2628; –∑[D7]=2192; –≥[D3]=1934;
+#$config{'trans_detect'}{'iso8859-5'}	||= '\xDE\xD0\xD5\xE2\xD8\xDD\xE1\xE0\xD2\xDA\xDB\xDF\xD4\xEC\xDC\xD7\xE3\xD1\xEB\xE7';	#  [–∑–á–≥–É–º–π–Ç—õ–∞¬ß–∏–∫–≤‚Äπ–Ω—û‚Äì–ø–â—ì] = [–å—õ‚Ä¶—í‚Ä¢–ä—ü–è–É‚Ä∞–â–ã‚Äû—ú‚Äπ—ì‚Äò–Ç¬ò‚Äö];	stat:–å[DE]=649; —õ[D0]=573; ‚Ä¶[D5]=489; —í[E2]=425; ‚Ä¢[D8]=416; –ä[DD]=410; —ü[E1]=379; –è[E0]=296; –É[D2]=269; ‚Ä∞[DA]=256; –â[DB]=221; –ã[DF]=194; ‚Äû[D4]=174; —ú[EC]=156; ‚Äπ[DC]=153; —ì[D7]=152; ‚Äò[E3]=141; –Ç[D1]=109; ¬ò[EB]=108; ‚Äö[E7]=100;
+#$config{'trans_detect'}{'cp1251'}	||= "\xE0\xC0\xEE\xCE"; #—õ–æ –å¬≠
 #$config{'trans_detect'}{'cp866'}	||= "\xA0\x80\xAE\x8E";
 #$config{'trans_detect'}{'koi8-r'}	||= "\xC1\xE1\xCF\xEF";
 ## $config{'trans_detect'}{'iso8859-5'}	||= "\xD0\xB0\xDE\xBE";
@@ -207,22 +210,23 @@ sub config_init {
       $config{'cp_detect_length'}    ||= 10000;
       $config{'kilo'}                ||= 8;                                                      # 5000k 6000k 7000k >8<m 9m 10m
       $config{'lng'}{'en'}{'months'} ||= [qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec)];
-      $config{'lng'}{'ru'}{'months'} ||= [qw(ﬂÌ‚ ‘Â‚ Ã‡ ¿Ô Ã‡È »˛Ì »˛Î ¿‚„ —ÂÌ ŒÍÚ ÕÓˇ ƒÂÍ)];
+      $config{'lng'}{'ru'}{'months'} ||=
+        [qw(–Ø–Ω–≤ –§–µ–≤ –ú–∞—Ä –ê–ø—Ä –ú–∞–π –ò—é–Ω –ò—é–ª –ê–≤–≥ –°–µ–Ω –û–∫—Ç –ù–æ—è –î–µ–∫)];
       @{ $config{'lng'}{$_}{'month_table'} }{ @{ $config{'lng'}{$_}{'months'} || [] } } = ( 0 .. 11 )
         for keys %{ $config{'lng'} };
       #@{ $config{'lng'}{''}{'month_table'} }{ @{ $config{'lng'}{''}{'months'} } } = ( 0 .. 11 )  ;
       $config{'lng'}{'en'}{'wdays'} ||= [qw(Sun Mon Tue Wed Thu Fri Sat)];
       $config{'log_screen'}         ||= 1;
       $config{'log_dir'}            ||= $config{'root_path'};
-      unless ($ENV{'SERVER_PORT'}) {
+      unless ( $ENV{'SERVER_PORT'} ) {
         $0 =~ m{([^\\/\s]+)\.\w+$};
-#warn "LD[$0:$1]";
-        $config{'log_default'} ||= ($1 // $0 // 'log') . '.log';
+        #warn "LD[$0:$1]";
+        $config{'log_default'} ||= ( $1 // $0 // 'log' ) . '.log';
       }
       #$config{'log_all'}     ||= '#book.log';
       #$config{'log_all'}     ||= '1';
-      $config{'encode_url_file_mask'} ||= '[^a-zA-Z0-9\-.()_]';                                  #url = '[^a-zA-Z0-9\-.()_!,]';
-      $config{'human'}{'date'} ||= sub {                                                         #v1
+      $config{'encode_url_file_mask'} ||= '[^a-zA-Z0-9\-.()_]';    #url = '[^a-zA-Z0-9\-.()_!,]';
+      $config{'human'}{'date'} ||= sub {                           #v1
         #my ( $day_of_month, $month, $year ) = ( localtime( ( $_[0] or time() ) ) )[ 3 .. 5 ];
         #return sprintf( '%04d' . ( ( ( $_[1] or '/' ) . '%02d' ) x 2 ), $year + 1900, $month + 1, $day_of_month );
         my $d = $_[1] || '/';
@@ -341,13 +345,21 @@ sub get_params(;$$) {      #v7
   wantarray ? %_ : \%_;
 }
 
+sub is_array ($) { UNIVERSAL::isa($_[0], 'ARRAY') }
+sub is_array_size ($) { is_array($_[0]) and @{$_[0]} }
+sub is_hash ($) { UNIVERSAL::isa($_[0], 'HASH') }
+sub is_hash_size ($) { is_hash($_[0]) and %{$_[0]} }
+sub is_code ($) { UNIVERSAL::isa($_[0], 'CODE') }
+sub code_run ($;@) { my $f = shift; return $f->(@_) if is_code $f }
+
+
 sub array (@) {
-  local @_ = map { ref $_ eq 'ARRAY' ? @$_ : $_ } @_;
+  local @_ = map { is_array $_ ? @$_ : $_ } @_;
   wantarray ? @_ : \@_;
 }
 
 sub array_any (@) {
-  local @_ = map { ref $_ eq 'ARRAY' ? @$_ : ref $_ eq 'HASH' ? sort keys %$_ : ref $_ eq 'CODE' ? $_->() : $_ } @_;
+  local @_ = map { is_array $_ ? @$_ : is_hash $_ ? sort keys %$_ : is_code $_  ? $_->() : $_ } @_;
   wantarray ? @_ : \@_;
 }
 
@@ -355,6 +367,10 @@ sub in ($@) {
   my $v = shift;
   grep { $v eq $_ } &array_any;
 }
+
+sub hash_merge ($$) {
+  $_[0]{$_} = $_[1]{$_} for keys %{$_[1]};
+} 
 
 =todo
 ------------jCZJhSDkEEg0Avf4h2hejC
@@ -376,6 +392,7 @@ sub encode_url($;$) {    #v5
   my ( $str, $mask ) = @_;
   return $str if defined $mask and !$mask;
   $mask ||= '[^a-zA-Z0-9\-.()_!,]';
+  utf8::encode $str;
   #return join( '+', map { s/$mask/'%'.sprintf('%02X', ord($&))/ge; $_ } split( /\x20/, $str ) );
   return join '+', map { s/($mask)/sprintf'%%%02X',ord $1/ge; $_ } split /\x20/, $str;
 }
@@ -387,15 +404,24 @@ sub encode_url_link($;$) {
   return $str if $str =~ /^(magnet|file):/i;
   #fixed?
   return $str if $config{'client_ie'};
+  #printlog(Dumper $str);
+ # eval {utf8::downgrade($str, 'FAIL_OK')# if utf8::is_utf8($str);
+#};
+  #utf8::encode($str);
+  #utf8::downgrade($str, 'FAIL_OK') if utf8::is_utf8($str);
+  utf8::is_utf8($str) ? utf8::encode($str) : utf8::downgrade($str, 'FAIL_OK');
+
   local %_ = split_url($str);
   $mask ||= '[^a-zA-Z0-9\-.()_\:@\/!,=]';
-  $_{$_} =~ s/$mask/'%'.sprintf('%2X', ord($&))/ge for keys %_;
+  #utf8::encode($_{$_}),
+  #utf8::downgrade($_{$_}, 'FAIL_OK'),
+  $_{$_} =~ s/$mask/sprintf'%%%2X',ord$&/ge for keys %_;
   return join_url( \%_ );
 }
 
 sub decode_url($) {    #v1
   my ($str) = @_;
-  $str =~ s/%([a-fA-F0-9]{2})/pack('C', hex($1))/eg;
+  $str =~ s/%([a-fA-F0-9]{2})/pack'C',hex$1/eg;
   return $str;
 }
 {
@@ -404,9 +430,7 @@ sub decode_url($) {    #v1
 
   sub file_append(;$@) {
     local $_ = shift;
-    for ( defined $_ ? $_ : keys %fh ) {
-      close( $fh{$_} ), delete( $fh{$_} ) if $fh{$_} and !@_;
-    }
+    for ( defined $_ ? $_ : keys %fh ) { close( $fh{$_} ), delete( $fh{$_} ) if $fh{$_} and !@_; }
     return if !@_;
     unless ( $fh{$_} ) { return unless open $fh{$_}, '>>', $_; return unless $fh{$_}; }
     print { $fh{$_} } @_;
@@ -416,10 +440,7 @@ sub decode_url($) {    #v1
     }
     return @_;
   }
-
-  END {
-    close( $fh{$_} ) for keys %fh;
-  }
+  END { close( $fh{$_} ) for keys %fh; }
 }
 
 sub file_rewrite(;$@) {
@@ -451,72 +472,77 @@ sub printlog (@) {          #v5
     $file = $config{'log_default'}, next if $file eq '1';
     last;
   }
-  $file = undef if $file eq '1';
   my $html = !$file and ( $ENV{'SERVER_PORT'} or $config{'view'} eq 'html' or $config{'view'} =~ /http/i );
+  $file = undef if $file eq '1';
   my $xml = $config{'view'} eq 'xml';
   my $delim = $config{'log_delim'} || ' ';
-  my @string = (
-    ( $xml  ? '<debug><![CDATA['    : () ),
-    ( $html ? '<div class="debug">' : () ),
-    (
-      ( ( $html || $xml ) and !$file ) ? ()
-      : (
-        $config{'log_datetime'} eq '0' ? () : human( 'date_time', ),
-        ( $config{'log_micro'} ? human('micro_time') : () ),
-        ( $config{'log_pid'}   ? (" [$$]")           : () ),
-      )
+  my $string = join '', ( $xml ? '<debug><![CDATA[' : () ), ( $html ? '<div class="debug">' : () ), (
+    ( ( $html || $xml ) and !$file ) ? ()
+    : (
+      $config{'log_datetime'} eq '0' ? () : human( 'date_time', ),
+      ( $config{'log_micro'} ? human('micro_time') : () ),
+      ( $config{'log_pid'}   ? (" [$$]")           : () ),
+    )
     ), (
-      $config{'log_caller'}
-      ? (
-        ' [', join( ',', grep { $_ and !/^ps/ } ( map { ( caller($_) )[ 2 .. 3 ] } ( 0 .. $config{'log_caller'} - 1 ) ) ), ']'
-        )
-      : ()
+    $config{'log_caller'}
+    ? (
+      ' [', join( ',', grep { $_ and !/^ps/ } ( map { ( caller($_) )[ 2 .. 3 ] } ( 0 .. $config{'log_caller'} - 1 ) ) ), ']'
+      )
+    : ()
     ),
-    $delim,
-    join( $delim, @_ ),
-    (),
-    ( $html ? '</div>'      : () ),
-    ( $xml  ? ']]></debug>' : () ),
-    ("\n")
-  );
+    $delim, join( $delim, @_ ),
+    #(),
+    ( $html ? '</div>' : () ), ( $xml ? ']]></debug>' : () ), ("\n");
 #print "[devlog][fac:$_[0]=".$config{ 'log_' . $_[0]}."][file=$file][log_screen=$config{'log_screen'} log_default=$config{'log_default'} noscreen=$noscreen html=$html xml=$xml]\n" ;
-  file_append( $config{'log_dir'} . $file, @string );
-  file_append() if !$config{'log_cache'};
+  file_append( $config{'log_dir'} . $file, $string );
+  file_append() if !$config{'log_cache'};    #flush buffer
   #if ( @_ and $file and open( LOG, '>>', $config{'log_dir'}.$file ) ) {
   #print LOG@string;
   #close(LOG);
   #}
-  print @string if @_ and $config{'log_screen'} and !$noscreen;
+  #local $_ = join '', @string;
+  #print @string if @_ and $config{'log_screen'} and !$noscreen and ;
+  print $string if @_ and $config{'log_screen'} and !$noscreen and ( !utf8::is_utf8($string) or utf8::valid($string) );
+  #print "not valid string\n"if utf8::is_utf8($string) and  !utf8::valid($string);
   #state(@_);
   flush() if $config{'log_flush'};
   return @_;
 }
 
-sub file_read ($) {
+sub file_read_ref ($) {
   open my $f, '<', $_[0] or return;
-  #print "slurp[$_[0]]";
   local $/ = undef;
   my $ret = <$f>;
   close $f;
-  #print "=[$ret]";
+  return \$ret;
+}
+
+sub file_read ($) { #dont use, del
+  open my $f, '<', $_[0] or return;
+  local $/ = undef;
+  my $ret = <$f>;
+  close $f;
   return $ret;
 }
 
-sub openproc($) {  my ($proc) = @_;
-  printlog( 'dbg', 'run ext:', $proc );
+sub openproc($;$) {    #my ($proc) = @_;
+  printlog( 'dbg', 'run ext:', @_ );
   my $handle;
-  return $handle if open( $handle, $proc );
-  return 0;
+  #printlog('openok', $handle),
+  return $handle if $_[1] ? open( $handle, $_[0], $_[1] ) : open( $handle, $_[0] );
+  #return $handle if open( $handle, ((), @_));
+  #printlog('openfail');
+  return;
 }
 
 sub printprog($;$$) {    #v1
-  my ( $proc, $nologbody, $handler ) = @_;
+  my ( $proc, $nologbody, $handler, $layer ) = @_;
   return unless $proc;
   my $ret;
   my $tim = timer();
   printlog( 'dbg', "Starting [$proc]:" );
   system($proc), return if $nologbody and !$handler;
-  my $h = openproc("$proc $config{'stderr_redirect'}|") or return 1;
+  my $h = openproc( '-|' . $layer, "$proc $config{'stderr_redirect'}" ) or return 1;
   while (<$h>) {
     s/\s*[\x0A\x0D]*$//;
     next unless length $_;
@@ -767,19 +793,40 @@ sub full_host($;$) {
 }
 sub cp_normalize($) { return $config{'trans_name'}{ lc $_[0] } || lc $_[0]; }
 
+sub encode_safe ($$){
+  my ( $cto, $string ) = @_;
+  $cto = cp_normalize($cto);
+  return $string if !$cto or $cto eq 'utf-8';
+
+   #return 
+     #utf8::downgrade($string),
+     #Encode::_utf8_off($string);
+   #printlog('ensafeB',$cto, Dumper $string,  utf8::is_utf8 $string);
+   #local $_ = Encode::encode $cto, Encode::decode  'utf-8',  $string;
+   local $_ = Encode::encode $cto,   $string;
+         # Encode::_utf8_off($_);
+
+     #utf8::downgrade($_),
+     #utf8::decode($_),
+   #printlog('ensafeA',$cto, Dumper  $_, utf8::is_utf8 $_);
+   return $_;
+}
+
 sub cp_trans($$$) {    #v1
   my ( $cfrom, $cto, $string ) = @_;
   $cfrom = cp_normalize($cfrom);
   $cto   = cp_normalize($cto);
   #printlog('dev', 'cp_trans:', $cfrom, $cto, $string);
   return $string if $cto eq $cfrom or !length($string) or !$cfrom or !$cto;
-  #print('dev', 'cp_trans:', join ':',$cfrom, $cto, $string);
+  print('dev', 'cp_trans:', join ':',$cfrom, $cto, $string) if $config{debug};
   #local $_ = "$cfrom -> $cto";
   #caller_trace();
   #return scalar cp_trans_count(@_); # unless $config{'fast_cp_trans'};
   #use Encode;
   #$string = encode($cto, decode($cfrom, $string));
-  return Encode::encode( $cto, Encode::decode( $cfrom, $string ) );
+  #return eval {Encode::encode $cto, Encode::decode $cfrom, $string} or $string;
+  Encode::from_to $string, $cfrom, $cto;
+  return $string;
 }
 
 sub cp_trans_count($$$) {    #v1
@@ -820,16 +867,16 @@ sub utf_trans($$) {
   $cnt += $string =~ s/\xD0\x87/\xF8/g;
   $cnt += $string =~ s/\xD1\x97/\xF9/g;     # ukr end
   $cnt += $string =~ s/\xE2\x80\x94/-/g;    # -
-  $cnt += $string =~ s/\xC2\xAB/"/g;        # ´
-  $cnt += $string =~ s/\xC2\xBB/"/g;        # ª
+  $cnt += $string =~ s/\xC2\xAB/"/g;        # ¬´
+  $cnt += $string =~ s/\xC2\xBB/"/g;        # ¬ª
   $cnt += $string =~ s/\xD1\x98/j/g;        #
-  $cnt += $string =~ s/\xD0\xB9/\xA9/g;     # È
-  #$cnt += $string =~ s/\xD0\xA9/\xC9/g;                           # Ÿ
+  $cnt += $string =~ s/\xD0\xB9/\xA9/g;     # –π
+  #$cnt += $string =~ s/\xD0\xA9/\xC9/g;                           # –©
   $cnt += $string =~ s/\xD0([\x90-\xBF])/chr(ord($1)-16)/eg;
   $cnt += $string =~ s/\xD1([\x80-\x8F])/chr(ord($1)+96)/eg;
   ( $string, $cnt2 ) = cp_trans_count( 'cp866', $cto, $string );
   $cnt += $cnt2;
-  $cnt += $string =~ s/\x21\x16/\xB9/g;     # È
+  $cnt += $string =~ s/\x21\x16/\xB9/g;     # –π
   return wantarray ? ( $string, $cnt ) : $string;
 }
 
@@ -839,7 +886,7 @@ sub to_utf_trans($$) {
   $cfrom = cp_normalize($cfrom);
   return if $cfrom eq 'utf-8';
   my $cnt;
-  #$cnt += $string =~ s/\xE9/\xD0\xB9/g;                           # È
+  #$cnt += $string =~ s/\xE9/\xD0\xB9/g;                           # –π
   $cnt += $string =~ s/\xAB/"/g;            # <
   $cnt += $string =~ s/\xBB/"/g;            # <
   #print "\ndos0[$string]\n";
@@ -857,11 +904,11 @@ sub to_utf_trans($$) {
   $cnt += $string =~ s/\xF8/\xD0\x87/g;
   $cnt += $string =~ s/\xF9/\xD1\x97/g;     # ukr end
   #=c
-  $cnt += $string =~ s/(?<!\xD0)\xB9/\x21\x16/g;    # π
-  $cnt += $string =~ s/(?<!\xD0)\xA9/\xD0\xB9/g;    # È
-  $cnt += $string =~ s/(?<!\xD0)\x89/\xD0\x99/g;    # …
-  $cnt += $string =~ s/(?<!\xD0)\xE9/\xD1\x89/g;    # ˘
-  $cnt += $string =~ s/(?<!\xD0)\x99/\xD0\xA9/g;    # Ÿ
+  $cnt += $string =~ s/(?<!\xD0)\xB9/\x21\x16/g;    # ‚Ññ
+  $cnt += $string =~ s/(?<!\xD0)\xA9/\xD0\xB9/g;    # –π
+  $cnt += $string =~ s/(?<!\xD0)\x89/\xD0\x99/g;    # –ô
+  $cnt += $string =~ s/(?<!\xD0)\xE9/\xD1\x89/g;    # —â
+  $cnt += $string =~ s/(?<!\xD0)\x99/\xD0\xA9/g;    # –©
   #=cut
   #$cnt += $string =~ s/\xAB/"/g;                           # <
   #$cnt += $string =~ s/\xBB/"/g;                           # >
@@ -894,31 +941,57 @@ sub detectcp($) {
   for my $cp ( keys %{ $config{'trans_detect'} } ) {
     ( length($$string) > $config{'cp_detect_length'} ? substr( $$string, 0, $config{'cp_detect_length'} ) : $$string ) =~
       s/([$config{'trans_detect'}{$cp}])/++$cpstat{$cp},$1/eg;
+    #printlog('testcp:', $cp, $cpstat{$cp});
     #$$string
   }
   $detectedcp = max_hash_el( \%cpstat, $config{'cp_detect_letters'} );
   return wantarray ? ( $detectedcp, \%cpstat ) : $detectedcp;
 }
 
-sub cp_detect_trans($$$;$$$) {
+sub cp_detect_trans(\$;$$$$$) {
   my ( $string, $data, $cp_to, $cp_default, $prot, $host ) = @_;
+  $data ||={};
+  $cp_to = cp_normalize( $cp_to || hconfig( 'cp_db', $host ) ) || 'utf-8';
+
+=bat
+  if (use_try('Encode::Detect')) {
+    eval {$$string = decode("Detect", $$string);
+    return;
+    };
+  } elsif (use_try('Encode::Guess')) {
+    my $decoder; eval {$decoder = Encode::Guess::guess_encoding($$string, Encode->encodings(":all"));};
+printlog(Dumper $decoder);  
+    if ($decoder) {
+    $$string = $decoder->decode($$string);
+    return;
+    }
+  }
+=cut   
+  return 'utf-8' if $cp_to eq 'utf-8' and utf8::decode($$string);
   $cp_default = cp_normalize( $cp_default || hconfig( 'cp_res', $host, $prot ) );
-  $cp_to = cp_normalize( $cp_to || hconfig( 'cp_db', $host ) );
   my $cnt;
   if ( !hconfig( 'no_cp_detect', $host ) and ( ++$data->{'tries'} < 20 or !$data->{'cp'} ) ) {
-    $data->{'stat'}{ detectcp($string) }++;
+    ++$data->{'stat'}{ detectcp($string) };
     $data->{'cp'} = max_hash_el( $data->{'stat'}, hconfig( 'cp_detect_strings', $host ) );
-#printlog( 'dbg', 'charset detected:', $data->{'cp'}, '   dbg: ', %{ $data->{'stat'} }, Dumper($data), Dumper(detectcp($string)),
-#' [', $$string, ']'
-#)      if $data->{'cp'} and $data->{'cp'} ne $cp_default;
+#printlog( 'dbg', 'charset detected:', $data->{'cp'}, '   dbg: ', %{ $data->{'stat'} }, Dumper($data), Dumper(detectcp($string)),' [', $$string, ']', "def:$cp_default",);#      if $data->{'cp'} and $data->{'cp'} ne $cp_default;
   }
-  if ( $data->{'cp'} and $data->{'cp'} ne $cp_to ) {
-    ( $$string, $cnt ) = cp_trans_count( $data->{'cp'}, $cp_to, $$string );
-    return $cnt ? $data->{'cp'} : undef;
+  #printlog( 'dbg', "encto: from=$data->{'cp'} to=$cp_to, def=$cp_default");
+  if ( $data->{'cp'} #and ($data->{'cp'} ne $cp_to 
+  #or $data->{'cp'} eq 'utf-8')
+  ) {
+    #( $$string, $cnt ) = cp_trans_count( $data->{'cp'}, $cp_to, $$string );
+    return $data->{'cp'} if $data->{'cp'} eq $cp_to;
+    $$string = Encode::decode $data->{'cp'}, $$string;
+    #return $cnt ? $data->{'cp'} : undef;
+    #printlog( 'dbg', "charset decoded [$data->{'cp'}]:", $$string);
+    return $data->{'cp'};
   }
   if ( $cp_default and $cp_default ne $cp_to ) {
-    ( $$string, $cnt ) = cp_trans_count( $cp_default, $cp_to, $$string );
-    return $cnt ? $cp_default : undef;
+    #( $$string, $cnt ) = cp_trans_count( $cp_default, $cp_to, $$string );
+    #return $cnt ? $cp_default : undef;
+    $$string = Encode::decode $cp_default, $$string;
+    #printlog( 'dbg', "charset decoded def [$cp_default]:", $$string);
+    return $cp_default;
   }
   return undef;
 }
@@ -937,20 +1010,37 @@ sub cp_lo($;$) {    #v1
   return $string;
 }
 
+sub unref ($;@){
+  local $_ = shift;
+  return unless length $_;
+  $_ = $$_ while ref $_ eq 'REF';
+  return $_->(@_) if ref $_ eq 'CODE';
+  #local
+  @_ = () if ref $_[0];
+  return join $,, ( $$_, @_ ) if ref $_ eq 'SCALAR';
+  return join $,, $_, @_;
+}
+
+
 sub lang($;$$$) {
   my ( $key, $lang ) = shift, shift;
   #print "CP[$config{'cp_config'},$work{'codepage'}]" if $key eq 'search';
-  return
-    #"[".(%config)."]".
-    shift() .       # "CP[$config{'cp_config'},$work{'codepage'}]".
-    cp_trans(
-    ( $config{'cp_config'} || $config{'cp_perl'} ),
-    $work{'codepage'}, (
+local $_ = (
         defined $config{'lng'}{ $lang ||= ( $work{'lang'} || $config{'lang'} ) }{$key} ? $config{'lng'}{$lang}{$key}
       : defined $config{'lng'}{''}{$key} ? $config{'lng'}{''}{$key}
       : $key
-    )
-    ) . shift;
+    );
+    #return unref $_ if ref $_;
+
+  return
+    #"[".(%config)."]".
+    shift() .       # "CP[$config{'cp_config'},$work{'codepage'}]".
+    unref($_) .
+    #cp_trans(
+    #( $config{'cp_config'} || $config{'cp_perl'} ),
+    #$work{'codepage'}, 
+    #) . 
+    shift();
 }
 
 sub min (@) {
@@ -986,7 +1076,7 @@ sub alarmed {
 sub mkdir_rec(;$$) {
   local $_ = shift // $_;
   $_ .= '/' unless m{/$};
-  while (m,/,g) { @_ ? mkdir $`, $_[0] : mkdir $` if length $` }
+  while (m{/}g) { @_ ? mkdir $`, $_[0] : mkdir $` if length $` }
 }
 
 sub check_int($;$$$) {
@@ -1043,7 +1133,7 @@ sub lib_init() {
   $SIG{__WARN__} = sub {
     printlog( 'warn', $!, $@, @_ );
     #printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
-    caller_trace(15);
+    #caller_trace(15);
     }, $SIG{__DIE__} = sub {
     printlog( 'die', $!, $@, @_ );
     #printlog( 'die', 'caller', $_, caller($_) || last ) for ( 0 .. 15 );
@@ -1147,7 +1237,7 @@ sub config_read {
   local $_;                                                     #= do ;
   #use lib::abs;
   for my $file ( uniq @files ) {
-    last if $static{'config_read'}{ $ENV{'SCRIPT_FILENAME'} . $file }++ and !$_[0];
+    ++$_, last if $static{'config_read'}{ $ENV{'SCRIPT_FILENAME'} . $file }++ and !$_[0];
     #warn "reading [$file]", -s $file, ;# lib::abs::path($file);
     #print( ' do1:',$_,',', $!, ' eval=', $@, "\n" ) if !$_ or $! or $@;
     #MAKE ARRAY
@@ -1158,7 +1248,7 @@ sub config_read {
   }
   if ( !$_ and !$_[1] ) {
     print "Content-type: text/html\n\n" if defined( $ENV{'SERVER_PORT'} );
-    print map "$_;\n", @errs;
+    print "config read errors: [@files]: ",, map "$_;\n", @errs;
   }
   #print"rp set1 to [$root_path]\n";
   conf(
@@ -1195,7 +1285,7 @@ sub pre_calc {
 }
 
 sub config_reload {
-  #print "config_reload(clear=$_[0];; $config{'root_path'})";
+  #warn "config_reload(clear=$_[0];; $config{'root_path'})";
   #print "config_reload(clear!=$_[0])\n";
   my $files = shift if ref $_[0] eq 'ARRAY';
   %config = () if $_[0];
@@ -1228,50 +1318,25 @@ sub reload_lib {
     warn $@ if $@;
   }
 }
+our %conf;
 
 sub conf(;$$) {
+  #warn 'conf from ', caller, Dumper \@_ ;
   my ( $sub, $order ) = ( shift, shift );
   #if ( !$ENV{'MOD_PERL'} ) {    $sub->(@_) if $sub;    return;  }
   my $id = $ENV{'SCRIPT_FILENAME'} || $work{'$0'} || $0;
   #print join ' ',('dev',"conf($sub, $order, [$root_path] id=$id)", caller,"<br\n/>");
   unless ($sub) {
-#print("running", scalar keys %{ $static{'conf_init'}{ $ENV{'PROSEARCH_PATH'} } }, "now=",scalar keys %config, "\n");
-#print("RUNCONF[$id]($_/",scalar keys %{ $static{'conf_init'}{$id } },"] from(",join('|',@{$static{'conf_init_from'}{$id}{$_}}), ";", "<br\n/>"),
-    $static{'conf_init'}{
-      #$ENV{'PROSEARCH_PATH'}
-      #$ENV{'SCRIPT_FILENAME'}
-      $id
-      }{$_}->() for sort { $a <=> $b } keys %{
-      $static{'conf_init'}{
-        #$ENV{'PROSEARCH_PATH'}
-        #$ENV{'SCRIPT_FILENAME'}
-        $id
-        }
-      };
-    #print("confrunned",  "now=",scalar keys %config, "\n");
+#print("running", scalar keys %{ $conf{'conf_init'}{ $ENV{'PROSEARCH_PATH'} } }, "now=",scalar keys %config, "\n");
+#warn("RUNCONF[$id]($_/",scalar keys %{ $conf{'conf_init'}{$id } },"] from(",join('|',@{$conf{'conf_init_from'}{$id}{$_}}), ";", "<br\n/>"),
+    $conf{'conf_init'}{$id}{$_}->() for sort { $a <=> $b } keys %{ $conf{'conf_init'}{$id} };
+    #warn("confrunned",  "now=",scalar keys %config, "\n");
     return;
   }
   local $_;
-  $static{'conf_init'}{
-    #$ENV{'SCRIPT_FILENAME'}
-    #$ENV{'PROSEARCH_PATH'}
-    $id
-    }{
-    $_ = (
-      $order or $static{'conf_count'}{
-        #$ENV{'PROSEARCH_PATH'}
-        #$ENV{'SCRIPT_FILENAME'}
-        $id
-        }
-        += 10
-    )
-    }
-    = $sub;
-  $static{'conf_init_from'}{
-    #$ENV{'SCRIPT_FILENAME'}
-    $id
-    }{$_} = [caller];
-  #print "conf(@_):", Dumper([caller],$static{'conf_init'}, $static{'conf_init_from'});
+  $conf{'conf_init'}{$id}{ $_ = ( $order or $conf{'conf_count'}{$id} += 10 ) } = $sub;
+  $conf{'conf_init_from'}{$id}{$_} = [caller];
+  #print "conf(@_):", Dumper([caller],$conf{'conf_init'}, $conf{'conf_init_from'});
 }
 
 sub http_get {    # REWRITE easier
@@ -1437,7 +1502,7 @@ sub save_list {
 }
 =cut
 
-sub schedule($$;@) {    #$Id: psmisc.pm 4443 2010-12-28 23:28:00Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+sub schedule($$;@) {    #$Id: psmisc.pm 4548 2011-03-07 01:32:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   our %schedule;
   my ( $every, $func ) = ( shift, shift );
   my $p;
@@ -1453,7 +1518,7 @@ sub schedule($$;@) {    #$Id: psmisc.pm 4443 2010-12-28 23:28:00Z pro $ $URL: sv
     and ( !( ref $p->{'cond'} eq 'CODE' ) or $p->{'cond'}->( $p, $schedule{ $p->{'id'} }, @_ ) )
     and ref $schedule{ $p->{'id'} }{'func'} eq 'CODE';
 }
-{    #$Id: psmisc.pm 4443 2010-12-28 23:28:00Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+{    #$Id: psmisc.pm 4548 2011-03-07 01:32:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   my (@locks);
   sub lockfile($) {
     return ( $config{'lock_dir'} || './' ) . ( length $_[0] ? $_[0] : 'lock' ) . ( $config{'lock_ext'} || '.lock' );
@@ -1520,7 +1585,7 @@ sub schedule($$;@) {    #$Id: psmisc.pm 4443 2010-12-28 23:28:00Z pro $ $URL: sv
     unlock_all();
     exit;
     }
-    for qw(HUP INT QUIT KILL TERM);
+    for qw(INT QUIT KILL TERM);    #HUP
 }
 {
   my ( $current, $order );
@@ -1531,7 +1596,7 @@ sub schedule($$;@) {    #$Id: psmisc.pm 4443 2010-12-28 23:28:00Z pro $ $URL: sv
     $program{ $current = $name }{'order'} ||= ( $setorder or $order += ( $config{'order_step'} || 10 ) );
     #print "newprog($current, $program{$current}{'order'});" ;
     return $current;
-  }    #v2
+  }                                #v2
 }
 
 sub use_try ($;@) {
@@ -1637,7 +1702,7 @@ config_init();
 
 package psconn;
 use strict;
-our $VERSION = ( split( ' ', '$Revision: 4443 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4548 $' ) )[1];
 #use psmisc;
 #sub connection {
 sub new {
@@ -1653,7 +1718,8 @@ sub init {
   my $self = shift;
   local %_ =
     ( 'connected' => 0, 'connect_auto' => 1, 'connect_tries' => 100, 'connect_chain_tries' => 10, 'error_sleep' => 5, @_ );
-  @{$self}{ keys %_ } = values %_;
+  #@{$self}{ keys %_ } = values %_;
+  $self->{$_} //= $_{$_} for keys %_;
   #printlog('dev', 'conn init error_sleep', $self->{'error_sleep'});
   $self->connect() if $self->{'auto_connect'};
   return $self;
@@ -1686,8 +1752,8 @@ sub connect {
   #if (!$self->_connect()) {   #ok
   my $aftersleep = 1;
   while ( !$self->{'die'} ) {
-    if (  ( $self->{'connect_tried'}++ <= $self->{'connect_tries'} or !$self->{'connect_tries'} )
-      and ( $self->{'connect_chain_tried'}++ <= $self->{'connect_chain_tries'} or !$self->{'connect_chain_tries'} ) )
+    if (  ( !$self->{'connect_tries'} or $self->{'connect_tried'}++ <= $self->{'connect_tries'} )
+      and ( !$self->{'connect_chain_tries'} or $self->{'connect_chain_tried'}++ <= $self->{'connect_chain_tries'} ) )
     {
       #do {    {    #ok
       $self->{'in_connect'} = 1;
@@ -1705,10 +1771,8 @@ sub connect {
       $self->dropconnect();
       $self->log(
         'dev',                          'psconn::connect run sleep',
-        $self->{'error_sleep'},         $self->{'connect_tried'},
-        '/',                            $self->{'connect_tries'},
-        $self->{'connect_chain_tried'}, '/',
-        $self->{'connect_chain_tries'}
+        $self->{'error_sleep'}, "c=$self->{'connect_tried'}/$self->{'connect_tries'}",
+        "ch=$self->{'connect_chain_tried'}/$self->{'connect_chain_tries'}",
       );
       $self->sleep( $self->{'error_sleep'} );
       $aftersleep = 0;

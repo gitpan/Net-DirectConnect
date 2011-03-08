@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: dcget 711 2010-12-30 11:57:09Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcget $
+#$Id: dcget 754 2011-03-07 01:07:15Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcget $
 
 =head1 NAME
 
@@ -7,9 +7,9 @@
 
 =head1 SYNOPSIS
 
- ./dcget hub [hub] [tth]
+ ./dcget dchub://hub [adc://hub] [tth] [-file] ...
 
- #NONE!file ... file:  topath/name:TTH:size
+ TODO:topath/name:TTH:size
 
 =head1 CONFIGURE 
 
@@ -17,7 +17,6 @@
  $config{dc}{host} = 'myhub.net';
 
 =cut
-
 use 5.10.0;
 use strict;
 use Data::Dumper;
@@ -31,54 +30,63 @@ our ( %config, %work );
 #use psmisc;
 use Net::DirectConnect::pslib::psmisc;
 psmisc->import qw(:log);
+#*config = *main::config;
 #require Net::DirectConnect::pslib::psmisc;
 #psmisc->import qw(:config :log printlog);
 #use pssql;
 use Net::DirectConnect;
+use Net::DirectConnect::filelist;
 #$config{disconnect_after}     //= 10;
 #$config{disconnect_after_inf} //= 0;
-psmisc::configure();      #psmisc::lib_init();
-psmisc::lib_init();    #for die handler
+psmisc::configure();    #psmisc::lib_init();
+psmisc::lib_init();     #for die handler
 $config{'auto_get_best'}      //= 1;
 $config{'hit_to_ask'}         //= 5;
 $config{'queue_recalc_every'} //= 100;
 $config{'get_every'}          //= 60;
-$config{'get_dir'}            //= './downloads/';
+#$config{'get_dir'}            //= './downloads/';
 $config{ 'log_' . $_ } //= 0 for qw (dmp dcdmp dcdbg);
-psmisc::printlog("usage: $1 [adc|dchub://]host[:port] [hub..]\n"), exit if !$ARGV[0] and !$config{dc}{host};  # and !$config{dc}{hosts};
+psmisc::printlog("usage: $1 [adc|dchub://]host[:port] [hub..]\n"), exit
+  if !$ARGV[0] and !$config{dc}{host};    # and !$config{dc}{hosts};
 psmisc::printlog( 'info', 'started:', $^X, $0, join ' ', @ARGV );
 #$SIG{INT} = $SIG{KILL} = sub { printlog 'exiting', exit; };
 #printlog 'dev', 'mkdir', $config{'get_dir'},
-mkdir $config{'get_dir'};
+#mkdir $config{'get_dir'};
 #exit;
 #use Net::DirectConnect::adc;
-my @todl = grep { /^[A-Z0-9]{39}$/ } @ARGV;
-@ARGV = grep { !/^[A-Z0-9]{39}$/ } @ARGV;
+my $log = sub (@) {
+  my $dc = ref $_[0] ? shift : {};
+  #print Dumper @_;
+  psmisc::printlog shift(), "[$dc->{'number'}]", @_,;
+};
+my @todl = grep { /^[A-Z0-9]{39}$/ or /^-/ } @ARGV;
+s/^-// for @todl;
+@ARGV = grep { !( /^[A-Z0-9]{39}$/ or /^-/ ) } @ARGV;
+$SIG{PIPE} = sub { printlog( 'sig', 'PIPE' ) };
+my @dirs = grep { -d } @ARGV;
+#printlog('dev', 'started', @ARGV),
+my $filelist = shift @ARGV if $ARGV[0] ~~ 'filelist';
+@ARGV = grep { !-d } @ARGV;
+my @hosts = grep { m{^\w+://} } @ARGV;
+Net::DirectConnect::filelist->new( log => $log, %{ $config{dc} || {} } )->filelist_make(@dirs), exit
+  if ( $filelist and !caller )
+  or ( !@hosts and !$config{dc}{host} );
 my @dc;
 @dc = map {
   Net::DirectConnect->new(
     modules            => ['filelist'],
-    'filelist_builder' => ( join ' ', $^X, 'dcshare', 'filelist' ),
+    share              => \@dirs,
+    'filelist_builder' => ( join ' ', $^X, $0, 'filelist' ),
+    #'filelist_builder' => ( join ' ', $^X, 'dcshare', 'filelist' ),
     #SUPAD        => { H => { PING => 1 } },
     #botinfo      => 'devperlpinger',
     #auto_GetINFO => 1,
     #Nick         => 'perlgetterrr',
     auto_connect => 1,
-    dev_http     => 1,
-    'log'        => sub (@) {
-      my $dc = ref $_[0] ? shift : {};
-      psmisc::printlog shift(), "[$dc->{'number'}]", @_,;
-    },
-    'handler' => { (
-        map {
-          my $msg = $_;
-          $msg => sub {
-            my $dc = shift;
-            #say join ' ', $msg, @_;
-            $dc->say($msg, @_); #print with console encoding
-            },
-          } qw(welcome chatline To)
-      ),
+    auto_say     => 1,
+    #dev_http     => 1,
+    'log'     => $log,
+    'handler' => {
       'Search' => sub {    #_parse_aft
         my $dc = shift;
         #printlog 'sch', Dumper @_ if $dc->{adc};
@@ -113,15 +121,15 @@ my @dc;
       },
       'RES' => sub {     #_parse_aft
         my $dc = shift;
-        psmisc::printlog 'RESparsed:', Dumper( \@_ );
+        #psmisc::printlog 'RESparsed:', Dumper( \@_ );
         my ( $dst, $peercid ) = @{ $_[0] };
         my $s = pop || return;    #%{ $_[1] || return };
-        #$db->insert_hash( 'results', \%s );
-        #my ($file) = $s->{FN} =~ m{([^\\/]+)$};
-        #++$work{'filename'}{ $s->{TR} }{$file}; # $self->{'want_download_filename'}
-        #$s->{CID} = $peercid;
-        #$work{'tthfrom'}{ $s->{TR} }{$peercid} = $s; # $self->{'want_download_tth_from'}
-        #++$work{'stat'}{'RES'};
+                                  #$db->insert_hash( 'results', \%s );
+                                  #my ($file) = $s->{FN} =~ m{([^\\/]+)$};
+                                  #++$work{'filename'}{ $s->{TR} }{$file}; # $self->{'want_download_filename'}
+                                  #$s->{CID} = $peercid;
+                                  #$work{'tthfrom'}{ $s->{TR} }{$peercid} = $s; # $self->{'want_download_tth_from'}
+                                  #++$work{'stat'}{'RES'};
       },
     },
     #auto_work
@@ -151,9 +159,9 @@ my @dc;
         [ 3600, 3600 ],
         our $hashes_cleaner_ ||= sub {
           my $min = scalar keys %{ $work{'hubs'} || {} };
-          psmisc::printlog( 'info', "queue clear min[$min] now", scalar %{ $work{'ask'} || {} });
+          psmisc::printlog( 'info', "queue clear min[$min] now", scalar %{ $work{'ask'} || {} } );
           delete $work{'ask'}{$_} for grep { $work{'ask'}{$_} < $min } keys %{ $work{'ask'} || {} };
-          psmisc::printlog( 'info', "queue clear ok now", scalar %{ $work{'ask'} || {} });
+          psmisc::printlog( 'info', "queue clear ok now", scalar %{ $work{'ask'} || {} } );
         }
       );
       if ( $config{'auto_get_best'} ) {
@@ -162,17 +170,21 @@ my @dc;
           our $queueask_ ||= sub {
             my ($dc) = @_;
             my $q;
+            #psmisc::printlog( 'dev', "getbest run");
             while ( $q = shift @{ $work{'toask'} } or return ) {
+              #psmisc::printlog( 'dev', "getbest:", $q);
               last if ( !exists $work{'asked'}{$q} );
 #$work{'ask_db'}{$q} = $work{'asked'}{$q} = $r->{'time'}, next                  if $r and $r->{'time'};    # + $config{'ask_retry'} > time;
 #$work{'ask_db'}{$q} = 0;
 #last;
             }
             return unless length $q;
+            #psmisc::printlog( 'dev', "getbest todo [$dc->{'search_todo'}]", );
             if ( !$dc->{'search_todo'} ) {
               $work{'asked'}{$q} = int time;
               psmisc::printlog( 'info', "search", $q, 'on', $dc->{'host'} );
-              $dc->search($q);
+              #$dc->search($q);
+              $dc->download($q);
             } else {
               unshift @{ $work{'toask'} }, $q;
             }
@@ -197,26 +209,21 @@ my @dc;
           $dc->download( shift @todl );
         }
       );
-      psmisc::schedule(
-        [ 60, 3600 ],
-        our $dump_sub__ ||= sub {
-          $dc->{__work} ||= \%work;    #for dumper
-          psmisc::printlog "Writing dump";
-          psmisc::file_rewrite( $0 . '.dump', Dumper @dc );
-        }
-      ) if $config{debug};
     },
     %{ $config{dc} || {} },
     #( $_ ? ( 'host' => $_ ) : () ),
     #( $ARGV[0] ? ( 'host' => $ARGV[0] ) : () ),
     'host' => $_,
-    )                                  # for ( @ARGV, @{ $config{dc}{hosts} || [] } );
+    )    # for ( @ARGV, @{ $config{dc}{hosts} || [] } );
   } (
   grep {
     $_
-    } ref $config{dc}{host} eq 'ARRAY' ? @{ $config{dc}{host} } : $config{dc}{host},
-  @ARGV
+    }    #psmisc::array($config{dc}{host}), #ref $config{dc}{host} eq 'ARRAY' ? @{ $config{dc}{host} } : $config{dc}{host},
+         #@ARGV
+    @hosts ? @hosts : psmisc::array( $config{dc}{host} )
   );
+$_->{__work} ||= \%work for    #for dumper
+  grep { $_->{dev_auto_dump} } @dc;
 while ( @dc = grep { $_ and $_->active() } @dc ) {
   $_->work() for @dc;
 }

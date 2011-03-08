@@ -1,12 +1,11 @@
 #!/usr/bin/perl -w
-#$Id: dchub 677 2010-12-13 22:44:31Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dchub $
+#$Id: dchub 754 2011-03-07 01:07:15Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dchub $
 
 =r
 
 dev hub test
 
 =cut
-
 use strict;
 use Data::Dumper;    #dev only
 $Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = 1;
@@ -33,14 +32,6 @@ my $dc = Net::DirectConnect->new(
   },
   'auto_work' => sub {
     my $dc = shift;
-    psmisc::schedule(
-      [ 20, 300 ],
-      #our $dump_sub__ ||=
-      sub {
-        print "Writing dump\n";
-        psmisc::file_rewrite( $0 . '.dump', Dumper $dc);
-      }
-    ) if $config{debug};
   }
 );
 #$dc->work(100);      #seconds
@@ -59,5 +50,4 @@ while ( $dc->active() ) {
 #$dc->wait_finish();
 $dc->disconnect();
 =cut
-
 #$dc = undef;

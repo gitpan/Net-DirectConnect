@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: watch.pl 686 2010-12-16 00:02:50Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/watch.pl $
+#$Id: watch.pl 754 2011-03-07 01:07:15Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/watch.pl $
 
 =readme
 
