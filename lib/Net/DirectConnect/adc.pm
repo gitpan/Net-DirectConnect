@@ -1,4 +1,4 @@
-#$Id: adc.pm 755 2011-03-07 01:43:07Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/adc.pm $
+#$Id: adc.pm 794 2011-06-17 17:48:15Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/adc.pm $
 package    #hide from cpan
   Net::DirectConnect::adc;
 use strict;
@@ -15,7 +15,7 @@ use Net::DirectConnect::http;
 use lib::abs('pslib');
 use psmisc;          # REMOVE
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 755 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 794 $' ) )[1];
 use base 'Net::DirectConnect';
 our %codesSTA = (
   '00' => 'Generic, show description',
@@ -73,6 +73,7 @@ sub tiger ($) {
 }
 sub hash ($) { base32( tiger( $_[0] ) ); }
 =cut
+
 #sub init {  my $self = shift;
 
 =cu
@@ -89,8 +90,92 @@ return $self;
 
 }
 =cut
+sub func {
+  my $self = shift if ref $_[0];
+#warn 'func call';
+  $self->SUPER::func(@_);
+  %_ = ( 'ID_file' => 'ID', );
+  $self->{$_} //= $_{$_} for keys %_;
+  if ( Net::DirectConnect::use_try( 'MIME::Base32', 'RFC' ) ) {
+    $self->{base_encode} ||= sub {
+      shift if ref $_[0];
+      MIME::Base32::encode_rfc3548(@_);
+    };
+    $self->{base_decode} ||= sub {
+      shift if ref $_[0];
+      MIME::Base32::decode_rfc3548(@_);
+    };
+  } else {
+    $self->log( 'err', 'cant use MIME::Base32' );
+  }
+  if ( Net::DirectConnect::use_try('Net::DirectConnect::TigerHash') ) {
+    $self->{hash} ||= sub { shift if ref $_[0]; Net::DirectConnect::TigerHash::tthbin( $_[0] ); };
+    $self->{base_encode} ||= sub {
+      shift if ref $_[0];
+      Net::DirectConnect::TigerHash::toBase32( $_[0] );
+    };
+    $self->{base_decode} ||= sub {
+      shift if ref $_[0];
+      Net::DirectConnect::TigerHash::fromBase32( $_[0] );
+    };
+  } else {
+    $self->log( 'err', 'cant use Net::DirectConnect::TigerHash' );
+  }
+  $self->{hash_base} ||= sub { shift if ref $_[0]; $self->base_encode( $self->hash( $_[0] ) ) };
+  #sub hash ($) { base32( tiger( $_[0] ) ); }
+  $self->{cmd_direct} ||= sub {
+    my $self = shift if ref $_[0];
+    my $peerid = shift;
+    local $self->{'host'} = $self->{'peers'}{$peerid}{'INF'}{I4}, local $self->{'port'} = $self->{'peers'}{$peerid}{'INF'}{U4}
+      if $self->{'peers'}{$peerid}{'INF'}{I4} and $self->{'peers'}{$peerid}{'INF'}{U4};
+    $self->cmd(@_);
+  };
+  $self->{ID_get} ||= sub {
+    #sub ID_get {
+    my $self = shift if ref $_[0];
+    if ( -s $self->{'ID_file'} ) { $self->{'ID'} ||= psmisc::file_read( $self->{'ID_file'} ); }
+    unless ( $self->{'ID'} ) {
+      $self->{'ID'} ||= join ' ', 'perl', $self->{'myip'}, $VERSION, $0, $self->{'INF'}{'NI'}, time,
+        '$Id: adc.pm 794 2011-06-17 17:48:15Z pro $';
+      psmisc::file_rewrite( $self->{'ID_file'}, $self->{'ID'} );
+    }
+    $self->{'PID'}       ||= $self->hash( $self->{'ID'} );
+    $self->{'CID'}       ||= $self->hash( $self->{'PID'} );
+    $self->{'INF'}{'PD'} ||= $self->base_encode( $self->{'PID'} );
+    $self->{'INF'}{'ID'} ||= $self->base_encode( $self->{'CID'} );
+    return $self->{'ID'};
+  };
+  $self->{INF_generate} ||= sub {
+    my $self = shift if ref $_[0];
+    #$self->log( 'dev', 'ing_generate', $self->{'myport'},$self->{'myport_udp'}, $self->{'myip'});
+    #$self->{'clients'}{'listener_udp'}
+    $self->{'INF'}{'NI'} ||= $self->{'Nick'} || 'perlAdcDev';
+    $self->{'PID'} ||= MIME::Base32::decode $self->{'INF'}{'PD'} if $self->{'INF'}{'PD'};
+    $self->{'CID'} ||= MIME::Base32::decode $self->{'INF'}{'ID'} if $self->{'INF'}{'ID'};
+    $self->ID_get();
+    $self->{'INF'}{'SID'} ||= $self->{broadcast} ? $self->{'INF'}{'ID'} : substr $self->{'INF'}{'ID'}, 0, 4;
+#sid
+#$self->log( 'id gen',"iID=$self->{'INF'}{'ID'} iPD=$self->{'INF'}{'PD'} PID=$self->{'PID'} CID=$self->{'CID'} ID=$self->{'ID'}" );
+    $self->{'INF'}{'SL'} ||= $self->{'S'}         || '2';
+    $self->{'INF'}{'SS'} ||= $self->{'sharesize'} || 20025693588;
+    $self->{'INF'}{'SF'} ||= 30999;
+    $self->{'INF'}{'HN'} ||= $self->{'H'}         || 1;
+    $self->{'INF'}{'HR'} ||= $self->{'R'}         || 0;
+    $self->{'INF'}{'HO'} ||= $self->{'O'}         || 0;
+    $self->{'INF'}{'VE'} ||= $self->{'client'} . $self->{'V'}
+      || 'perl'
+      . $Net::DirectConnect::VERSION . '_'
+      . $VERSION;    #. '_' . ( split( ' ', '$Revision: 794 $' ) )[1];    #'++\s0.706';
+    $self->{'INF'}{'US'} ||= 10000;
+    $self->{'INF'}{'U4'} ||= $self->{'myport_udp'} || $self->{'myport'};    #maybe if broadcast only
+    $self->{'INF'}{'I4'} ||= $self->{'myip'};
+    $self->{'INF'}{'SU'} ||= 'ADC0,TCP4,UDP4';
+    return $self->{'INF'};
+  };
+}
+
 sub init {
-  my $self = shift;
+  my $self = shift if ref $_[0];
   #shift if $_[0] eq __PACKAGE__;
   #print "adcinit SELF=", $self, "REF=", ref $self, "  P=", @_, "package=", __PACKAGE__, "\n\n";
   #$self->SUPER::new();
@@ -128,6 +213,7 @@ sub init {
   $self->{SUPAD}{C}{$_} = $_ for qw(BASE TIGR BZIP);
   if ( $self->{'broadcast'} ) { $self->{SUPAD}{B} = $self->{SUPAD}{C}; }
   if ( $self->{'hub'} ) {
+    #$self->log( 'dev', 'hub settings apply');
     $self->{'auto_connect'}         = 0;
     $self->{'auto_listen'}          = 1;
     $self->{'status'}               = 'working';
@@ -138,76 +224,10 @@ sub init {
   #}
   #$self->{$_} ||= $self->{'parent'}{$_} ||= {} for qw(peers peers_sid peers_cid want share_full share_tth);
   $self->{$_} ||= $self->{'parent'}{$_} for qw(ID PID CID INF SUPAD myport);
+# Proto
   $self->{message_type} = 'B' if $self->{'broadcast'};
-  if ( Net::DirectConnect::use_try( 'MIME::Base32', 'RFC' ) ) {
-    $self->{base_encode} ||= sub {
-      shift if ref $_[0];
-      MIME::Base32::encode_rfc3548(@_);
-    };
-    $self->{base_decode} ||= sub {
-      shift if ref $_[0];
-      MIME::Base32::decode_rfc3548(@_);
-    };
-  } else {
-    $self->log( 'err', 'cant use MIME::Base32' );
-  }
-  if ( Net::DirectConnect::use_try('Net::DirectConnect::TigerHash') ) {
-    $self->{hash} ||= sub { shift if ref $_[0]; Net::DirectConnect::TigerHash::tthbin( $_[0] ); };
-    $self->{base_encode} ||= sub {
-      shift if ref $_[0];
-      Net::DirectConnect::TigerHash::toBase32( $_[0] );
-    };
-    $self->{base_decode} ||= sub {
-      shift if ref $_[0];
-      Net::DirectConnect::TigerHash::fromBase32( $_[0] );
-    };
-  } else {
-    $self->log( 'err', 'cant use Net::DirectConnect::TigerHash' );
-  }
-  $self->{hash_base} ||= sub { shift if ref $_[0]; $self->base_encode( $self->hash( $_[0] ) ) };
-  #sub hash ($) { base32( tiger( $_[0] ) ); }
-  $self->{cmd_direct} ||= sub {
-    my $self = shift if ref $_[0];
-    my $peerid = shift;
-    local $self->{'host'} = $self->{'peers'}{$peerid}{'INF'}{I4}, local $self->{'port'} = $self->{'peers'}{$peerid}{'INF'}{U4}
-      if $self->{'peers'}{$peerid}{'INF'}{I4} and $self->{'peers'}{$peerid}{'INF'}{U4};
-    $self->cmd(@_);
-  };
-  $self->{INF_generate} ||= sub {
-    my $self = shift if ref $_[0];
-    #$self->log( 'dev', 'ing_generate', $self->{'myport'},$self->{'myport_udp'}, $self->{'myip'});
-    #$self->{'clients'}{'listener_udp'}
-    $self->{'INF'}{'NI'} ||= $self->{'Nick'} || 'perlAdcDev';
-    $self->{'PID'} ||= MIME::Base32::decode $self->{'INF'}{'PD'} if $self->{'INF'}{'PD'};
-    $self->{'CID'} ||= MIME::Base32::decode $self->{'INF'}{'ID'} if $self->{'INF'}{'ID'};
-    if ( -s $self->{'ID_file'} ) { $self->{'ID'} ||= psmisc::file_read( $self->{'ID_file'} ); }
-    unless ( $self->{'ID'} ) {
-      $self->{'ID'} ||= join ' ', 'perl', $self->{'myip'}, $VERSION, $0, $self->{'INF'}{'NI'}, time;
-      psmisc::file_rewrite( $self->{'ID_file'}, $self->{'ID'} );
-    }
-    $self->{'PID'}       ||= $self->hash( $self->{'ID'} );
-    $self->{'CID'}       ||= $self->hash( $self->{'PID'} );
-    $self->{'INF'}{'PD'} ||= $self->base_encode( $self->{'PID'} );
-    $self->{'INF'}{'ID'} ||= $self->base_encode( $self->{'CID'} );
-    $self->{'INF'}{'SID'} ||= $self->{broadcast} ? $self->{'INF'}{'ID'} : substr $self->{'INF'}{'ID'}, 0, 4;
-#sid
-#$self->log( 'id gen',"iID=$self->{'INF'}{'ID'} iPD=$self->{'INF'}{'PD'} PID=$self->{'PID'} CID=$self->{'CID'} ID=$self->{'ID'}" );
-    $self->{'INF'}{'SL'} ||= $self->{'S'}         || '2';
-    $self->{'INF'}{'SS'} ||= $self->{'sharesize'} || 20025693588;
-    $self->{'INF'}{'SF'} ||= 30999;
-    $self->{'INF'}{'HN'} ||= $self->{'H'}         || 1;
-    $self->{'INF'}{'HR'} ||= $self->{'R'}         || 0;
-    $self->{'INF'}{'HO'} ||= $self->{'O'}         || 0;
-    $self->{'INF'}{'VE'} ||= $self->{'client'} . $self->{'V'}
-      || 'perl'
-      . $Net::DirectConnect::VERSION . '_'
-      . $VERSION;    #. '_' . ( split( ' ', '$Revision: 755 $' ) )[1];    #'++\s0.706';
-    $self->{'INF'}{'US'} ||= 10000;
-    $self->{'INF'}{'U4'} ||= $self->{'myport_udp'} || $self->{'myport'};    #maybe if broadcast only
-    $self->{'INF'}{'I4'} ||= $self->{'myip'};
-    $self->{'INF'}{'SU'} ||= 'ADC0,TCP4,UDP4';
-    return $self->{'INF'};
-  };
+  $self->func();
+#warn "IG:$self->{INF_generate}";
   $self->INF_generate();
   $self->{'parse'} ||= {
 #
@@ -254,6 +274,7 @@ sub init {
         $self->{'peers'}{$peerid}{'SUP'}{ $params->{$_} } = 1 if $_ eq 'AD';
       }
 =cut      
+
       #$self->log('adcdev', 'SUPans:', $peerid, $self->{'peers'}{$peerid}{'INF'}{I4}, $self->{'peers'}{$peerid}{'INF'}{U4});
       #local $self->{'host'} = $self->{'peers'}{$peerid}{'INF'}{I4}; #can answer direct
       #local $self->{'port'} = $self->{'peers'}{$peerid}{'INF'}{U4};
@@ -493,6 +514,7 @@ sub init {
         'auto_connect' => 1,
       );
 =cut
+
     },
     'CTM' => sub {
       my $self = shift if ref $_[0];
@@ -548,6 +570,7 @@ sub init {
         $self->log( 'dcerr', 'SND', "unknown type", @_ );
       }
 =cut
+
     },
   };
 
@@ -561,6 +584,7 @@ sub init {
 
 
 =cut  
+
   $self->{'cmd'} = {
     #move to main
     'search_send' => sub {
@@ -693,7 +717,7 @@ sub init {
     'stat_hub' => sub {
       my $self = shift if ref $_[0];
       local %_;
-      for my $w qw(SS SF) {
+      for my $w (qw(SS SF)) {
         #$self->log( 'dev', 'calc', $_, $w),
         $_{$w} += $self->{'peers'}{$_}{INF}{$w} for grep { $_ and $_ ne $self->{'INF'}{'SID'} } keys %{ $self->{'peers_sid'} };
       }
@@ -722,32 +746,27 @@ sub init {
       $self->cmd_adc( $dst, 'SND', @_ );
     },
 =cut    
-  #$self->log( 'dev', "0making listeners [$self->{'M'}]:$self->{'no_listen'}" );
+
+  $self->log( 'dev', "0making listeners [$self->{'M'}]:$self->{'no_listen'}; auto=$self->{'auto_listen'}" );
   unless ( $self->{'no_listen'} ) {
-    #$self->log( 'dev', 'nyportgen',"$self->{'M'} eq 'A' or !$self->{'M'} ) and !$self->{'auto_listen'} and !$self->{'incoming'}" );
+#$self->log( 'dev', 'nyportgen',"$self->{'M'} eq 'A' or !$self->{'M'} ) and !$self->{'auto_listen'} and !$self->{'incoming'}" );
     if (
       #( $self->{'M'} eq 'A' or !$self->{'M'} )  and
       !$self->{'incoming'}
+        and !$self->{'auto_listen'}
       )
     {
-      #$self->log( 'dev', __FILE__, __LINE__, "  myptr");
+      #$self->log( 'dev', __FILE__, __LINE__, "  myptr", $self->{'auto_listen'}, $self->{broadcast});
       if (
-        !$self->{'auto_listen'} or    #$self->{'Proto'} ne 'tcp'
+        #!$self->{'auto_listen'} or    #$self->{'Proto'} ne 'tcp'
+        
         $self->{broadcast}
         )
       {
         #$self->log( 'dev', __FILE__, __LINE__, "  myptr");
-        #$self->log( 'dev', "making listeners: tcp; class=", $self->{'incomingclass'} );
+        $self->log( 'dev', "making listeners: tcp; class=", $self->{'incomingclass'} );
         $self->{'clients'}{'listener_tcp'} = $self->{'incomingclass'}->new(
-          #%$self, $self->clear(),
-          #'want' => $self->{'want'},
-          #'NickList'    => \%{ $self->{'NickList'} },
-          #'IpList'      => \%{ $self->{'IpList'} },
-          #'PortList'    => \%{ $self->{'PortList'} },
-          #'handler'     => \%{ $self->{'handler'} },
-          'parent' => $self, 'auto_listen' => 1,    #'disconnect_recursive'=>1,
-                                                    #'myport'        => $self->{'myport'},
-                                                    #( map { $_ => $self->{$_} } qw(myport want peers ) ),
+          'parent' => $self, 'auto_listen' => 1,    
         );
         #$self->log( 'dev', __FILE__, __LINE__, "  myptr");
         $self->{'myport'} = $self->{'myport_tcp'} = $self->{'clients'}{'listener_tcp'}{'myport'};
@@ -758,15 +777,9 @@ sub init {
         #and $self->{'Proto'} ne 'udp'
         )
       {
-        #$self->log( 'dev', "making listeners: udp" );
+        $self->log( 'dev', "making listeners: udp ($self->{'auto_listen'})" );
         $self->{'clients'}{'listener_udp'} = $self->{'incomingclass'}->new(
-          #%$self, $self->clear(),
           'parent' => $self, 'Proto' => 'udp', 'auto_listen' => 1,
-#?    'want'     => \%{ $self->{'want'} },
-#?    'NickList' => \%{ $self->{'NickList'} },
-#?    'IpList'   => \%{ $self->{'IpList'} },
-#?    'PortList' => \%{ $self->{'PortList'} },
-#'handler' => \%{ $self->{'handler'} },
 #$self->{'clients'}{''} = $self->{'incomingclass'}->new( %$self, $self->clear(),
 #'LocalPort'=>$self->{'myport'},
 #'debug'=>1,
@@ -788,6 +801,47 @@ sub init {
         $self->log( 'dev', 'nyportgen', $self->{'myport_udp'} );
         $self->log( 'err', "cant listen udp (search repiles)" ) unless $self->{'myport_udp'};
       }
+
+
+
+
+      if ( 
+        #!$self->{'auto_listen'} and 
+        $self->{'dev_sctp'}
+        )
+      {
+        $self->log( 'dev', "making listeners: sctp" );
+        $self->{'clients'}{'listener_sctp'} = $self->{'incomingclass'}->new(
+          'parent' => $self, 'Proto' => 'sctp', 'auto_listen' => 1,
+        );
+        $self->{'myport_sctp'} = $self->{'clients'}{'listener_sctp'}{'myport'};
+        $self->log( 'dev', 'nyportgen', $self->{'myport_sctp'} );
+        $self->log( 'err', "cant listen sctp" ) unless $self->{'myport_sctp'};
+      }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     }
     #DEV=z
 
@@ -803,6 +857,7 @@ $self->log( 'info', 'listening broadcast ', $self->{'dev_broadcast'} || $self->{
       $self->log( 'err', "cant listen broadcast (hubless)" ) unless $self->{'clients'}{'listener_udp_broadcast'}{'myport'};
     }
 =cut
+
     if ( $self->{'dev_http'} ) {
       $self->log( 'dev', "making listeners: http" );
       #$self->{'clients'}{'listener_http'} = Net::DirectConnect::http->new(

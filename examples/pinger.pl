@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: pinger.pl 754 2011-03-07 01:07:15Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/pinger.pl $
+#$Id: pinger.pl 793 2011-06-17 16:51:17Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/pinger.pl $
 
 =head1 NAME
 
@@ -47,21 +47,14 @@ Net::DirectConnect->new(
   #botinfo      => 'devperlpinger',
   auto_GetINFO => 1,
   auto_connect => 1,
+  auto_say     => 1,
   dev_http     => 1,
   'log'        => sub (@) {
     my $dc = ref $_[0] ? shift : {};
     psmisc::printlog shift(), "[$dc->{'number'}]", @_,;
   },
-  'handler' => { (
-      map {
-        my $msg = $_;
-        $msg => sub {
-          my $dc = shift;
-          #say join ' ', $msg, @_;
-          $dc->say( $msg, @_ );    #print with console encoding
-          },
-        } qw(welcome chatline To)
-    ),
+  'handler' => { 
+    
     INF => sub {
       my $dc  = shift;
       my $dst = shift @{ $_[0] };

@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: psmisc.pm 4548 2011-03-07 01:32:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+#$Id: psmisc.pm 4629 2011-06-17 17:48:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
 
 =copyright
 PRO-search shared library
@@ -35,7 +35,8 @@ use Time::HiRes qw(time);
 #use locale;
 use Encode;
 use POSIX qw(strftime);
-our $VERSION = ( split( ' ', '$Revision: 4548 $' ) )[1];
+use lib::abs;
+our $VERSION = ( split( ' ', '$Revision: 4629 $' ) )[1];
 our (%config);
 #my ( %config );
 #local *config = *main::config;
@@ -324,7 +325,8 @@ sub config_init {
 sub get_params_one(@) {    # p=x,p=y,p=z => p=x,p1=y,p2=z ; p>=z => p=z, p_mode='>'; p => p; -p => -p=1;
   local %_ = %{ ref $_[0] eq 'HASH' ? shift : {} };
   for (@_) {               # PERL RULEZ # SORRY # 8-) #
-    tr/+/ /, s/%([a-f\d]{2})/pack 'C', hex $1/gei for my ( $k, $v ) = /^([^=]+=?)=(.+)$/ ? ( $1, $2 ) : ( /^([^=]*)=?$/, /^-/ );
+    #tr/+/ /, s/%([a-f\d]{2})/pack 'C', hex $1/gei for my ( $k, $v ) = /^([^=]+=?)=(.+)$/ ? ( $1, $2 ) : ( /^([^=]*)=?$/, /^-/ );
+    tr/+/ /, s/%([a-f\d]{2})/pack 'H*', $1/gei for my ( $k, $v ) = /^([^=]+=?)=(.+)$/ ? ( $1, $2 ) : ( /^([^=]*)=?$/, /^-/ );
     $_{"${1}_mode$2"} .= $3 if $k =~ s/^(.+?)(\d*)([=!><~@]+)$/$1$2/;
     $k =~ s/(\d*)$/($1 < 100 ? $1 + 1 : last)/e while defined $_{$k};
     $_{$k} = $v;           #lc can be here
@@ -345,13 +347,18 @@ sub get_params(;$$) {      #v7
   wantarray ? %_ : \%_;
 }
 
-sub is_array ($) { UNIVERSAL::isa($_[0], 'ARRAY') }
-sub is_array_size ($) { is_array($_[0]) and @{$_[0]} }
-sub is_hash ($) { UNIVERSAL::isa($_[0], 'HASH') }
-sub is_hash_size ($) { is_hash($_[0]) and %{$_[0]} }
-sub is_code ($) { UNIVERSAL::isa($_[0], 'CODE') }
-sub code_run ($;@) { my $f = shift; return $f->(@_) if is_code $f }
+sub get_params_utf8(;$$) {
+  local $_ = &get_params;
+  utf8::decode $_ for %$_;
+  wantarray ? %$_ : $_;
+}
 
+sub is_array ($) { UNIVERSAL::isa( $_[0], 'ARRAY' ) }
+sub is_array_size ($) { is_array( $_[0] ) and @{ $_[0] } }
+sub is_hash ($) { UNIVERSAL::isa( $_[0], 'HASH' ) }
+sub is_hash_size ($) { is_hash( $_[0] ) and %{ $_[0] } }
+sub is_code ($) { UNIVERSAL::isa( $_[0], 'CODE' ) }
+sub code_run ($;@) { my $f = shift; return $f->(@_) if is_code $f }
 
 sub array (@) {
   local @_ = map { is_array $_ ? @$_ : $_ } @_;
@@ -359,7 +366,7 @@ sub array (@) {
 }
 
 sub array_any (@) {
-  local @_ = map { is_array $_ ? @$_ : is_hash $_ ? sort keys %$_ : is_code $_  ? $_->() : $_ } @_;
+  local @_ = map { is_array $_ ? @$_ : is_hash $_ ? sort keys %$_ : is_code $_ ? $_->() : $_ } @_;
   wantarray ? @_ : \@_;
 }
 
@@ -367,10 +374,7 @@ sub in ($@) {
   my $v = shift;
   grep { $v eq $_ } &array_any;
 }
-
-sub hash_merge ($$) {
-  $_[0]{$_} = $_[1]{$_} for keys %{$_[1]};
-} 
+sub hash_merge ($$) { $_[0]{$_} = $_[1]{$_} for keys %{ $_[1] }; }
 
 =todo
 ------------jCZJhSDkEEg0Avf4h2hejC
@@ -403,14 +407,13 @@ sub encode_url_link($;$) {
   return $str if defined $mask and !$mask;
   return $str if $str =~ /^(magnet|file):/i;
   #fixed?
-  return $str if $config{'client_ie'};
+  #return $str if $config{'client_ie'};
   #printlog(Dumper $str);
- # eval {utf8::downgrade($str, 'FAIL_OK')# if utf8::is_utf8($str);
-#};
+  # eval {utf8::downgrade($str, 'FAIL_OK')# if utf8::is_utf8($str);
+  #};
   #utf8::encode($str);
   #utf8::downgrade($str, 'FAIL_OK') if utf8::is_utf8($str);
-  utf8::is_utf8($str) ? utf8::encode($str) : utf8::downgrade($str, 'FAIL_OK');
-
+  utf8::is_utf8($str) ? utf8::encode($str) : utf8::downgrade( $str, 'FAIL_OK' );
   local %_ = split_url($str);
   $mask ||= '[^a-zA-Z0-9\-.()_\:@\/!,=]';
   #utf8::encode($_{$_}),
@@ -419,9 +422,10 @@ sub encode_url_link($;$) {
   return join_url( \%_ );
 }
 
-sub decode_url($) {    #v1
-  my ($str) = @_;
+sub decode_url($;$) {    #v1
+  my ( $str, $noutf ) = @_;
   $str =~ s/%([a-fA-F0-9]{2})/pack'C',hex$1/eg;
+  utf8::decode $str unless $noutf;
   return $str;
 }
 {
@@ -517,7 +521,7 @@ sub file_read_ref ($) {
   return \$ret;
 }
 
-sub file_read ($) { #dont use, del
+sub file_read ($) {    #dont use, del
   open my $f, '<', $_[0] or return;
   local $/ = undef;
   my $ret = <$f>;
@@ -665,20 +669,22 @@ sub ip_to_name($)   { return func_cache( \&ip_to_name_noc,   @_ ); }
 sub name_to_ip($)   { return func_cache( \&name_to_ip_noc,   @_ ); }
 
 sub normalize_ip_noc($) {    #v2
-  my ($ip) = @_;
-  return lc $ip
+  my ($host) = @_;
+  #my ($err);
+  my ( $ip, $err ) = name_to_ip($host);
+  #printlog "ip[$ip]";
+  return undef if $ip =~ /^(?:0|127)\./ and !$host =~ /^(?:0|127)\./;
+  return lc $host
     if $config{'norm_skip_host'}
-      and
-      ( ( ref $config{'norm_skip_host'} eq 'Regexp' ? $ip =~ $config{'norm_skip_host'} : $ip =~ /$config{'norm_skip_host'}/i )
+      and ( (
+          ref $config{'norm_skip_host'} eq 'Regexp' ? $host =~ $config{'norm_skip_host'} : $host =~ /$config{'norm_skip_host'}/i
+        )
       );
-  my ($err);
-  ( $ip, $err ) = name_to_ip($ip);
   return $ip if $err;
-  my ( $tmp, $host );
+  my ( $tmp );
   return $ip unless $tmp = inet_aton($ip);
   return $ip unless $host = ( gethostbyaddr( $tmp, AF_INET ) )[0];
-
-  for my $repl ( @{ $config{'ip_normalize_pre'} } ) {
+  for my $repl ( @{ $config{'ip_normalize_pre'} || [] } ) {
     last if $host =~ /^$repl\./;
     my $thost = $host;
     $thost =~ s/^[^.]+/$repl/;
@@ -793,23 +799,21 @@ sub full_host($;$) {
 }
 sub cp_normalize($) { return $config{'trans_name'}{ lc $_[0] } || lc $_[0]; }
 
-sub encode_safe ($$){
+sub encode_safe ($$) {
   my ( $cto, $string ) = @_;
   $cto = cp_normalize($cto);
   return $string if !$cto or $cto eq 'utf-8';
-
-   #return 
-     #utf8::downgrade($string),
-     #Encode::_utf8_off($string);
-   #printlog('ensafeB',$cto, Dumper $string,  utf8::is_utf8 $string);
-   #local $_ = Encode::encode $cto, Encode::decode  'utf-8',  $string;
-   local $_ = Encode::encode $cto,   $string;
-         # Encode::_utf8_off($_);
-
-     #utf8::downgrade($_),
-     #utf8::decode($_),
-   #printlog('ensafeA',$cto, Dumper  $_, utf8::is_utf8 $_);
-   return $_;
+  #return
+  #utf8::downgrade($string),
+  #Encode::_utf8_off($string);
+  #printlog('ensafeB',$cto, Dumper $string,  utf8::is_utf8 $string);
+  #local $_ = Encode::encode $cto, Encode::decode  'utf-8',  $string;
+  local $_ = Encode::encode $cto, $string;
+  # Encode::_utf8_off($_);
+  #utf8::downgrade($_),
+  #utf8::decode($_),
+  #printlog('ensafeA',$cto, Dumper  $_, utf8::is_utf8 $_);
+  return $_;
 }
 
 sub cp_trans($$$) {    #v1
@@ -818,7 +822,7 @@ sub cp_trans($$$) {    #v1
   $cto   = cp_normalize($cto);
   #printlog('dev', 'cp_trans:', $cfrom, $cto, $string);
   return $string if $cto eq $cfrom or !length($string) or !$cfrom or !$cto;
-  print('dev', 'cp_trans:', join ':',$cfrom, $cto, $string) if $config{debug};
+  print( 'dev', 'cp_trans:', join ':', $cfrom, $cto, $string ) if $config{debug};
   #local $_ = "$cfrom -> $cto";
   #caller_trace();
   #return scalar cp_trans_count(@_); # unless $config{'fast_cp_trans'};
@@ -950,7 +954,7 @@ sub detectcp($) {
 
 sub cp_detect_trans(\$;$$$$$) {
   my ( $string, $data, $cp_to, $cp_default, $prot, $host ) = @_;
-  $data ||={};
+  $data ||= {};
   $cp_to = cp_normalize( $cp_to || hconfig( 'cp_db', $host ) ) || 'utf-8';
 
 =bat
@@ -967,6 +971,7 @@ printlog(Dumper $decoder);
     }
   }
 =cut   
+
   return 'utf-8' if $cp_to eq 'utf-8' and utf8::decode($$string);
   $cp_default = cp_normalize( $cp_default || hconfig( 'cp_res', $host, $prot ) );
   my $cnt;
@@ -976,9 +981,11 @@ printlog(Dumper $decoder);
 #printlog( 'dbg', 'charset detected:', $data->{'cp'}, '   dbg: ', %{ $data->{'stat'} }, Dumper($data), Dumper(detectcp($string)),' [', $$string, ']', "def:$cp_default",);#      if $data->{'cp'} and $data->{'cp'} ne $cp_default;
   }
   #printlog( 'dbg', "encto: from=$data->{'cp'} to=$cp_to, def=$cp_default");
-  if ( $data->{'cp'} #and ($data->{'cp'} ne $cp_to 
-  #or $data->{'cp'} eq 'utf-8')
-  ) {
+  if (
+    $data->{'cp'}    #and ($data->{'cp'} ne $cp_to
+    #or $data->{'cp'} eq 'utf-8')
+    )
+  {
     #( $$string, $cnt ) = cp_trans_count( $data->{'cp'}, $cp_to, $$string );
     return $data->{'cp'} if $data->{'cp'} eq $cp_to;
     $$string = Encode::decode $data->{'cp'}, $$string;
@@ -1010,36 +1017,32 @@ sub cp_lo($;$) {    #v1
   return $string;
 }
 
-sub unref ($;@){
+sub unref ($;@) {
   local $_ = shift;
   return unless length $_;
   $_ = $$_ while ref $_ eq 'REF';
   return $_->(@_) if ref $_ eq 'CODE';
-  #local
   @_ = () if ref $_[0];
   return join $,, ( $$_, @_ ) if ref $_ eq 'SCALAR';
   return join $,, $_, @_;
 }
 
-
 sub lang($;$$$) {
   my ( $key, $lang ) = shift, shift;
   #print "CP[$config{'cp_config'},$work{'codepage'}]" if $key eq 'search';
-local $_ = (
-        defined $config{'lng'}{ $lang ||= ( $work{'lang'} || $config{'lang'} ) }{$key} ? $config{'lng'}{$lang}{$key}
-      : defined $config{'lng'}{''}{$key} ? $config{'lng'}{''}{$key}
-      : $key
-    );
-    #return unref $_ if ref $_;
-
+  local $_ = (
+      defined $config{'lng'}{ $lang ||= ( $work{'lang'} || $config{'lang'} ) }{$key} ? $config{'lng'}{$lang}{$key}
+    : defined $config{'lng'}{''}{$key} ? $config{'lng'}{''}{$key}
+    :                                    $key );
+  #return unref $_ if ref $_;
   return
     #"[".(%config)."]".
-    shift() .       # "CP[$config{'cp_config'},$work{'codepage'}]".
+    shift() .    # "CP[$config{'cp_config'},$work{'codepage'}]".
     unref($_) .
     #cp_trans(
     #( $config{'cp_config'} || $config{'cp_perl'} ),
-    #$work{'codepage'}, 
-    #) . 
+    #$work{'codepage'},
+    #) .
     shift();
 }
 
@@ -1219,8 +1222,9 @@ sub config_read {
   #print " [$file] config_read($_[0])";
   #do $ENV{'PROSEARCH_PATH'} . './config.pl' or do '../config.pl';
   #print "config_readb(); root_path = $root_path\n";
+  #$root_path ||= lib::abs::path('../').'/';
   ( $ENV{'SCRIPT_FILENAME'} || $work{'$0'} || $0 ) =~ m|^(.+)[/\\].+?$|;
-  $root_path ||=    #$ENV{'PROSEARCH_PATH'} ||
+  $root_path =    #||=    $ENV{'PROSEARCH_PATH'} ||
     ( $1 ? $1 . '/' : undef );
   #$root_path||=  $1 . '/' if $1;
   $root_path =~ s|\\|/|g;
@@ -1241,6 +1245,10 @@ sub config_read {
     #warn "reading [$file]", -s $file, ;# lib::abs::path($file);
     #print( ' do1:',$_,',', $!, ' eval=', $@, "\n" ) if !$_ or $! or $@;
     #MAKE ARRAY
+    if ( !$ENV{'SERVER_PORT'} and !-e $file and -e $file . '.dist' and use_try('File::Copy') ) {
+      printlog( 'warn', 'unfinished install, copying', $file . '.dist', '->', $file );
+      File::Copy::copy( $file . '.dist', $file );
+    }
     $_ += do $file and last;                                    #and warn("read [$file] ok $! $@;")
     push @errs, map { "config [$file] not found: " . $_ } grep { $_ } $!, $@, unless $_;
     #push @errs, grep { $_ } $!, $@ unless $_;
@@ -1324,7 +1332,8 @@ sub conf(;$$) {
   #warn 'conf from ', caller, Dumper \@_ ;
   my ( $sub, $order ) = ( shift, shift );
   #if ( !$ENV{'MOD_PERL'} ) {    $sub->(@_) if $sub;    return;  }
-  my $id = $ENV{'SCRIPT_FILENAME'} || $work{'$0'} || $0;
+  my $id =    #$ENV{'PROSEARCH_PATH'} ||
+    $ENV{'SCRIPT_FILENAME'} || $work{'$0'} || $0;
   #print join ' ',('dev',"conf($sub, $order, [$root_path] id=$id)", caller,"<br\n/>");
   unless ($sub) {
 #print("running", scalar keys %{ $conf{'conf_init'}{ $ENV{'PROSEARCH_PATH'} } }, "now=",scalar keys %config, "\n");
@@ -1502,7 +1511,7 @@ sub save_list {
 }
 =cut
 
-sub schedule($$;@) {    #$Id: psmisc.pm 4548 2011-03-07 01:32:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+sub schedule($$;@) {    #$Id: psmisc.pm 4629 2011-06-17 17:48:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   our %schedule;
   my ( $every, $func ) = ( shift, shift );
   my $p;
@@ -1518,7 +1527,7 @@ sub schedule($$;@) {    #$Id: psmisc.pm 4548 2011-03-07 01:32:29Z pro $ $URL: sv
     and ( !( ref $p->{'cond'} eq 'CODE' ) or $p->{'cond'}->( $p, $schedule{ $p->{'id'} }, @_ ) )
     and ref $schedule{ $p->{'id'} }{'func'} eq 'CODE';
 }
-{    #$Id: psmisc.pm 4548 2011-03-07 01:32:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+{    #$Id: psmisc.pm 4629 2011-06-17 17:48:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   my (@locks);
   sub lockfile($) {
     return ( $config{'lock_dir'} || './' ) . ( length $_[0] ? $_[0] : 'lock' ) . ( $config{'lock_ext'} || '.lock' );
@@ -1702,7 +1711,7 @@ config_init();
 
 package psconn;
 use strict;
-our $VERSION = ( split( ' ', '$Revision: 4548 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4629 $' ) )[1];
 #use psmisc;
 #sub connection {
 sub new {
@@ -1770,8 +1779,10 @@ sub connect {
       $self->{'in_connect'} = 0;
       $self->dropconnect();
       $self->log(
-        'dev',                          'psconn::connect run sleep',
-        $self->{'error_sleep'}, "c=$self->{'connect_tried'}/$self->{'connect_tries'}",
+        'dev',
+        'psconn::connect run sleep',
+        $self->{'error_sleep'},
+        "c=$self->{'connect_tried'}/$self->{'connect_tries'}",
         "ch=$self->{'connect_chain_tried'}/$self->{'connect_chain_tries'}",
       );
       $self->sleep( $self->{'error_sleep'} );
@@ -1868,7 +1879,7 @@ sub sleep {
   #$self->log( 'dev', 'psconn::sleep', @_ );
   #local $_ = $work{'sql_locked'};
   #sql_unlock_tables() if $work{'sql_locked'} and $_[0];
-  sleep(@_);
+  CORE::sleep(@_);
   #return psmisc::sleeper(@_);
   #sql_lock_tables($_) if $_ and $_[0];
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: dcshare 754 2011-03-07 01:07:15Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcshare $
+#$Id: dcshare 793 2011-06-17 16:51:17Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcshare $
 
 =head1 NAME
 
@@ -70,7 +70,7 @@ use Time::HiRes qw(time sleep);
 use Encode;
 use lib::abs '../lib';
 use Net::DirectConnect::pslib::psmisc;
-psmisc->import qw(:log);
+psmisc->import(qw(:log));
 our (%config);    #, $db
 use Net::DirectConnect;
 use Net::DirectConnect::filelist;

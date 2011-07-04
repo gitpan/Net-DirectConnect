@@ -1,8 +1,9 @@
 #!/usr/bin/perl
-#$Id: statlib.pm 745 2011-02-01 13:06:43Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
+#$Id: statlib.pm 790 2011-05-27 10:20:14Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
 package statlib;
 use strict;
 use Time::HiRes qw(time sleep);
+use utf8;
 our $root_path;
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
@@ -54,7 +55,8 @@ $config{'browser_ie'} = 1 if $ENV{'HTTP_USER_AGENT'} =~ /MSIE/ and $ENV{'HTTP_US
 $config{ 'browser_' . $_ } = 1 for grep { $ENV{'HTTP_USER_AGENT'} =~ /$_/i } @{ $config{'browsers'} };
 $config{'use_graph'} ||= 1;    #  if grep {$config{'browser_'. $_}} qw(firefox safari chrome opera);
 $config{'graph_inner'} ||= 1 if grep { $config{ 'browser_' . $_ } } qw(firefox safari chrome);
-$config{'sql'} ||= {
+$config{'title'}       ||= 'dcstat';
+$config{'sql'}         ||= {
   #'driver'              => 'mysql',
   'driver' => 'sqlite', 'dbname' => 'dcstat', 'auto_connect' => 1, 'log' => sub { shift; psmisc::printlog(@_) },
   #'cp_in'               => 'cp1251',
@@ -77,8 +79,8 @@ $config{'sql'} ||= {
       'string' => pssql::row( undef,  'type'  => 'VARCHAR', 'length' => 255, 'index' => 1, 'default' => '', ),
       'hub'    => pssql::row( undef,  'type'  => 'VARCHAR', 'length' => 64, 'index' => 1, 'default' => '', ),
       'nick'   => pssql::row( undef,  'type'  => 'VARCHAR', 'length' => 32, 'index' => 1, 'default' => '', ),
-      'ip'   => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 15, 'default' => '', ),
-      'port' => pssql::row( undef, 'type' => 'SMALLINT', ),
+      'ip'   => pssql::row( undef, 'type' => 'VARCHAR',  'length'  => 15, 'default' => '', ),
+      'port' => pssql::row( undef, 'type' => 'SMALLINT', 'default' => 0, ),
       'tth'      => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 40,  'index'   => 1, 'default' => '', ),
       'file'     => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 255, 'default' => '', ),
       'filename' => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 255, 'index'   => 1, 'default' => '', ),
@@ -156,21 +158,38 @@ $config{'queries'}{'queries top tth'} ||= {
   'periods' => 1,
   ( !$config{'use_graph'} ? ( 'class' => 'half' ) : ( 'graph' => 1 ) ),
   'desc'      => { 'ru' => 'Чаще всего скачивают', 'en' => 'Most downloaded' },
-  'show'      => [qw(cnt string filename size tth )],
+  'show'      => [qw(n cnt string filename size tth time )],
   'SELECT'    => '*, COUNT(*) as cnt',
+  #'SELECT'    => 'queries.*,results.*, COUNT(*) as cnt',
   'FROM'      => 'queries',
   'LEFT JOIN' => 'results USING (tth)',
   'WHERE'     => ['queries.tth != ""'],
   'GROUP BY'  => 'queries.tth',
   'ORDER BY'  => 'cnt DESC',
   'order'     => ++$order,
+  'sort'      => [qw(time cnt size)],
 };
+
+=cu
+$config{'queries'}{'queries top tth new'} ||= {%{$config{'queries'}{'queries top tth'}}};
+local %_ = 
+(
+'ORDER BY'=> 'time DESC',
+  'desc'      => { 'ru' => 'Популярные новинки', 'en' => 'Pop new' },
+  'graph' => 0,
+  'show'      => [qw(n time cnt string filename size tth )],
+
+  'order'     => ++$order,
+)          ;
+$config{'queries'}{'queries top tth new'}{$_}=$_{$_} for keys %_;
+=cut
+
 $config{'queries'}{'queries top string'} ||= {
   'main'    => 1,
   'periods' => 1,
   ( !$config{'use_graph'} ? ( 'class' => 'half' ) : ( 'graph' => 1 ) ),
   'group_end' => 1,
-  'show'      => [qw(cnt string)],
+  'show'      => [qw(n cnt string)],
   'desc'      => { 'ru' => 'Чаще всего ищут', 'en' => 'Most searched' },
   'SELECT'    => 'string, COUNT(*) as cnt',
   'FROM'      => 'queries',
@@ -185,7 +204,7 @@ $config{'queries'}{'queries string last'} ||= {
   'class'    => 'half',
   'desc'     => { 'ru' => 'Сейчас ищут', 'en' => 'last searches' },
   'FROM'     => 'queries',
-  'show'     => [qw(time hub nick ip string )],
+  'show'     => [qw(n time hub nick ip string )],
   'SELECT'   => '*',
   'WHERE'    => ['queries.string != ""'],
   'ORDER BY' => 'queries.time DESC',
@@ -196,7 +215,7 @@ $config{'queries'}{'queries tth last'} ||= {
   'desc'      => { 'ru' => 'Сейчас скачивают', 'en' => 'last downloads' },
   'class'     => 'half',
   'group_end' => 1,
-  'show'      => [qw(time hub nick ip filename size tth)],
+  'show'      => [qw(n time hub nick ip filename size tth)],
   'SELECT' =>
 '*, (SELECT string FROM results WHERE queries.tth=results.tth LIMIT 1) AS string, (SELECT filename FROM results WHERE queries.tth=results.tth LIMIT 1) AS filename, (SELECT size FROM results WHERE queries.tth=results.tth LIMIT 1) AS size',
   'WHERE'    => ['tth != ""'],
@@ -207,7 +226,7 @@ $config{'queries'}{'results top'} ||= {
   'main'    => 1,
   'periods' => 1,
   #( !$config{'use_graph'} ? () : ( 'graph' => 1 ) ),
-  'show'     => [qw(cnt string filename size tth)],                                                 #time
+  'show'     => [qw(n cnt string filename size tth)],                                               #time
   'desc'     => { 'ru' => 'Распространенные файлы', 'en' => 'Most stored' },
   'SELECT'   => '*, COUNT(*) as cnt',
   'FROM'     => 'results',
@@ -219,7 +238,7 @@ $config{'queries'}{'results top'} ||= {
 $config{'queries'}{'users top'} ||= {
   'main'     => 1,
   'class'    => 'half',
-  'show'     => [qw(time hub nick size online )],
+  'show'     => [qw(n time hub nick size online )],
   'SELECT'   => '*',
   'FROM'     => 'users',
   'ORDER BY' => 'size DESC',
@@ -229,7 +248,7 @@ $config{'queries'}{'users online'} ||= {
   'main'      => 1,
   'class'     => 'half',
   'group_end' => 1,
-  'show'      => [qw(time hub nick size online )],
+  'show'      => [qw(n time hub nick size online )],
   'SELECT'    => '*',
   'FROM'      => 'users',
   'WHERE'     => ['online > 0'],
@@ -240,7 +259,7 @@ $config{'queries'}{'results top users'} ||= {
   'main'      => 1,
   'periods'   => 1,
   'class'     => 'half',
-  'show'      => [qw(cnt hub nick share)],                                                                #time
+  'show'      => [qw(n cnt hub nick share)],                                                              #time
   'desc'      => { 'ru' => 'Чаще всего скачивают с', 'en' => 'they have anything' },
   'SELECT'    => '*, users.size as share, COUNT(*) as cnt',
   'FROM'      => 'results',
@@ -254,7 +273,7 @@ $config{'queries'}{'results top users tth'} ||= {
   'main'      => 1,
   'periods'   => 1,
   'class'     => 'half',
-  'show'      => [qw(cnt hub nick  share)],                                                 #time
+  'show'      => [qw(n cnt hub nick  share)],                                               #time
   'desc'      => { 'ru' => 'У них найдется все', 'en' => 'they know 42' },
   'SELECT'    => '*, users.size as share, COUNT(*) as cnt',
   'FROM'      => 'results',
@@ -268,7 +287,7 @@ $config{'queries'}{'queries top users'} ||= {
   'main'      => 1,
   'periods'   => 1,
   'class'     => 'half',
-  'show'      => [qw(cnt hub nick share)],                                                   #time
+  'show'      => [qw(n cnt hub nick share)],                                                 #time
   'desc'      => { 'ru' => 'Больше всех ищут', 'en' => 'they search "42"' },
   'SELECT'    => '*, users.size as share, COUNT(*) as cnt',
   'FROM'      => 'queries',
@@ -283,7 +302,7 @@ $config{'queries'}{'queries top users tth'} ||= {
   'periods'   => 1,
   'class'     => 'half',
   'group_end' => 1,
-  'show'      => [qw(cnt hub nick share)],                                                                     #time
+  'show'      => [qw(n cnt hub nick share)],                                                                   #time
   'desc'      => { 'ru' => 'Больше всех скачивают', 'en' => 'they have unlimited hdds' },
   'SELECT'    => '*, users.size as share, COUNT(*) as cnt',
   'FROM'      => 'queries',
@@ -296,12 +315,12 @@ $config{'queries'}{'queries top users tth'} ||= {
 $config{'queries'}{'hubs top'} ||= {
   'main'  => 1,
   'class' => 'half',
-  'show'  => [qw(time hub users size )],    #time
-  #'SELECT'         => 'DISTINCT hub , MAX(size), h2.*', # DISTINCT hub,size,time
-  #!'SELECT' => '*, hub as h1'
+  'show'  => [qw(n time hub users size )],    #time
+                                              #'SELECT'         => 'DISTINCT hub , MAX(size), h2.*', # DISTINCT hub,size,time
+                                              #!'SELECT' => '*, hub as h1'
   , #DISTINCT DISTINCT hub,size,time                                                    'FROM'     => 'hubs',  'LEFT JOIN' => 'hubs as h2 USING (hub,size)','GROUP BY' => 'hubs.hub',  'ORDER BY' => 'h2.size DESC',
-  #'WHERE'    => ['time = (SELECT time FROM hubs WHERE hub=h ORDER BY size DESC LIMIT 1)'],
-  #!'WHERE' => ['time = (SELECT time FROM hubs WHERE hub=h1 ORDER BY size DESC LIMIT 1)'],
+    #'WHERE'    => ['time = (SELECT time FROM hubs WHERE hub=h ORDER BY size DESC LIMIT 1)'],
+    #!'WHERE' => ['time = (SELECT time FROM hubs WHERE hub=h1 ORDER BY size DESC LIMIT 1)'],
   'SELECT' => '*', 'WHERE' => ['time = (SELECT time FROM hubs /*WHERE hub=h1*/ ORDER BY size DESC LIMIT 1)'],
   #'GROUP BY' => 'hubs.hub',
   #'ORDER BY' => 'size DESC',
@@ -324,7 +343,7 @@ $config{'queries'}{'hubs now'} ||= {
   #'group_end' => 1,
   'group_end' => 1,
   'class'     => 'half',
-  'show'      => [qw(time hub users size)],
+  'show'      => [qw(n time hub users size)],
   'FROM'      => 'hubs',
   'SELECT'    => '*',
   'WHERE'     => ['time = (SELECT time FROM hubs ORDER BY time DESC LIMIT 1)'],
@@ -334,7 +353,7 @@ $config{'queries'}{'hubs now'} ||= {
 $config{'queries'}{'results ext'} ||= {
   'main'     => 1,
   'class'    => 'half',
-  'show'     => [qw(cnt ext size)],
+  'show'     => [qw(n cnt ext size)],
   'desc'     => { 'ru' => 'Расширения', 'en' => 'by extention' },
   'SELECT'   => '*, SUM(size) as size , COUNT(*) as cnt',
   'FROM'     => 'results',
@@ -345,7 +364,7 @@ $config{'queries'}{'results ext'} ||= {
 };
 $config{'queries'}{'counts'} ||= {
   'main'      => 1,
-  'show'      => [qw(tbl cnt)],
+  'show'      => [qw(n tbl cnt)],
   'class'     => 'half',
   'group_end' => 1,
   'sql'       => (
@@ -359,7 +378,7 @@ $config{'queries'}{'chat top'} ||= {
   'main'     => 1,
   'periods'  => 1,
   'class'    => 'half',
-  'show'     => [qw(cnt hub nick)],
+  'show'     => [qw(n cnt hub nick)],
   'desc'     => { 'ru' => 'Находки для шпиона', 'en' => 'top flooders' },
   'SELECT'   => '*, COUNT(*) as cnt',
   'FROM'     => 'chat',
@@ -374,14 +393,14 @@ $config{'queries'}{'chat last'} ||= {
   'desc'           => { 'ru' => 'Сейчас в чате', 'en' => 'online' },
   'group_end'      => 1,
   'no_string_link' => 1,
-  'show'           => [qw(time hub nick string)],
+  'show'           => [qw(n time hub nick string)],
   'SELECT'         => '*',
   'FROM'           => 'chat',
   'ORDER BY'       => 'time DESC',
   'order'          => ++$order,
 };
 $config{'queries'}{'string'} ||= {
-  'show'          => [qw(cnt string  filename size tth)],
+  'show'          => [qw(n cnt string  filename size tth)],
   'no_query_link' => 1,
   'SELECT'        => '*, COUNT(*) as cnt',
   'WHERE'         => ['tth != ""'],
@@ -392,13 +411,13 @@ $config{'queries'}{'string'} ||= {
 $config{'queries'}{'tth'} ||= {
   %{ $config{'queries'}{'string'} },
   'desc'     => { 'ru' => 'Имена файла', 'en' => 'various filenames' },
-  'show'     => [qw(cnt string filename size tth)],
+  'show'     => [qw(n cnt string filename size tth)],
   'GROUP BY' => 'filename',
 };
 $config{'queries'}{'filename'} ||= {
   %{ $config{'queries'}{'string'} },
   'desc'     => { 'ru' => 'Разное содержимое', 'en' => 'various tth' },
-  'show'     => [qw(cnt string filename size tth)],
+  'show'     => [qw(n cnt string filename size tth)],
   'GROUP BY' => 'tth',
 };
 psmisc::configure( 0, 0, 0, 1 );
@@ -447,4 +466,109 @@ sub make_query {
 }
 $db ||= pssql->new( %{ $config{'sql'} || {} }, );
 ( $tq, $rq, $vq ) = $db->quotes();
+
+#=todo
+{
+ my $self = $db;
+
+
+  $self->{'array_hash_repl'} = sub {
+    my $self = shift;
+    my $r = shift;
+    return {} if  !$self->{'sth'} or !$r;
+      my $i = -1;
+      my %uniq;
+      $r = { map {++$i; $_=>($r->[$i] ? $uniq{$_} = $r->[$i] : $uniq{$_})  } @{$self->{'sth'}{'NAME'}} };
+    return $r;
+  };
+  $self->{'array_hash_add'} = sub {
+    my $self = shift;
+    my $r = shift;
+    return {} if  !$self->{'sth'} or !$r;
+      my $i = -1;
+      my %uniq;
+      $r = { map {++$i; $_=>($uniq{$_} ||= $r->[$i])  } @{$self->{'sth'}{'NAME'}} };
+    return $r;
+  };
+  $self->{'fetch_hash'} = sub {
+    my $self = shift;
+    #return $self->{'sth'}->fetchrow_hashref();
+    local $_ = $self->{'sth'}->fetchrow_arrayref() || return;
+#print 'A:',Dumper $self->{'sth'}{'NAME'},$_;
+    #return $self->array_hash_add( $_ );
+    return $self->array_hash_repl( $_ );
+  };
+
+  $self->{'array_to_hash'} = sub {
+    my $self = shift;
+  };
+
+  $self->{'line'} = sub {
+    my $self = shift;
+    return {} if @_ and $self->prepare(@_);
+    return {} if !$self->{'sth'} or $self->{'sth'}->err;
+    my $tim = psmisc::timer();
+    local $_ =
+      scalar( psmisc::cp_trans_hash( $self->{'codepage'}, $self->{'cp_out'}, ( 
+      #$self->array_to_hash( $self->{'sth'}->fetchrow_arrayref() )
+      $self->fetch_hash()
+      #$self->{'sth'}->fetchrow_hashref() || {} 
+      ) ) );
+    $self->{'queries_time'} += $tim->();
+    $self->log(
+      'dmp', 'line:[', @_, '] = ', scalar keys %$_,
+      ' per', psmisc::human( 'time_period', $tim->() ),
+      'err=', $self->err(),
+    ) if ( caller(2) )[0] ne 'pssql';
+    return $_;
+  }if $self->{'driver'} =~ /mysql/;
+
+
+  $db->{'query'} = sub {
+    my $self = shift;
+    my $tim  = psmisc::timer();
+    my @hash;
+    for my $query (@_) {
+      next unless $query;
+      local $self->{'explain'} = 0, $self->query_log( $self->{'EXPLAIN'} . ' ' . $query )
+        if $self->{'explain'} and $self->{'EXPLAIN'};
+      local $_ = $self->line($query);
+      next unless keys %{$_};
+      push( @hash, $_ );
+      next unless $self->{'sth'} and keys %{$_};
+      my $tim = psmisc::timer();
+      #$self->log("Db[",%$_,"]($self->{'codepage'}, $self->{'cp_out'})"),
+      #print 'name', Dumper $self->{sth}{'NAME'};
+      #while ( my $r = $self->{'sth'}->fetchrow_arrayref()  ) {
+      while ( my $r = $self->fetch_hash() ) {
+#print 'H:',Dumper $r;
+            
+
+      #$r = $self->array_to_hash($r);
+#print "r[$r]", Dumper $r;
+      push( @hash, scalar psmisc::cp_trans_hash( $self->{'codepage'}, $self->{'cp_out'}, $r ) );
+      #print Dumper \%uniq;
+      }
+        #$self->log("Da[",%$_,"]"),
+        #while ( $_ = $self->{'sth'}->fetchrow_hashref() );
+#print 'name', Dumper $self->{sth}{'NAME'}, $self->{sth}{'NAME_hash'} ,Dumper @hash;
+      $self->{'queries_time'} += $tim->();
+    }
+    $self->log(
+      'dmp', 'query:[', @_, '] = ', scalar @hash, ' per', psmisc::human( 'time_period', $tim->() ),
+      'rps', psmisc::human( 'float', ( scalar @hash ) / ( $tim->() || 1 ) ),
+      'err=', $self->err()
+    );
+    $self->{'dbirows'} = scalar @hash if $self->{'no_dbirows'} or $self->{'dbirows'} <= 0;
+    #$self->query_print($_) for @hash;
+    #$self->log('qcp', $self->{'codepage'});
+    if ( $self->{'codepage'} eq 'utf-8' ) {
+      for (@hash) { utf8::decode $_ for %$_; }
+    }
+    return wantarray ? @hash : \@hash;
+  } if $self->{'driver'} =~ /mysql/;
+}
+#=cut
+
+
 1;

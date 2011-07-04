@@ -1,4 +1,4 @@
-#$Id: filelist.pm 755 2011-03-07 01:43:07Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/filelist.pm $
+#$Id: filelist.pm 814 2011-06-29 17:28:45Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/filelist.pm $
 
 =head1 SYNOPSIS
 
@@ -7,14 +7,17 @@ generate dc++ xml filelist
 perl filelist.pm /path/to/dir
 
 =cut
+
 package    # no cpan
   Net::DirectConnect::filelist;
 use 5.10.0;
 use strict;
 use utf8;
-use Encode;
+use warnings;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 755 $' ) )[1];
+use Encode;
+use Net::DirectConnect::adc;
+our $VERSION = ( split( ' ', '$Revision: 814 $' ) )[1];
 
 =tofix
 $0 =~ m|^(.+)[/\\].+?$|;                #v0
@@ -30,6 +33,7 @@ use base 'Net::DirectConnect';
       "; #use Net::DirectConnect; 
       #psmisc::use_try ('Net::DirectConnect');
 =cut
+
 use base 'Net::DirectConnect';
 #use lib '../../../examples/stat/pslib';    # REMOVE
 #use lib 'stat/pslib';                      # REMOVE
@@ -39,7 +43,7 @@ use pssql;     # REMOVE
 our %config;
 *config = *main::config;
 $config{ 'log_' . $_ } //= 0 for qw (dmp dcdmp dcdbg trace);
-$config{ 'log_' . $_ } //= 1  for qw (screen default);
+$config{ 'log_' . $_ } //= 1 for qw (screen default);
 Net::DirectConnect::use_try 'Sys::Sendfile' unless $^O =~ /win/i;
 my ( $tq, $rq, $vq );
 
@@ -61,7 +65,7 @@ sub new {
   #$self->{$_} = $_{$_} for keys %_;
   $self->func(@_);
   $self->init_main(@_);
-  $self->{log} = sub (@) {
+  $self->{'log'} = sub (@) {
     my $dc = ref $_[0] ? shift : $self || {};
     #print "PL[$_[0]]";
     psmisc::printlog shift(), "[$dc->{'number'}]", @_,;
@@ -94,34 +98,52 @@ sub new {
 ##$config{share_root} //= '';
   $self->{'share'} = [ $self->{'share'} ] unless ref $self->{'share'};
   tr{\\}{/} for @{ $self->{'share'} || [] };
-  #$self->{'sql'} //= {
-  local %_ = (
-    'driver' => 'sqlite',
-    #'dbname' => 'files',
-    'database' => 'files',
-    #'auto_connect'        => 1,
-    #'log' => sub { shift if ref $_[0]; $self->log(@_) if $self },
-    'log'=>$self->{'log'},
-    #'cp_in'               => 'cp1251',
-    'connect_tries' => 0, 'connect_chain_tries' => 0, 'error_tries' => 0, 'error_chain_tries' => 0,
-    #insert_by => 1000,
-    #nav_all => 1,
-    'table' => {
+  Net::DirectConnect::adc::func($self);
+  $self->ID_get();
+  #$self->log('idr:', $self->{'INF'}{'ID'});
+  #$self->ID_get();
+  unless ( $self->{no_sql} ) {
+
+      local %_ = (
+      'driver' => 'sqlite',
+      #'dbname' => 'files',
+      'database' => 'files',
+      #'auto_connect'        => 1,
+      #'log' => sub { shift if ref $_[0]; $self->log(@_) if $self },
+      'log' => $self->{'log'},
+      #'cp_in'               => 'cp1251',
+      'connect_tries' => 0, 'connect_chain_tries' => 0, 'error_tries' => 0, 'error_chain_tries' => 0,
+      #insert_by => 1000,
+      #nav_all => 1,
+      #{}
+      #},
+    );
+     $self->{sql}{$_} //= $_{$_} for keys %_ ;
+    my ($short) = $self->{sql}{'driver'} =~ /mysql/;
+	    
+    my %table = (
       'filelist' => {
-        'path' => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 255, 'default' => '', 'index' => 1, 'primary' => 1 ),
-        'file' => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 255, 'default' => '', 'index' => 1, 'primary' => 1 ),
+        'path' => pssql::row( undef, 'type' => 'VARCHAR', 'length' => ($short ? 150 : 255), 'default' => '', 'index' => 1, 'primary' => 1 ),
+        'file' => pssql::row( undef, 'type' => 'VARCHAR', 'length' => ($short ? 150 : 255), 'default' => '', 'index' => 1, 'primary' => 1 ),
         'tth'  => pssql::row( undef, 'type' => 'VARCHAR', 'length' => 40,  'default' => '', 'index' => 1 ),
         'size' => pssql::row( undef, 'type' => 'BIGINT',  'index'  => 1, ),
         'time' => pssql::row( 'time', ),    #'index' => 1,
                                             #'added'  => pssql::row( 'added', ),
                                             #'exists' => pssql::row( undef, 'type' => 'SMALLINT', 'index' => 1, ),
       },
-      }
-      #},
-    ),
-    ( map { $self->{sql}{$_} //= $_{$_} } keys %_ ), $self->{db} ||= pssql->new( %{ $self->{'sql'} || {} }, ),
-    ( $tq, $rq, $vq ) = $self->{db}->quotes(),
-    unless $self->{no_sql};
+    );
+    if ( $self->{db} ) {
+      $self->{db}{table}{$_} = $table{$_} for keys %table;
+    }
+      local %_ = (
+      'table' => \%table,
+    );
+     $self->{sql}{$_} //= $_{$_} for keys %_ ;
+    #warn ('sqlore:',Data::Dumper::Dumper $self->{'sql'}, \%_),
+
+    $self->{db} ||= pssql->new( %{ $self->{'sql'} || {} }, );
+    ( $tq, $rq, $vq ) = $self->{db}->quotes();
+  }
   $self->{filelist_make} //= sub {
     my $self = shift if ref $_[0];
     my $notth;
@@ -139,8 +161,10 @@ sub new {
     };
     local $SIG{INT} = sub { ++$stopscan; ++$interrupted; $self->log( 'warn', "INT rec, stopscan" ) };
     local $SIG{INFO} = sub { $printinfo->(); };
+    #$self->{'INF'}{'ID'}
     psmisc::file_rewrite $self->{files}, qq{<?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<FileListing Version="1" Base="/" Generator="Net::DirectConnect $Net::DirectConnect::VERSION">
+<FileListing Version="1" }, ( !$self->{'INF'}{'ID'} ? () : qq{CID="$self->{'INF'}{'ID'}" } ),
+      qq{Base="/" Generator="Net::DirectConnect $Net::DirectConnect::VERSION">
 };
 #<FileListing Version="1" CID="KIWZDBLTOFWIQOT6NWP7UOPJVDE2ABYPZJGN5TZ" Base="/" Generator="Net::DirectConnect $Net::DirectConnect::VERSION">
 #};
@@ -161,6 +185,7 @@ sub new {
         if $f->{'tth'};
       $self->{share_full}{ $f->{'file'} } ||= $f->{'full_local'};
 =cut
+
   #$self->log 'set share', "[$f->{file}], [$f->{tth}] = [$self->{share_full}{ $f->{tth} }],[$self->{share_full}{ $f->{file} }]";
   #$self->log Dumper $self->{share_full};
       }
@@ -242,7 +267,7 @@ sub new {
                 . " AND ${rq}time${rq}="
                 . $self->{db}->quote( $f->{time} )
                 . " LIMIT 1" );
-            #$self->log ('already scaned', $indb->{size}),
+            #$self->log ('dev', 'already scaned', $indb->{size}),
             $filelist_line->( { %$f, %$indb } ), next, if $indb->{size} ~~ $f->{size};
             #$db->select('filelist', {path=>$f->{path},file=>$f->{file}, });
             #$self->log Dumper ;
@@ -348,6 +373,8 @@ sub new {
     #$self->share_changed();
   };
   $self->{share_changed} //= sub {
+    my $self = shift if ref $_[0];
+    #$self->log('dev', "share_changed");
     if ( $self->{'status'} eq 'connected' ) {
       if ( $self->{adc} ) { $self->cmd( 'I', 'INF', undef, 'SS', 'SF' ); }
       else                { $self->cmd('MyINFO'); }
@@ -373,6 +400,7 @@ sub new {
     $self->log ".done:", ( scalar keys %{ $self->{share_full} } ), "\n";
   }
 =cut
+
     #$self->log( "filelist_load try", $global{shareloaded}, -s $self->{files}, );    #ref $_[0]
     return
       if !$self->{files}
@@ -386,7 +414,6 @@ sub new {
     local $/ = '<';
     %{ $self->{share_full} } = %{ $self->{share_tth} } = ();
     my $dir;
-
     while (<$f>) {
       #<Directory Name="distr">
       #<File Name="3470_2.x.rar" Size="18824575" TTH="CL3SVS5UWWSAFGKCQZTMGDD355WUV2QVLNNADIA"/>
@@ -443,7 +470,12 @@ sub new {
       #[10, $self->{filelist_scan}],
       $self->{filelist_scan},
       our $sharescan_sub__ ||= sub {
-        $self->log( 'info','filelist actual age seconds:', ( time - $^T + 86400 * -M $self->{files} ), '<', $self->{filelist_scan} );
+        $self->log(
+          'info',
+          'filelist actual age seconds:',
+          ( time - $^T + 86400 * -M $self->{files} ),
+          '<', $self->{filelist_scan}
+        );
         return
           if -e $self->{files}
             and -s $self->{files} > 200
@@ -490,10 +522,13 @@ return unless $name;
           if $tth;
         $self->{share_full}{$file} ||= $full_local;
 =cut
-    $self->log( 'dev', 'adding downloaded file to share', $full, $tth );
-    $self->share_add_file( $full, $tth ) unless $self->{'file_recv_filelist'};    # unless $self->{'no_auto_share_downloaded'};
-          #TODO          $self->{db}->insert_hash( 'filelist', $f ) if !$self->{no_sql} and $f->{tth};
-    $self->share_changed();
+
+    $self->log( 'dev', 'adding downloaded file to share', $full, $tth ),
+    $self->share_add_file( $full, $tth ), 
+    $self->share_changed()
+      if !$self->{'file_recv_filelist'} and !$self->{'no_auto_share_downloaded'};  # unless $self->{'no_auto_share_downloaded'};
+         #TODO          $self->{db}->insert_hash( 'filelist', $f ) if !$self->{no_sql} and $f->{tth};
+    ;
     };
   $self->filelist_load() unless $standalone;    # (caller)[0] ~~ __PACKAGE__;
                                                 #$self->log('initok');

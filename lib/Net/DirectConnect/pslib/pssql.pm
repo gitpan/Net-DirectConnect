@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: pssql.pm 4548 2011-03-07 01:32:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/pssql.pm $
+#$Id: pssql.pm 4624 2011-05-26 18:10:55Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/pssql.pm $
 
 =copyright
 PRO-search sql library
@@ -56,7 +56,7 @@ package    #no cpan
 use strict;
 use utf8;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 4548 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4624 $' ) )[1];
 #use locale;
 use DBI;
 use Data::Dumper;    #dev only
@@ -76,7 +76,7 @@ use psmisc;
 #our ( %config, %work, %stat, %static, $param, );
 use base 'psconn';
 our $AUTOLOAD;
-#our $VERSION = ( split( ' ', '$Revision: 4548 $' ) )[1];
+#our $VERSION = ( split( ' ', '$Revision: 4624 $' ) )[1];
 my ( $tq, $rq, $vq );
 my ( $roworder, $tableorder, );
 our ( %row, %default );
@@ -140,8 +140,7 @@ BEGIN {
       'IF EXISTS'           => 'IF EXISTS',
       'REPLACE'             => 'REPLACE',
       'AUTO_INCREMENT'      => 'AUTOINCREMENT',
-      'ANALYZE'                 => 'ANALYZE',
-
+      'ANALYZE'             => 'ANALYZE',
       'err_ignore'          => [qw( 1 )],
       'error_type'          => sub {                                 #TODO!!!
         my $self = shift;
@@ -206,26 +205,26 @@ BEGIN {
       'dbi'                     => 'mysql',
       'user'                    => 'root',
       'port'                    => 9306,
-      'params'                  => [qw(host port )],    # perldoc DBD::mysql
+      'params'                  => [qw(host port )],                                  # perldoc DBD::mysql
       'sphinx'                  => 1,
       'value quote'             => "'",
       'no_dbirows'              => 1,
       'no_column_prepend_table' => 1,
       'no_join'                 => 1,
-      'OPTION'			=> 'OPTION',
-      'option'			=> {'max_query_time'=>20000, 'cutoff'=>1000},
+      'OPTION'                  => 'OPTION',
+      'option'                  => { 'max_query_time' => 20000, 'cutoff' => 1000 },
     },
     'mysql5' => {
-      'dbi'            => 'mysql',
-      'user'           => 'root',
-      'use_drh'        => 1,
-          'mysql_enable_utf8' => 1,
-      'varchar_max'    => 65530,
-      'unique_max'     => 1000,
-      'primary_max'    => 999,
-      'fulltext_max'   => 1000,
-      'err_connection' => [qw( 1 1040 1053 1129 1213 1226 2002 2003 2006 2013 )],
-      'err_fatal'      => [qw( 1016 1046 1251 )],                                   # 1045,
+      'dbi'               => 'mysql',
+      'user'              => 'root',
+      'use_drh'           => 1,
+      'mysql_enable_utf8' => 1,
+      'varchar_max'       => 65530,
+      'unique_max'        => 1000,
+      'primary_max'       => 999,
+      'fulltext_max'      => 1000,
+      'err_connection'    => [qw( 1 1040 1053 1129 1213 1226 2002 2003 2006 2013 )],
+      'err_fatal'         => [qw( 1016 1046 1251 )],                                   # 1045,
       'err_syntax'  => [qw( 1054 1060 1064 1065 1067 1071 1096 1103 1118 1148 1191 1364 1366 1406 1439)],  #maybe all 1045..1075
       'err_repair'  => [qw( 126 130 144 145 1034 1062 1194 1582 )],
       'err_retry'   => [qw( 1317 )],
@@ -353,7 +352,9 @@ sub cmd {
   my @ret =
     ref( $self->{$cmd} ) eq 'CODE'
     ? ( wantarray ? ( $self->{$cmd}->( $self, @_ ) ) : scalar $self->{$cmd}->( $self, @_ ) )
-    : ( exists $self->{$cmd} ? ( ( defined( $_[0] ) ? ( $self->{$cmd} = $_[0] ) : ( $self->{$cmd} ) ) ) : (undef) );
+    : ( exists $self->{$cmd} ? ( ( defined( $_[0] ) ? ( $self->{$cmd} = $_[0] ) : ( $self->{$cmd} ) ) ) : 
+    (!$self->{'dbh'} ? () : $self->{'dbh'}->can($cmd) ? $self->{'dbh'}->$cmd(@_) : exists $self->{'dbh'}{$cmd} ? 
+    ( ( defined( $_[0] ) ? ( $self->{'dbh'}->{$cmd} = $_[0] ) : ( $self->{'dbh'}->{$cmd} ) ) ) : undef) );
   $self->{'handler'}{$cmd}->( $self, \@_, \@ret ) if $self->{'handler'}{$cmd};
   return wantarray ? @ret : $ret[0];
 }
@@ -418,6 +419,7 @@ sub init {
       'PrintWarn'   => 0,
       'HandleError' => sub {
         $self->log( 'dev', 'HandleError', @_, $DBI::err, $DBI::errstr );
+        #$self->{'err'} = "$DBI::err, $DBI::errstr";
         #psmisc::caller_trace(15)
       },
     },
@@ -450,7 +452,6 @@ sub init {
     'err'                => 0,
     'insert_cached_time' => 60,
     'auto_repairs_max'   => 2,
-
     @_,
   );
   @{$self}{ keys %_ } = values %_;
@@ -525,7 +526,8 @@ sub calc {
   local $_ = $self->{ $self->{'codepage'} } || $self->{'codepage'};
   $self->{'cp'} = $_;
   $self->{'cp_set_names'} ||= $_;
-  $self->{'cp_int'} ||= 'cp1251';    # internal
+  #$self->{'cp_int'} ||= 'cp1251';    # internal
+  $self->{'cp_int'} ||= 'utf-8';    # internal
   $self->cp_client( $self->{'codepage'} );
 }
 
@@ -712,9 +714,9 @@ sub functions {
       push( @hash, $_ );
       next unless $self->{'sth'} and keys %{$_};
       my $tim = psmisc::timer();
-     #$self->log("Db[",%$_,"]($self->{'codepage'}, $self->{'cp_out'})"),
+      #$self->log("Db[",%$_,"]($self->{'codepage'}, $self->{'cp_out'})"),
       push( @hash, scalar psmisc::cp_trans_hash( $self->{'codepage'}, $self->{'cp_out'}, $_ ) ),
-     #$self->log("Da[",%$_,"]"),
+        #$self->log("Da[",%$_,"]"),
         while ( $_ = $self->{'sth'}->fetchrow_hashref() );
       $self->{'queries_time'} += $tim->();
     }
@@ -725,6 +727,10 @@ sub functions {
     );
     $self->{'dbirows'} = scalar @hash if $self->{'no_dbirows'} or $self->{'dbirows'} <= 0;
     #$self->query_print($_) for @hash;
+    #$self->log('qcp', $self->{'codepage'});
+    if ( $self->{'codepage'} eq 'utf-8' ) {
+      for (@hash) { utf8::decode $_ for %$_; }
+    }
     return wantarray ? @hash : \@hash;
   };
   $self->{'query_log'} ||= sub {
@@ -812,41 +818,41 @@ tries
         or $self->{'fatal'}
         or ( $self->{'error_tries'} and $self->{'errors'} > $self->{'error_tries'} )
         or ( $self->{'error_chain_tries'} and $self->{'errors_chain'} > $self->{'error_chain_tries'} );
-    $self->log( 'err', 'err_parse: IMPOSIBLE! !$err and !$self->{sth}' ), $self->err(1), return 0
+    $self->log( 'err', 'err_parse: IMPOSIBLE! !$err and !$self->{sth}' ), $self->err('sth'), return 0
       if $sth and ( !$err and !$self->{'sth'} );
     $self->{'errors_chain'} = 0, return $self->err(0) if !$err and $self->{'dbh'};
     ++$self->{'errors_chain'};
     ++$self->{'errors'};
     $self->log( 'err',
       "SQL: error[$err,$errstr,$errtype,$state] on executing {$$cmd} [sleep:$self->{'error_sleep'}] dbh=[$self->{'dbh'}]" );
-    $self->log( 'dev', "err_parse st3 ret0 fatal=$errtype" ), $self->err(1), return (0)
+    $self->log( 'dev', "err_parse st3 ret0 fatal=$errtype" ), $self->err($errtype), return (0)
       if $errtype and grep { $errtype eq $_ } qw(fatal syntax ignore);
     $self->log( 'dev', "err_parse sleep($self->{'error_sleep'}), ret1 ", );
     $self->sleep( $self->{'error_sleep'}, 'sql_parse' ) if $self->{'error_sleep'};
-    $self->log( 'dev', "err_parse st3 ret1 fatal=$errtype" ), return $self->err(1)
+    $self->log( 'dev', "err_parse st3 ret1 fatal=$errtype" ), return $self->err($errtype)
       if $errtype and grep { $errtype eq $_ } qw(retry);
 
     if ( $errtype eq 'install_db' and $self->{'auto_install_db'}-- > 0 ) {
       $self->log( 'info', "SQL: trying automatic install db" );
       $self->create_databases(@_);
-      return $self->err(1);
+      return $self->err($errtype);
     }
-    $self->log( 'info', "SQL: trying reconnect[$self->{'connected'}]" ), $self->reconnect(), return $self->err(1)
+    $self->log( 'info', "SQL: trying reconnect[$self->{'connected'}]" ), $self->reconnect(), return $self->err('dbh')
       if !$self->{'dbh'};
     if ( $errtype eq 'install' ) {
       if ( $self->{'auto_install'}-- > 0 ) {
         $self->log( 'dev',  "SQL:install err " );
         $self->log( 'info', "SQL: trying automatic install" );
         $self->install();
-        return $self->err(1);
+        return $self->err($errtype);
       } else {
         $self->log( 'dev', "SQL:NOinstall err " );
-        $self->err(1);
+        $self->err($errtype);
         return (0);
       }
     }
     $self->log( 'err', "SQL: connection error, trying reconnect and retry last query" ), $self->dropconnect(),
-      $self->reconnect(), return $self->err(1)
+      $self->reconnect(), return $self->err($errtype)
       if $errtype eq 'connection';
     if ( $self->{'auto_repair'} and $errtype eq 'repair' ) {
       my ($repair) = $errstr =~ /'(?:.*[\\\/])*(\w+)(?:\.my\w)?'/i;
@@ -864,11 +870,11 @@ tries
           $self->repair($repair);
           $self->{'rep_ext'} = $self->{'rep_frm'} = 1;
           $self->{'rep_quick'} = 0;
-          return $self->err(1);
+          return $self->err($errtype);
         }
       }
     }
-    $self->log( 'dev', "err_parse st2 ret1 no dbh", $err, $errstr ), return $self->err(1) if !$self->{'dbh'};
+    $self->log( 'dev', "err_parse st2 ret1 no dbh", $err, $errstr ), return $self->err('dbh') if !$self->{'dbh'};
     $self->log( 'dev', "err_parse unknown error ret($self->{'err_retry_unknown'}), end: [$err], [$errstr], [$errtype]" );
     return $self->err( $self->{'err_retry_unknown'} );
   };
@@ -1149,6 +1155,7 @@ tries
       #push( @subq, "UNIQUE $rq$_$rq  (" . join( ',',  @{ $unique{$_} } ) . ")" )   for grep @{ $unique{$_} },   keys %unique;
     }
     #push(
+    #$self->log('dev', "[cp:$self->{'cp'}; dcs:$self->{'DEFAULT CHARACTER SET'}]");
     #@ret,
     return
       #print
@@ -1163,7 +1170,7 @@ tries
         . ( join ' ', '', grep { $_ } $self->{'table_constraint'}, $self->{'table_param'}{$tab}{'table_constraint'} ) . ") "
         . $self->{'table options'} . ' '
         . $self->{'table_param'}{$tab}{'table options'}
-        . ( $self->{'cp'} and $self->{'DEFAULT CHARACTER SET'} ? " $self->{'DEFAULT CHARACTER SET'} $vq$self->{'cp'}$vq " : '' )
+        . ( $self->{'cp'} && $self->{'DEFAULT CHARACTER SET'} ? " $self->{'DEFAULT CHARACTER SET'} $vq$self->{'cp'}$vq " : '' )
         . ';' ), @do;
     #return undef;
   };
@@ -1258,17 +1265,17 @@ tries
       #} keys %{ $self->{'table'}{$table} }
   };
   $self->{'insert_cached'} ||= sub {
-    my $self = shift;
-    my $table = shift || $self->{'current_table'};
+    my $self         = shift;
+    my $table        = shift;
+    my $table_insert = $table || $self->{'current_table'};
 #$self->log('dev','insert_cached', Dumper(\@_), 'by', ( $self->{'table_param'}{$table}{'insert_by'} or $self->{'insert_by'} ), 'bytime=', $self->{'insert_cached_time'});
     my @dummy;
     #my ( $tq, $rq, $vq ) = sql_quotes();
-    ++$self->{'table_updated'}{$table};
-    ++$self->{'inserts'};
-    push( @{ $self->{'insert_buffer'}{$table} }, \@_ ) if $table and scalar @_;
+    ++$self->{'inserts'}, ++$self->{'table_updated'}{$table_insert}, push( @{ $self->{'insert_buffer'}{$table_insert} }, \@_ )
+      if $table_insert and @_;
     for my $table ( $table ? ($table) : ( keys %{ $self->{'insert_buffer'} } ) ) {
-      $self->{'insert_block'}{$table} = ( $self->{'table_param'}{$table}{'insert_by'} or $self->{'insert_by'} )
-        unless defined $self->{'insert_block'}{$table};
+      $self->{'insert_block'}{$table} //= $self->{'table_param'}{$table}{'insert_by'} || $self->{'insert_by'};
+      #unless defined $self->{'insert_block'}{$table};
       #$self->log('ict', $table,int(time() - $self->{'insert_buffer_time'}{$table}));
       #$self->{'insert_buffer_time'}{$table}||=time();
       if (
@@ -1454,8 +1461,9 @@ tries
   $self->{'cut'} ||= sub {
     my $self = shift;
     return $_[0] unless $_[1];
-    return $_[0] = substr( $_[0], 0, $_[1] - ( ( $self->{'codepage'} eq 'utf-8' and $self->{'driver'} =~ /mysql/ ) ? 2 : 0 ) ),
-      ( $self->{'codepage'} eq 'utf-8' ? $_[0] =~ s/[\xD0\xD1]+$// : () );
+    #return $_[0] = substr( $_[0], 0, $_[1] - ( ( $self->{'codepage'} eq 'utf-8' and $self->{'driver'} =~ /mysql/ ) ? 2 : 0 ) ),
+    #  ( $self->{'codepage'} eq 'utf-8' ? $_[0] =~ s/[\xD0\xD1]+$// : () );
+    return $_[0] = substr( $_[0], 0, $_[1] );
   };
   #=cut
   $self->{'insert_data'} ||= sub {
@@ -1565,7 +1573,11 @@ tries
     my $table      = shift || $self->{'current_table'};
     my $search_str = shift;
     my %tparam;
-    if ( $self->{'table'}{$table}{'name'} and $self->{'table'}{$table}{'ext'} and $search_str =~ /^\s*(\S+)\.+(\S+)\s*$/ ) {
+    #if ( $self->{'table'}{$table}{'name'} and $self->{'table'}{$table}{'ext'} and $search_str =~ /^\s*(\S+)\.+(\S+)\s*$/ ) {
+    if (  $self->{'table'}{$table}{'name'}
+      and $self->{'table'}{$table}{'ext'}
+      and $search_str =~ m{^([^/|"]+[^\s/|"])\.([^/\."|]+)$} )
+    {
       %tparam = ( 'name' => $1, 'ext' => $2 );
     } elsif ( $self->{'table'}{$table}{'tiger'} and $search_str =~ /^\s*([A-Z0-9]{39})\s*$/i ) {
       %tparam = ( 'tiger' => uc $1 );
@@ -1652,13 +1664,17 @@ tries
       $search_str_add .= ' /' . $param->{ 'path' . $param_num } . '/ ';
       delete $param->{ 'path' . $param_num };
     }
-    for my $item (
-      grep( {
+    for my $item ( (
+        sort {
+          $self->{'table'}{$table}{$b}{'weight'} <=> $self->{'table'}{$table}{$a}{'weight'}
+            || $self->{'table'}{$table}{$b}{'order'} <=> $self->{'table'}{$table}{$a}{'order'}
+        } grep {
                $self->{'nav_all'}
             or $self->{'table'}{$table}{$_}{'nav_num_field'}
             or $self->{'table'}{$table}{$_}{'nav_field'}
             or $self->{'table'}{$table}{$_}{'nav_hide'}
-        } keys %{ $self->{'table'}{$table} } ),
+        } keys %{ $self->{'table'}{$table} }
+      ),
       @{ $self->{'table_param'}{$table}{'join_fields'} }
       )
     {
@@ -1936,6 +1952,13 @@ tries
     $self->{'calc_count'}->( $self, $param, $table );
     return undef;
   };
+  $self->{'can_select'} ||= sub {
+    my $self = shift;
+    my ( $param, $table, ) = @_;
+    my $where = $self->where( $param, undef, $table );
+    return $where if $where;
+    return '0E0' if $self->{'use_sphinx'} and $self->{'sphinx_dbi'} and length $param->{'q'};
+  };
   $self->{'select'} ||= sub {
     my $self = shift;
     my ( $table, $param, ) = @_;
@@ -1947,24 +1970,43 @@ tries
 #$self->log( 'dbg',  'q3',  $self->where($param));
     my $select;
     my $ids = [];
-    if ( $self->{'use_sphinx'} and $self->{'sphinx_dbi'} and length $param->{q} and !$self->q_file( $table, $param->{q} ) ) {
+    $self->{'founded_max'} = 0;
+    #my ($fail_q, $fail_n);
+    my @fail;
+    if ( $self->{'use_sphinx'} and $self->{'sphinx_dbi'} and length $param->{'q'} and !$self->q_file( $table, $param->{'q'} ) )
+    {
       ( $tq, $rq, $vq ) = $self->quotes();
+      local $self->{'sphinx_dbi'}->{'option'}{'max_query_time'} = 2000 if $config{'client_bot'};
       $ids = $self->{'sphinx_dbi'}->select( $table, $param );
-      unless (@$ids) {
+      $self->{'founded_max'} = $self->{'sphinx_dbi'}{'option'}{'cutoff'};
+      #$self->log ('d1', "fmax", $self->{'founded_max'});
+      if (
+        ( @$ids < $self->{'limit'} )    #and (!$self->{'use_sphinx'} or !$config{'client_bot'})
+        )
+      {
+        #warn "limit[]"
+        #$self->log( 'dbg','q', $param->{'q'});
         #local $self->{'sphinx_dbi'}->{'select_append'} = ' OPTION ranker=wordcount ';
-      	++$work{'fulltext_fail'};
-        if ( ( local $param->{'q'} = $param->{'q'} ) =~ s/(\w\s+)(\w)/$1 | $2/g ) {
-          local $param->{'no_querystat'} = 1;
-          $ids = $self->{'sphinx_dbi'}->select( $table, $param );
-          #TODO: info about changed query
-      	  unless (@$ids){
-      	    ++$work{'fulltext_fail_or'};
+        ++$work{'fulltext_fail'} unless @$ids;
+        local $param->{'q'} = $param->{'q'};
+        for my $func ( sub { $_[0] =~ s/^\s*"\s*// and $_[0] =~ s/\s*"\s*$// }, sub { $_[0] =~ s/(\w\s+)(\w)/$1 | $2/g }, ) {
+          if ( $func->( $param->{'q'} ) ) {
+            local $param->{'no_querystat'} = 1;
+            my %already = map { $_->{'id'} => 1 } @$ids;
+            my $ids_add = $self->{'sphinx_dbi'}->select( $table, $param );
+            $self->{'founded_max'} = $self->{'sphinx_dbi'}{'option'}{'cutoff'};
+            #TODO: info about changed query
+            #$self->log('dev', "setfail $#$ids:$ids->[$#$ids]{id};"),
+            push @fail, { 'n' => scalar @$ids, 'q' => $param->{'q'} } if @$ids_add;
+            unless (@$ids_add) { ++$work{'fulltext_fail_or'}; }
+            push @$ids, grep { !$already{ $_->{id} } } @$ids_add;
           }
+          last if @$ids >= $self->{'limit'};
         }
       }
       if (@$ids) {
-        $select = " WHERE ${rq}id${rq} IN (" . ( join ',', map { $_->{id} } @$ids ) . ')';
-      } 
+        $select = " WHERE ${rq}id${rq} IN (" . ( join ',', map { $_->{'id'} } @$ids ) . ')';
+      }
     }
     local $self->{'limit_body'} = sub { }
       if @$ids;
@@ -1972,8 +2014,11 @@ tries
     #unless ($select) {
     #local $self->{'table'}{$table}{$table}{'ext'}{'nav_field'} = 0;
     #local $self->{'table'}{$table}{'ext'}{'q_skip'} = 1;
-    
-	    $select ||= $self->where( $param, undef, $table ) if !$self->{'use_sphinx'} or !$self->{'no_sphinx_like'};
+    #$self->log( 'dev', "!$select and !$config{'client_bot'}");
+    if ( !$select and ( !$self->{'use_sphinx'} or !$config{'client_bot'} ) ) {
+      $select = $self->where( $param, undef, $table ) if ( !$self->{'use_sphinx'} or !$self->{'no_sphinx_like'} );
+      $self->{'founded_max'} = 0;
+    }
     #}
     my $ret = [];
     $ret =
@@ -1983,6 +2028,16 @@ tries
     #my %byid = map { $_->{id} => $_ } @$ret;
     #for my $s (@$ids) { $byid{ $s->{id} }{$_} //= $s->{$_} for keys %$s; }
     #$self->log 'dev', Dumper $ret;
+    if ( $self->{'use_sphinx'} and @$ids ) {
+      my $n = 0;
+      my %ids = map { $_->{'id'} => ++$n } @$ids;
+      #$self->log( 'dev', map { $_->{'id'} } @$ret);
+      @$ret = sort { $ids{ $a->{'id'} } <=> $ids{ $b->{'id'} } } @$ret;
+      #$self->log( 'dev', map { $_->{'id'} } @$ret);
+      #$self->log( 'dev', Dumper \@fail);
+      $ret->[ $_->{'n'} ]{'__fulltext_fail'} = $_->{'q'} for @fail;
+    }
+    #$self->log( 'dev', Dumper \@$ret);
     #}
     return wantarray ? @$ret : $ret;
   };
@@ -2211,8 +2266,8 @@ tries
     #my $limit = psmisc::check_int( ( $param->{'limit'} or $self->{'limit'} ), 0, $self->{'results_max'}, $self->{'on_page'} );
     #$sql .= ' LIMIT ' . ( $param->{'show_from'} ? $param->{'show_from'} . ',' : '' ) . " $limit"      if $param->{'show_from'}
     $sql .= $self->limit_body();
-    if ($self->{'OPTION'} and psmisc::is_hash $self->{'option'})  { #sphinx
-      $sql .= $self->{'OPTION'} . ' '. join ', ', map {"$_=$self->{'option'}{$_}"} keys %{$self->{'option'}};
+    if ( $self->{'OPTION'} and psmisc::is_hash $self->{'option'} ) {    #sphinx
+      $sql .= $self->{'OPTION'} . ' ' . join ', ', map { "$_=$self->{'option'}{$_}" } keys %{ $self->{'option'} };
     }
     $sql .= $self->{'select_append'};
     return $sql;
@@ -2323,9 +2378,9 @@ tries
   };
   $self->{'next_user_prepare'} ||= sub {
     my $self = shift;
-    $self->{'queries'} = $self->{'queries_time'} = $self->{'errors_chain'} = $self->{'errors'} = $self->{'connect_tried'} = 0;
-    #delete $stat{$_} for qw (found files found_time onpage results top_founded_max top_pages_max);
-    $self->{stat} = {};
+    #$self->{'queries'} = $self->{''} = $self->{''} = $self->{''} = $self->{''} = 0;
+    $self->{$_} = 0 for qw(founded queries queries_time errors_chain errors connect_tried);
+    $self->{'stat'} = {};
     $self->{ 'on_user' . $_ }->($self) for grep { ref $self->{ 'on_user' . $_ } eq 'CODE' } ( '', 1 .. 5 );
     #$self->{ 'on_user' }->($self) for grep { ref $self->{ 'on_user' } eq 'CODE'}('');
     #$self->log('dev', 'nup');
@@ -2334,6 +2389,7 @@ tries
     my $self = shift;
     $self->user_params(@_);
     $self->next_user_prepare(@_);
+    $self->{'sphinx_dbi'}->next_user(@_) if $self->{'sphinx_dbi'};
   };
 
 =stem links

@@ -1,4 +1,4 @@
-#$Id: clihub.pm 755 2011-03-07 01:43:07Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clihub.pm $
+#$Id: clihub.pm 787 2011-05-25 21:41:28Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clihub.pm $
 package    #hide from cpan
   Net::DirectConnect::clihub;
 use strict;
@@ -10,7 +10,7 @@ use Net::DirectConnect;
 use Net::DirectConnect::clicli;
 #use Net::DirectConnect::http;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 755 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 787 $' ) )[1];
 use base 'Net::DirectConnect';
 
 sub name_to_ip($) {
@@ -85,7 +85,9 @@ sub init {
         and $text eq 'You are already in the hub.' );
       if ( $self->{'NickList'}{$nick}{'oper'} or $self->{'NickList'}{$nick}{'hubbot'} or $nick eq 'Hub-Security' ) {
         if (
-             $text =~ /^(?:Minimum search interval is|Минимальный интервал поиска):(\d+)s/
+          $text =~
+/Минимальный интервал поиска составляет: \(Minimum search interval is:\) (\d+)секунд \(seconds\)/
+          or $text =~ /^(?:Minimum search interval is|Минимальный интервал поиска):(\d+)s/
           or $text =~ /Search ignored\.  Please leave at least (\d+) seconds between search attempts\./  #Hub-Security opendchub
           )
         {
@@ -398,6 +400,7 @@ sub init {
 
 
 =cut  
+
   #$self->{'cmd'} = {
   local %_ = (
     'connect_aft' => sub {
@@ -630,6 +633,7 @@ sub init {
     $self->log( 'err', "cant listen http" )
       unless $self->{'myport_http'};
 =cut
+
   $self->{'handler_int'}{'disconnect_bef'} = sub {
     #delete $self->{'sid'};
     #$self->log( 'dev', 'disconnect int' ) if $self and $self->{'log'};

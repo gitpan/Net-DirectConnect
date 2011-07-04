@@ -1,4 +1,13 @@
-# $Id: Changes 747 2011-03-04 23:37:37Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/Changes $
+# $Id: Changes 817 2011-07-04 16:12:36Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/Changes $
+0.10: 
+non blocking connect fixed
+
+kidding: sctp connects dev_sctp=1
+
+5.14 warnings, 5.15 errors fixed
+
+over 9000 bugs fixed
+
 0.09:
 full internal utf
 

@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: dcget 754 2011-03-07 01:07:15Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcget $
+#$Id: dcget 794 2011-06-17 17:48:15Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcget $
 
 =head1 NAME
 
@@ -29,7 +29,7 @@ use lib::abs '../lib';
 our ( %config, %work );
 #use psmisc;
 use Net::DirectConnect::pslib::psmisc;
-psmisc->import qw(:log);
+psmisc->import(qw(:log));
 #*config = *main::config;
 #require Net::DirectConnect::pslib::psmisc;
 #psmisc->import qw(:config :log printlog);
@@ -173,7 +173,9 @@ my @dc;
             #psmisc::printlog( 'dev', "getbest run");
             while ( $q = shift @{ $work{'toask'} } or return ) {
               #psmisc::printlog( 'dev', "getbest:", $q);
-              last if ( !exists $work{'asked'}{$q} );
+              psmisc::printlog('dev', 'already in share', $q),
+              next if $dc->{share_full}{$q};
+              last if  !exists $work{'asked'}{$q};
 #$work{'ask_db'}{$q} = $work{'asked'}{$q} = $r->{'time'}, next                  if $r and $r->{'time'};    # + $config{'ask_retry'} > time;
 #$work{'ask_db'}{$q} = 0;
 #last;

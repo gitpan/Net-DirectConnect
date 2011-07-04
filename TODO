@@ -1,4 +1,4 @@
-# $Id: TODO 730 2011-01-10 00:21:51Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/TODO $
+# $Id: TODO 779 2011-05-20 19:58:56Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/TODO $
 
 
 dont add to share downloaded filelists
@@ -58,4 +58,7 @@ adjustable: delete user from hash when quit
 
 ?Сейчас метод "get" загружает файл полностью, было бы неплохо реализовать частичную загрузку с указанного места в файле и указанное кол-во байт. Такая возможность нужна для получения информации о видео, аудио файле и т.д. Скачал первые 10 Кб - и все стало ясно))
 
+.tth.partial
+dont get shared
 
+dcstat: json, xml output, json input

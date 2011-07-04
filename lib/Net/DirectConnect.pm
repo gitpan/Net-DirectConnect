@@ -1,7 +1,7 @@
-#$Id: DirectConnect.pm 757 2011-03-08 23:11:27Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect.pm $
+#$Id: DirectConnect.pm 817 2011-07-04 16:12:36Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect.pm $
 package Net::DirectConnect;
 use strict;
-our $VERSION = '0.09';# . '_' . ( split( ' ', '$Revision: 757 $' ) )[1];
+our $VERSION = '0.10';# . '_' . ( split ' ', '$Revision: 817 $' )[1];
 no warnings qw(uninitialized);
 use utf8;
 use Encode;
@@ -9,7 +9,8 @@ use Socket;
 use IO::Socket;
 use IO::Select;
 use POSIX;
-use Time::HiRes qw(time);
+#use Fcntl;
+use Time::HiRes qw(time sleep);
 use Data::Dumper;
 $Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = $Data::Dumper::Terse = 1;
 our $AUTOLOAD;
@@ -42,12 +43,10 @@ sub send_udp ($$;@) {
       'PeerPort' => $port,
       'Proto'    => 'udp',
       'Timeout'  => $opt->{'Timeout'}, (
-        $opt->{'nonblocking'}
-        ? (
-          'Blocking' => 0,
-          #'MultiHomed' => 1,    #del
-          )
-        : ()
+        #$opt->{'nonblocking'} ? (
+        'Blocking' => 0,
+        #'MultiHomed' => 1,    #del
+        #) : ()
       ),
       %{ $opt->{'sockopts'} || {} },
     )
@@ -74,7 +73,7 @@ sub socket_addr ($) {
 }
 
 sub schedule($$;@)
-{    #$Id: DirectConnect.pm 757 2011-03-08 23:11:27Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect.pm $
+{    #$Id: DirectConnect.pm 817 2011-07-04 16:12:36Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect.pm $
   our %schedule;
   my ( $every, $func ) = ( shift, shift );
   my $p;
@@ -101,8 +100,8 @@ sub use_try ($;@) {
   our %tried;
   ( my $path = ( my $module = shift ) . '.pm' ) =~ s{::}{/}g;
   return $tried{$module} if exists $tried{$module};
-  $tried{$module} =
-    ( $INC{$path} or eval 'use ' . $module . ' qw(' . ( join ' ', @_ ) . ');1;' and $INC{$path} );
+  local $SIG{__DIE__} = undef;
+  $tried{$module} = ( $INC{$path} or eval 'use ' . $module . ' qw(' . ( join ' ', @_ ) . ');1;' and $INC{$path} );
 }
 
 sub module_load {
@@ -131,8 +130,8 @@ sub new {
   else                             { bless( $self, $class ) unless ref $class; }
   #print ref $self;
   #$self-
-  #psmisc::printlog('dev', 'func');
-  $self->func();    #@param
+  #psmisc::printlog('dev', 'func', Dumper @_);
+  $self->func(@_);    #@param
   eval { $self->{'recv_flags'} = MSG_DONTWAIT; } unless $^O =~ /win/i;
   $self->{'recv_flags'} ||= 0;
   #psmisc::printlog('dev', 'init');
@@ -204,11 +203,11 @@ sub new {
   # $self->log( 'dev', "set console encoding  [$self->{charset_console}]");
   #eval qq{use encoding $self->{charset_console}};
   eval qq{use encoding '$self->{charset_internal}', STDOUT=> '$self->{charset_console}', STDIN => '$self->{charset_console}'}
-    if !$self->{parent} and !$self->{no_charset_console};
+    if !$self->{parent} and !$self->{no_charset_console} and $self->{charset_internal} and $self->{charset_console};
   #$self->log( 'dev', 'utf8: УТф восемь');
   #$self->log( 'dev', Dumper $self);
   if ( $self->{'auto_say'} ) {
-    $self->log('dcdbg', "using encodings console:[$self->{charset_console}] protocol:[$self->{charset_protocol}]" );
+    $self->log( 'dcdbg', "using encodings console:[$self->{charset_console}] protocol:[$self->{charset_protocol}]" );
     for my $cmd ( @{ $self->{'auto_say_cmd'} || [] } ) {
       #$self->log('AS', $cmd);
       $self->{'handler_int'}{$cmd} = sub {
@@ -252,6 +251,7 @@ sub log(@) {
 
 sub cmd {
   my $self = shift;
+  #return unless $self->{'cmd'};
   my $dst;
   $dst =    #$_[0]
     shift if $self->{'adc'} and length $_[0] == 1;
@@ -260,13 +260,13 @@ sub cmd {
   #$self->{'log'}->($self,'dev', 'cmd', $cmd, @_) if $cmd ne 'log';
   #$self->{'log'}->($self,'dev', $self->{number},'cmd', $cmd, @_) if $cmd ne 'log';
   my ( $func, $handler );
-  if ( ref $self->{'cmd'}{$cmd} eq 'CODE' ) {
+  if ($self->{'cmd'} and ref $self->{'cmd'}{$cmd} eq 'CODE' ) {
     $func    = $self->{'cmd'}{$cmd};
     $handler = '_cmd';
     unshift @_, $dst if $dst;
   } elsif ( ref $self->{$cmd} eq 'CODE' ) {
     $func = $self->{$cmd};
-  } elsif ( ref $self->{'cmd'}{ $dst . $cmd } eq 'CODE' ) {
+  } elsif ($self->{'cmd'} and ref $self->{'cmd'}{ $dst . $cmd } eq 'CODE' ) {
     $func    = $self->{'cmd'}{ $dst . $cmd };
     $handler = '_cmd';
     #unshift @_, $dst if $dst;
@@ -290,17 +290,17 @@ sub cmd {
     @ret = $self->cmd_adc( $dst, $cmd, @_ );
   } else {
     $self->log(
-      'info',
+      'dev',
       "UNKNOWN CMD:[$cmd]{@_} : please add \$dc->{'cmd'}{'$cmd'} = sub { ... };",
       "self=", ref $self,
       #Dumper $self->{'cmd'},
       $self->{'parse'}
-    ) if ! grep {$cmd eq $_} qw(new init);
-    $self->{'cmd'}{$cmd} = sub { };
+    ) if !grep { $cmd eq $_ } qw(new init);
+    $self->{'cmd'}{$cmd} = sub { } if $self->{'cmd'};
   }
   $ret = scalar @ret > 1 ? \@ret : $ret[0];
   $self->handler( $cmd . $handler . '_aft', \@_, $ret );
-  if ( $self->{'cmd'}{$cmd} ) {
+  if ($self->{'cmd'} and $self->{'cmd'}{$cmd} ) {
     if    ( $self->{'auto_wait'} ) { $self->wait(); }
     elsif ( $self->{'auto_recv'} ) { $self->recv_try(); }
   }
@@ -358,10 +358,13 @@ sub func {
     my $self = shift;
     #$self->log( 'dev', 'init', __PACKAGE__, 'func', __FILE__, __LINE__ );
     local %_ = @_;
+#warn Dumper \%_;
+    #$self->log(__LINE__, "Proto=$self->{Proto}");
     $self->{$_} = $_{$_} for keys %_;
     local %_ = (
       'Listen'        => 10,
-      'Timeout'       => 5,
+      'Timeout'       => 10, #connect
+      'Timeout_connected'       => 300,
       'myport'        => 412,                                                               #first try
       'myport_base'   => 40000,
       'myport_random' => 1000,
@@ -379,21 +382,21 @@ sub func {
       },
       #'auto_recv'          => 1,
       'max_reads'          => 20,
-      'wait_once'          => 0.1,
+      #'wait_once'          => 0.1,
       'waits'              => 100,
       'wait_finish_tries'  => 600,
       'wait_finish_by'     => 1,
-      'wait_connect_tries' => 600,
+      #'wait_connect_tries' => 600,
       'clients_max'        => 50,
       'wait_clients_tries' => 200,
       #del    'wait_clients_by'    => 0.01,
       'work_sleep'        => 0.01,
       'select_timeout'    => 1,
       'cmd_recurse_sleep' => 0,
-      ( $^O eq 'MSWin32' ? () : ( 'nonblocking' => 1 ) ),
-      'nonblocking' => 1,
-      'informative' => [ qw(number peernick status host port filebytes filetotal proxy bytes_send bytes_recv) ],    # sharesize
-      'informative_hash' => [qw(clients)],                   #NickList IpList PortList
+      #( $^O eq 'MSWin32' ? () : ( 'nonblocking' => 1 ) ),
+      #'nonblocking' => 1,
+      'informative' => [qw(number peernick status host port filebytes filetotal proxy bytes_send bytes_recv)],    # sharesize
+      #'informative_hash' => [qw(clients)],                   #NickList IpList PortList
                                                              #'disconnect_recursive' => 1,
       'reconnect_sleep'  => 5,
       'partial_ext'      => '.partial',
@@ -417,15 +420,20 @@ sub func {
       'charset_internal' => 'utf8',
       #charset_nick => 'utf8',
     );
+    #$self->log(__LINE__, "Proto=$self->{Proto}");
+    $self->{'wait_connect_tries'} //= $self->{'Timeout'};
+
     $self->{$_} //= $_{$_} for keys %_;
-    $self->{'partial_prefix'} //= $self->{'download_to'} . 'Incomplete/', $self->{$_} //= $self->{'parent'}{$_} ||= {}
-      for qw(peers peers_sid peers_cid handler clients);    #want share_full share_tth
-                                                            #$self->{$_} ||= $self->{'parent'}{$_} ||= {}, for qw(   );
+    $self->{'partial_prefix'} //= $self->{'download_to'} . 'Incomplete/';
+    $self->{$_} //= $self->{'parent'}{$_} ||= {} for qw(peers peers_sid peers_cid handler clients);   #want share_full share_tth
+           #$self->{$_} ||= $self->{'parent'}{$_} ||= {}, for qw(   );
     $self->{$_} //= $self->{'parent'}{$_} ||= [] for qw(queue_download);
     $self->{$_} //= $self->{'parent'}{$_} ||= $global{$_} ||= {},
       for qw(sockets share_full share_tth want want_download want_download_filename downloading);
     $self->{'parent'}{$_} ? $self->{$_} = $self->{'parent'}{$_} : ()
-      for qw(log disconnect_recursive  partial_prefix partial_ext download_to);
+      for qw(log disconnect_recursive  partial_prefix partial_ext download_to Proto);
+    #$self->log("Proto=$self->{Proto}");
+
     #$self->log("charset_console=$self->{charset_console} charset_fs=$self->{charset_fs}");
     #psmisc::printlog('dev', 'init0', Dumper $self);
   };
@@ -447,6 +455,7 @@ sub func {
     #$self->{'select_send'} ||= IO::Select->new();    #$self->{'socket'}
     return unless $self->{'socket'};
     $self->{'select'}->add( $self->{'socket'} );
+    $self->{'select_send'}->add( $self->{'socket'} );
     $self->{'sockets'}{ $self->{'socket'} } = $self;
     #$self->log( 'dev', 'current select', $self->{'select'}->handles );
   };
@@ -466,40 +475,61 @@ sub func {
     return 0
       if ( $self->{'socket'} and $self->{'socket'}->connected() )
       or grep { $self->{'status'} eq $_ } qw(destroy);    #connected
-    $self->log( 'info', "connecting to $self->{'protocol'}://$self->{'host'}:$self->{'port'}", %{ $self->{'sockopts'} || {} } );
-    $self->{'status'}   = 'connecting';
+    $self->log( 'info', "connecting to $self->{'protocol'}://$self->{'host'}:$self->{'port'} via $self->{'Proto'} ", %{ $self->{'sockopts'} || {} } );
+    #$self->{'status'}   = 'connecting';
+    $self->{'status'}   = 'connecting_tcp';
     $self->{'outgoing'} = 1;
     $self->{'port'}     = $1 if $self->{'host'} =~ s/:(\d+)//;
-    $self->{'recv_buf'} = undef;
-    $self->{'socket'} ||= new IO::Socket::INET(
+    delete $self->{'recv_buf'};
+    #$self->log('dev', 'conn strt', $self->{'Timeout'});
+    $self->{'socket'} ||= IO::Socket::INET->new(
       'PeerAddr' => $self->{'host'},
       'PeerPort' => $self->{'port'},
       'Proto'    => $self->{'Proto'} || 'tcp',
-      'Timeout'  => $self->{'Timeout'}, (
-        $self->{'nonblocking'}
-        ? (
-          'Blocking' => 0,
-          #'MultiHomed' => 1,    #del
-          )
-        : ()
-      ),
+      #'Timeout'  => $self->{'Timeout'},
+      #(
+      #$self->{'nonblocking'} ? (
+      'Blocking' => 0,
+      #'MultiHomed' => 1,    #del
+      #) : ()
+      #),
       %{ $self->{'sockopts'} || {} },
     );
+    #$self->log('dev', 'conn end');
     $self->log( 'err', "connect socket  error: $@,", Encode::decode( $self->{charset_fs}, $! ), "[$self->{'socket'}]" ),
       return 1
       if !$self->{'socket'};
-    #$self->log( 'err', "connect socket  error: $@, $! [$self->{'socket'}]" ), return 1 if !$self->{'socket'};
-    #$self->{'socket'}->binmode(":encoding($self->{charset_protocol})");
-    #$self->{charset_protocol} = 'utf8';
-    #$self->log( 'dev', "set encoding of socket to [$self->{charset_protocol}]");
-    #    binmode($self->{'socket'}, ":encoding($self->{charset_protocol})");
-    #    binmode($self->{'socket'}, ":raw:encoding($self->{charset_protocol})");
-    #    binmode($self->{'socket'}, ":encoding($self->{charset_protocol}):bytes");
-    #    binmode($self->{'socket'}, ":$self->{charset_protocol}");
-    $self->{time_start} = time;
+        #$self->log( 'dev',  'timeout to', $self->{'Timeout'});
+
+         $self->{'socket'}->timeout( $self->{'Timeout'} ) if $self->{'Timeout'};   #timeout must be after new, ifyou want nonblocking
+         #$self->log( 'err', "connect socket  error: $@, $! [$self->{'socket'}]" ), return 1 if !$self->{'socket'};
+         #$self->{'socket'}->binmode(":encoding($self->{charset_protocol})");
+         #$self->{charset_protocol} = 'utf8';
+         #$self->log( 'dev', "set encoding of socket to [$self->{charset_protocol}]");
+         #    binmode($self->{'socket'}, ":encoding($self->{charset_protocol})");
+         #    binmode($self->{'socket'}, ":raw:encoding($self->{charset_protocol})");
+         #    binmode($self->{'socket'}, ":encoding($self->{charset_protocol}):bytes");
+         #    binmode($self->{'socket'}, ":$self->{charset_protocol}");
+         #eval {$self->{'socket'}->fcntl( Fcntl::O_ASYNC,1);};    $self->log('warn', "cant Fcntl::O_ASYNC : $@") if $@;
+         #eval {$self->{'socket'}->fcntl( Fcntl::O_NONBLOCK,1);};    $self->log('warn', "cant Fcntl::O_NONBLOCK : $@") if $@;
     $self->select_add();
-    #$self->log( 'dev', "connected0", "[$self->{'socket'}] c=", $self->{'socket'}->connected() );
+    $self->{time_start} = time;
+    #$self->log($self, 'connected2 inited',"MT:$self->{'message_type'}", ' with');
+    #$self->log( 'dev', "connect_aft after", );
+    #!!$self->recv_try();
+    #$self->log( 'dev', "connect after", );
+    return 0;
+  };
+  $self->{'connected'} ||= sub {
+    my $self = shift;
     $self->get_my_addr();
+    #$self->log( 'info', 'broken socket, cant get my ip'), 
+    #$self->destroy(), 
+    return unless $self->{'myip'};
+    $self->{'status'} = 'connecting';
+#$self->log( 'dev', "connected0", "[$self->{'socket'}] c=", $self->{'socket'}->connected(), 'p=', $self->{'socket'}->protocol() );
+    #$self->log( 'dev',  'timeout to', $self->{'Timeout_connected'});
+    $self->{'socket'}->timeout( $self->{'Timeout_connected'} ) if $self->{'Timeout_connected'};
     $self->get_peer_addr();
     $self->{'hostip'} ||= $self->{'host'};
     #my $localmask ||= join '|', @{ $self->{'local_mask_rfc'} || [] }, @{ $self->{'local_mask'} || [] };
@@ -520,11 +550,6 @@ sub func {
     $self->log( 'info', "connect to $self->{'host'}($self->{'hostip'}):$self->{'port'} [me=$self->{'myip'}] ok ", );
     #$self->log( $self, 'connected1 inited', "MT:$self->{'message_type'}", ' with' );
     $self->cmd('connect_aft');
-    #$self->log($self, 'connected2 inited',"MT:$self->{'message_type'}", ' with');
-    #$self->log( 'dev', "connect_aft after", );
-    $self->recv_try();
-    #$self->log( 'dev', "connect recv after", );
-    return 0;
   };
   $self->{'connect_check'} ||= sub {
     my $self = shift;
@@ -532,10 +557,12 @@ sub func {
       if $self->{'Proto'} eq 'udp'
         or $self->{'incoming'}
         or $self->{'status'} eq 'listening'
-        or ( $self->{'socket'} and $self->{'socket'}->connected() )
-        or !$self->active();
+        or (
+          $self->{'socket'}
+          #and $self->{'socket'}->connected()
+        ) or !$self->active();
+    #$self->log(          'warn', 'connect_check: must reconnect', Dumper $self->{'socket'}->connected(), $self->{'socket'}, $self->{'status'});
     $self->{'status'} = 'reconnecting';
-    #$self->log(          'warn', 'connect_check: must reconnect');
     $self->every(
       $self->{'reconnect_sleep'},
       $self->{'reconnect_func'} ||= sub {
@@ -555,6 +582,7 @@ sub func {
   };
   $self->{'reconnect'} ||= sub {
     my $self = shift;
+#$self->log(          'dev', 'reconnect');
     $self->disconnect();
     $self->{'status'} = 'reconnecting';
     sleep $self->{'reconnect_sleep'};
@@ -567,14 +595,15 @@ sub func {
         or ( $self->{'M'} eq 'P' and !$self->{'allow_passive_ConnectToMe'} );    #RENAME
     $self->myport_generate();
     for ( 1 .. $self->{'myport_tries'} ) {
-      $self->{'socket'} ||= new IO::Socket::INET(
+      $self->{'socket'} ||= IO::Socket::INET->new(
         'LocalPort' => $self->{'myport'},
         'Proto'     => $self->{'Proto'} || 'tcp', (
           $self->{'Proto'} ne 'udp'
           ? ( 'Listen' => $self->{'Listen'} )
           : ()
         ),
-        ( $self->{'nonblocking'} ? ( 'Blocking' => 0 ) : () ),
+        #( $self->{'nonblocking'} ? ( 'Blocking' => 0 ) : () ),
+        'Blocking' => 0,
         %{ $self->{'sockopts'} || {} },
       );
       $self->select_add(), last if $self->{'socket'};
@@ -617,7 +646,7 @@ sub func {
         )
       {
         #next if $self->{'clients'}{$client} eq $self;
-        $self->log( 'dev', "destroy cli", $self->{'clients'}{$_}, ref $self->{'clients'}{$_} ),
+        #$self->log( 'dev', "destroy cli", $self->{'clients'}{$_}, ref $self->{'clients'}{$_} ),
           $self->{'clients'}{$client}->destroy()
           if ref $self->{'clients'}{$client}
             and $self->{'clients'}{$client}{'destroy'};
@@ -719,7 +748,7 @@ sub func {
     #$self->log( 'dcdmp', "0rawrawrcv [fh:$self->{'filehandle'}]:", $self->{'databuf'} );
     if ( $self->{'filehandle'} ) {
       $self->file_write( \$self->{'databuf'} );
-    } else {
+    } elsif(length $self->{'databuf'}) {
       #$self->log( 'dcdmp', "rawrawrcv:", $self->{'databuf'} );
       $self->{'recv_buf'} .= $self->{'databuf'};
       #$self->log( 'dcdmp', "rawrawbuf:", $self->{'recv_buf'} );
@@ -759,25 +788,41 @@ sub func {
     #$self->{'select'} = IO::Select->new( $self->{'socket'} ) if !$self->{'select'} and $self->{'socket'};
     #my ( $readed, $reads );
     #$self->{'databuf'} = '';
-    #$self->log( 'traceD', 'DC::select', 'bef' );
+    #$self->log( 'dev', 'recv_try', 'bef' );
     my ( $recv, $send, $exeption ) = IO::Select->select( $self->{'select'}, $self->{'select_send'}, $self->{'select'}, $sleep );
 #$self->log( 'traceD', 'DC::select', 'aft' , Dumper ($recv, $send, $exeption));
 #schedule(10, sub {        $self->log( 'dev', 'DC::select', 'aft' , Dumper ($recv, $send, $exeption), 'from', $self->{'select'}->handles() ,    'and ', $self->{'select_send'}->handles());        });
+    #$self->{'select'}->remove(@$exeption) if $exeption;
     for (@$exeption) {
-      $self->log( 'err', 'exeption', $_, $self->{sockets}{$_}{number} );
+      #$self->log( 'dcdbg', 'exeption', $_, $self->{sockets}{$_}{number} ),
+        #$self->{'select'}->remove($_);
+        $self->{sockets}{$_}->destroy() if ref $self->{sockets}{$_};
+      delete $self->{sockets}{$_};
+      ++$ret,
+    }
+    #for (@$recv, @$send) {
+    for ( keys %{ $self->{sockets} } ) {
+      #$self->log( 'dev', 'connected chk' , $self->{sockets}{$_}{socket}, $self->{sockets}{$_}{socket}->connected());
+      #$self->log( 'dev', 'connected call' ),
+      $self->{sockets}{$_}->connected(),
+      ++$ret,
+        if $self->{sockets}{$_}{status} eq 'connecting_tcp' and $self->{sockets}{$_}{socket}->connected();
     }
     for (@$recv) {
       $self->log( 'err', 'no object for recv handle', $_, ), next,
-        if !$self->{sockets}{$_}
-          or !ref $self->{sockets}{$_};
-      $self->{sockets}{$_}->recv($_);
+        #if !$self->{sockets}{$_} or !ref $self->{sockets}{$_};
+        if !ref $self->{sockets}{$_} or ref $self->{sockets}{$_} eq 'HASH';
+#$self->log( 'dev',ref $self->{sockets}{$_});
+      $ret += $self->{sockets}{$_}->recv($_);
     }
     for (@$send) {
       #$self->log( 'err', 'no object for send handle',$_,  ) , next , unless $self->{sockets}{$_};
-      #$self->log( 'dev', 'can_send', $_, $self->{sockets}{$_}{number} );
+      #++$self->{sockets}{$_}{send_can};
+      #$self->log( 'dev', 'can_send', $_, $self->{sockets}{$_}{number}, $self->{sockets}{$_}{send_can} );
       if ( $self->{sockets}{$_}{'filehandle_send'} ) {
-        $self->{sockets}{$_}->file_send_part();
+        $ret += $self->{sockets}{$_}->file_send_part();
       }
+      #$self->{sockets}{$_}->send();
     }
     #if ( $self->{'filehandle_send'} ) { $self->file_send_part(); }
     #$self->{'recv_runned'}{ $self->{'number'} } = undef;
@@ -787,10 +832,17 @@ sub func {
     my $self = shift;
     my ( $waits, $wait_once ) = @_;
     $waits     ||= $self->{'waits'};
-    $wait_once ||= $self->{'wait_once'};
+    #$wait_once ||= $self->{'wait_once'};
     local $_;
     my $ret;
-    $ret += $self->recv_try($wait_once) while --$waits > 0 and !$ret;
+    #$self->log( 'dev', "start wait", $waits);
+    while ( --$waits > 0 and !$ret ) {
+      #$ret += $self->recv_try($wait_once);
+      last unless $self->active();
+      $ret += $self->recv_try();
+      #$self->log( 'dev', "wait", $waits, $ret);
+      #sleep 0.1 if !$ret;
+    }
     #$ret += $self->work($wait_once) while --$waits > 0 and !$ret;
     return $ret;
   };
@@ -809,8 +861,9 @@ sub func {
   $self->{'wait_connect'} ||= sub {
     my $self = shift;
     for ( 0 .. ( $_[0] || $self->{'wait_connect_tries'} ) ) {
-      last if $self->{'status'} eq 'connected';
-      $self->wait(1);
+#$self->log('dev', 'ws', $self->{'status'}, $_, ( $_[0] , $self->{'wait_connect_tries'}));
+      last if grep {$self->{'status'} eq $_} qw(connected transfer disconnecting disconnected destroy), '';
+      $self->wait_sleep(1);
       #$self->work(1);
     }
     return $self->{'status'};
@@ -819,7 +872,9 @@ sub func {
     my $self = shift;
     for ( 0 .. $self->{'wait_finish_tries'} ) {
       last if $self->finished();
-      $self->wait( undef, $self->{'wait_finish_by'} );
+      #$self->wait( undef, $self->{'wait_finish_by'} );
+      #$self->log( 'dev', 'wait_finish', $_);
+      $self->wait_sleep();
       #$self->work( undef, $self->{'wait_finish_by'} );
     }
     local @_;
@@ -833,19 +888,13 @@ sub func {
   $self->{'wait_clients'} ||= sub {
     my $self = shift;
     for my $n ( 0 .. $self->{'wait_clients_tries'} ) {
+      local @_;
       last
         if !$self->{'clients_max'}
-          or $self->{'clients_max'} > scalar( $self->clients_my() );    #keys %{ $self->{'clients'} };
+          or $self->{'clients_max'} > ( @_ = $self->clients_my() );    #keys %{ $self->{'clients'} };
       $self->info() unless $_;
-      $self->log(
-        'info',
-        "wait clients",
-        scalar(
-          $self->clients_my()
-            #keys %{ $self->{'clients'} }
-          )
-          . "/$self->{'clients_max'}  $n/$self->{'wait_clients_tries'}"
-      );
+      $self->log( 'info', "wait clients",
+        scalar( @_ = $self->clients_my() ) . "/$self->{'clients_max'}  $n/$self->{'wait_clients_tries'}" );
       #$self->wait( undef, $self->{'wait_clients_by'} );
       $self->work(5);
     }
@@ -854,13 +903,21 @@ sub func {
     my $self      = shift;
     my $how       = shift || 1;
     my $starttime = time();
-    $self->wait(@_) while $starttime + $how > time();
+    #$self->log( 'dev', "wait_sleep",$starttime , $how , time(), "==", $starttime + $how),
+    my $ret;
+    while ($starttime + $how > time()) {
+      last unless $self->active();
+      $ret += $self->wait(@_);
+    }
+    return $ret;
+    #$self->log( 'dev', "wait_sleep",$starttime , $how , time(), "==", $starttime + $how),
     #$self->work(@_) while $starttime + $how > time();
   };
   $self->{'work'} ||= sub {
     my $self   = shift;
     my @params = @_;
     #$self->periodic();
+    #$self->log( 'dev', 'work', @params);
     schedule(
       1,
       our $___work_every ||= sub {
@@ -874,32 +931,38 @@ sub func {
           #$self->clients_my()
           )
         {
-          $self->log(
-            'dev',
-"del client[$self->{'clients'}{$_}{'number'}][$_] socket=[$self->{'clients'}{$_}{'socket'}] status=[$self->{'clients'}{$_}{'status'}] last active=",
-            time - $self->{'clients'}{$_}{activity}
-            ), (
-            !ref $self->{'clients'}{$_}{destroy}
-            ? ()
-            : $self->{'clients'}{$_}->destroy()
-            ),
-            #%{$self->{'clients'}{$_}} = (),
-            delete( $self->{'clients'}{$_} ),
+          if (
+               !$self->{'clients'}{$_}{'socket'}
+            or !length $self->{'clients'}{$_}{'status'}
+            or $self->{'clients'}{$_}{'status'} eq 'destroy'
+            or (  $self->{'clients'}{$_}{'status'} ne 'listening'
+              and $self->{'clients'}{$_}{inactive_timeout}
+              and time - $self->{'clients'}{$_}{activity} > $self->{'clients'}{$_}{inactive_timeout} )
+            )
+          {
             $self->log(
-            'dev', "now clients", map { "[$self->{'clients'}{$_}{'number'}]$_" }
-              sort keys %{ $self->{'clients'} }
-            ),
-            next
-            if !$self->{'clients'}{$_}{'socket'}
-              or !length $self->{'clients'}{$_}{'status'}
-              or $self->{'clients'}{$_}{'status'} eq 'destroy'
-              or (  $self->{'clients'}{$_}{'status'} ne 'listening'
-                and $self->{'clients'}{$_}{inactive_timeout}
-                and time - $self->{'clients'}{$_}{activity} > $self->{'clients'}{$_}{inactive_timeout} );
+              'dev',
+"del client[$self->{'clients'}{$_}{'number'}][$_] socket=[$self->{'clients'}{$_}{'socket'}] status=[$self->{'clients'}{$_}{'status'}] last active=",
+              time - $self->{'clients'}{$_}{activity}
+            );
+            (
+              !ref $self->{'clients'}{$_}{destroy}
+              ? ()
+              : $self->{'clients'}{$_}->destroy()
+            );
+            #%{$self->{'clients'}{$_}} = (),
+            delete( $self->{'clients'}{$_} );
+            #$self->log('dev', "now clients", map { "$_" }sort keys %{ $self->{'clients'} });
+            next;
+          }
           #$ret += $self->{'clients'}{$_}->recv();
           #$self->log('dev', 'work', $self->{'clients'}{$_}{'number'}, $self->{'clients'}{$_}, $self);
           #next if $self->{'clients'}{$_} eq $self;
           #$self->{'clients'}{$_}->work();
+        }
+        for ( keys %{ $self->{'sockets'} } ) {
+          next if $self->{'sockets'}{$_} and %{ $self->{'sockets'}{$_} };
+          delete $self->{'sockets'}{$_};
         }
         $self->{$_}->($self) for grep { ref $self->{$_} eq 'CODE' } qw(worker auto_work);
         #$self->log('dev', 'work exit',      );
@@ -949,11 +1012,14 @@ sub func {
             my ($filename);
             for my $file ( keys %{ $self->{'want_download_filename'}{$tth} } ) {
               my $partial = $file;
+$self->log('dev',  'partial prepare1', $partial);
+              $partial = $self->{'partial_prefix'} . $partial . $self->{'partial_ext'};
+$self->log('dev',  'partial prepare2', $partial);
               $partial = Encode::encode $self->{charset_fs}, $file
                 if $self->{charset_fs};
-              $partial = $self->{'partial_prefix'} . $partial . $self->{'partial_ext'};
+$self->log('dev',  'partial prepare3', $partial);
               if ( -s $partial ) {
-                #$self->log('dev',  'already downloading: ' ,$file, -s $partial);
+                $self->log('dev',  'already downloading: ' ,$file, -s $partial);
                 $filename = $file;
                 last;
               }
@@ -991,12 +1057,14 @@ sub func {
       [ $self->{dev_auto_dump_first} || 20, $self->{dev_auto_dump_every} || 100 ],
       our $dump_sub__ ||= sub {
         $self->log( 'dev', "Writing dump" );
-        open my $fh, '>', $self->{dev_auto_dump_file} || $0 . '.dump'
+        open my $fh, '>', $self->{dev_auto_dump_file} || $0 .($self->{dev_auto_dump_timed} ? '.'.time : ()). '.dump'
           or return;
         print $fh Dumper $self;
         close $fh;
       }
     ) if $self->{dev_auto_dump};
+
+#$self->log( 'dev', "work -> sleep" ),
     return $self->wait_sleep(@params) if @params;
     return $self->recv_try( $self->{'work_sleep'} );
   };
@@ -1101,6 +1169,17 @@ sub func {
     local $_;    # = join( '', @_ );
                  #$self->{bytes_send} += length $_;
                  #eval { $_ = $self->{'socket'}->send( join( '', @_ ) ); } if $self->{'socket'};
+=no
+    unless ($self->{send_can}) {
+    	$self->{send_buffer_raw} = \@_;
+    	return 0;
+    }
+    if ($self->{send_buffer_raw}) {
+	unshift @_, @{$self->{send_buffer_raw}};
+	$self->{send_buffer_raw} = undef;
+    }
+=cut
+    return unless @_;
     eval { $_ = $self->{'socket'}->send(@_); } if $self->{'socket'};
     $self->{bytes_send} += $_;
     $self->log( 'err', 'send error', $@ ) if $@;
@@ -1165,7 +1244,7 @@ sub func {
     $file //= 'TTH/' . $tth if $tth;
     my $full = ( $as || $file );
     $full = $self->{'download_to'} . $full unless $full =~ m{[/\\]};
-    #$self->log( 'warn', "cid[$cid] sid[$sid] nick[$nick]");
+    #$self->log( 'dev', "cid[$cid] sid[$sid] nick[$nick] full[$full] as,file[$as || $file]");
     my $sizenow = -s $full;
     if ($sizenow) {
       $self->log( 'info', "file [$_] already exists size=$sizenow must be=$size" );
@@ -1253,24 +1332,24 @@ sub func {
     $self->{'file_recv_full'} = $self->{'file_recv_dest'};
     $self->{'file_recv_full'} = $self->{'download_to'} . $self->{'file_recv_full'}
       unless $self->{'file_recv_full'} =~ m{[/\\]};
-    $self->{'file_recv_dest'} = Encode::encode $self->{charset_fs}, $self->{'file_recv_dest'}
-      if $self->{charset_fs};    # ne $self->{charset_protocol};
+    #$self->{'file_recv_dest'} = Encode::encode $self->{charset_fs}, $self->{'file_recv_dest'} if $self->{charset_fs};    # ne $self->{charset_protocol};
                                  #$self->{'file_recv_dest'}
        #$self->log( 'dcdev', "pre enc filename [$self->{'file_recv_dest'}] [$self->{charset_fs} ne $self->{charset_protocol}]");
        #$self->{'file_recv_dest'} = Encode::encode $self->{charset_fs}, Encode::decode $self->{charset_protocol},
        #$self->log( 'dcdev', "pst enc filename [$self->{'file_recv_dest'}]");
     mkdir_rec $self->{'partial_prefix'} if $self->{'partial_prefix'};
-    $self->{'file_recv_partial'} = $self->{'file_recv_dest'} . $self->{'partial_ext'};
+    $self->{'file_recv_partial'} = "$self->{'file_recv_dest'}.$self->{'file_recv_tth'}$self->{'partial_ext'}";
+$self->log( 'dcdev', "file_recv_partial1 [$self->{'file_recv_partial'}]");
     $self->{'file_recv_partial'} = $self->{'partial_prefix'} . $self->{'file_recv_partial'}
       unless $self->{'file_recv_partial'} =~ m{[/\\]};
+$self->log( 'dcdev', "file_recv_partial2 [$self->{'file_recv_partial'}]");
+    $self->{'file_recv_partial'} = Encode::encode $self->{charset_fs}, $self->{'file_recv_partial'} if $self->{charset_fs};
     $self->{'filebytes'} = $self->{'file_recv_from'} = -s $self->{'file_recv_partial'};
     $self->{'file_recv_to'} ||= $self->{'file_recv_size'} - $self->{'file_recv_from'}
       if $self->{'file_recv_size'} and $self->{'file_recv_from'};
-    $self->log(
-      'dcdev', 'file_select3',               $self->{'filename'}, $self->{'fileas'},
-      'part:', $self->{'file_recv_partial'}, 'full:',             $self->{'file_recv_full'},
-      'from',  $self->{'file_recv_from'}
-    );
+    #$self->log('dcdev', 'file_select3',               $self->{'filename'}, $self->{'fileas'},
+    #  'part:', $self->{'file_recv_partial'}, 'full:',             $self->{'file_recv_full'},
+    #  'from',  $self->{'file_recv_from'});
   };
   $self->{'file_open'} ||= sub {
     my $self = shift;
@@ -1325,10 +1404,9 @@ sub func {
       if ( $self->{'filebytes'} == $self->{'filetotal'} ) {
         mkdir_rec $self->{'download_to'} if $self->{'download_to'};
         if ( length $self->{'partial_ext'} ) {
-          #$self->log( 'dcerr', 'file_close',3, $self->{'file_recv_partial'} , $dest);
-          local $self->{'file_recv_full'} =
-            Encode::encode $self->{charset_fs}, $self->{'file_recv_full'}
+          local $self->{'file_recv_full'} = Encode::encode $self->{charset_fs}, $self->{'file_recv_full'}
             if $self->{charset_fs};    # ne $self->{charset_protocol};
+          $self->log( 'dcdev', 'file_close',3, $self->{'file_recv_partial'}, $self->{'file_recv_full'});
           $self->log( 'dcerr', 'cant move finished file', $self->{'file_recv_partial'}, $self->{'file_recv_full'} )
             if !rename $self->{'file_recv_partial'},
             $self->{'file_recv_full'};
@@ -1367,11 +1445,13 @@ sub func {
         $file, $self->{'share_full'}{$file},
         'from', scalar keys %{ $self->{'share_full'} }
       );
+      return 1;
     }
+    return undef;
   };
   $self->{'file_send'} ||= sub {
     my $self = shift;
-    $self->log( 'dcdev', 'file_send', Dumper \@_ );
+    #$self->log( 'dcdev', 'file_send', Dumper \@_ );
     my ( $file, $start, $size, $as ) = @_;
     $start //= 0;
     my $filesize = -s $file;
@@ -1474,6 +1554,7 @@ sub func {
     schedule(
       1,
       $self->{__stat_} ||= sub {
+        my $self = shift;
         our ( $lastmark, $lasttime );
         $self->log(
           'dev',                   "sent bytes",                      #length $self->{'file_send_buf'},
@@ -1487,7 +1568,8 @@ sub func {
           ),
           $lastmark = $self->{'file_send_offset'}, $lasttime = time,
           #if time - $lasttime > 1;
-      }
+      },
+      $self
     );
     #$self->{activity} = time if $sent;
     #$self->{bytes_send} += $sent;
@@ -1513,7 +1595,9 @@ sub func {
       #$self->{'status'} = 'connected';
       #?
       #$self->disconnect();
+      $self->destroy();
     }
+    return $sent;
   };
   $self->{'file_send_parse'} =
     #$self->{'ADCSND'} =
@@ -1524,13 +1608,13 @@ sub func {
     if ( $_[0] eq 'file' ) {
       my $file = $_[1];
       if ( $file =~ s{^TTH/}{} ) {
-        $self->file_send_tth( $file, $_[2], $_[3], $_[1] );
+        return $self->file_send_tth( $file, $_[2], $_[3], $_[1] );
       } else {
         #$self->file_send($file, $_[2], $_[3]);
-        $self->file_send_tth( $file, $_[2], $_[3], $_[1] );
+        return $self->file_send_tth( $file, $_[2], $_[3], $_[1] );
       }
     } elsif ( $_[0] eq 'list' ) {
-      $self->file_send_tth( 'files.xml.bz2', );
+      return $self->file_send_tth( 'files.xml.bz2', );
     } elsif ( $_[0] eq 'tthl' ) {
       #TODO!! now fake
       ( my $tth = $_[1] ) =~ s{^TTH/}{};
@@ -1546,7 +1630,9 @@ sub func {
       $self->send($tth);
     } else {
       $self->log( 'dcerr', 'SND', "unknown type", @_ );
+      return 2;
     }
+    return undef;
     };
   $self->{'download'} ||= sub {
     my $self = shift;
@@ -1581,8 +1667,14 @@ sub func {
     my ($self) = @_;
     return unless $self->{'socket'};
     eval { @_ = unpack_sockaddr_in( getsockname( $self->{'socket'} ) || return ); };
-    return unless $_[1];
-    return unless $_[1] = inet_ntoa( $_[1] );
+    $self->log('dcerr', "cant get my ip [$@]", Dumper \@_) if $@;
+    #$self->log('dcerr', "cant get my ip [0.0.0.0:$_[0]]"), 
+    return if $_[1] eq "\0\0\0\0";
+    #$self->log('dev', "1my ip", Dumper \@_);
+    #return unless $_[1];
+    return unless $_[1] and $_[1] = inet_ntoa( $_[1] );
+    #$self->log('dev', "2my ip", Dumper \@_);
+    #return if $_[1] eq '0.0.0.0';
     #$self->{'log'}->('dev', "MYIP($self->{'myip'}) [$self->{'number'}] SOCKNAME $_[0],$_[1];");
     return $self->{'myip'} ||= $_[1];
   };
@@ -1591,8 +1683,11 @@ sub func {
     $self->log(
       'info',
       map( {"$_=$self->{$_}"} grep { $self->{$_} } @{ $self->{'informative'} } ),
-      map( { $_ . '(' . scalar( keys %{ $self->{$_} } ) . ')=' . join( ',', sort keys %{ $self->{$_} } ) }
-        grep { keys %{ $self->{$_} } } @{ $self->{'informative_hash'} } )
+      #map( { $_ . '(' . scalar( keys %{ $self->{$_} } ) . ')=' . join( ',', sort keys %{ $self->{$_} } ) }
+        #grep { keys %{ $self->{$_} } } @{ $self->{'informative_hash'} } )
+        'clients:', scalar keys %{ $self->{'clients'} }, 
+        map {"($self->{'clients'}{$_}{'number'})$_=$self->{'clients'}{$_}{'status'}"} 
+        sort keys %{ $self->{'clients'}},
     );
     $self->log(
       'dcdbg',
@@ -1608,12 +1703,12 @@ sub func {
   $self->{'active'} ||= sub {
     my $self = shift;
     return $self->{'status'}
-      if grep { $self->{'status'} eq $_ } qw(connecting connected reconnecting listening transfer);
+      if grep { $self->{'status'} eq $_ } qw(connecting_tcp connecting connected reconnecting listening transfer);
     return 0;
   };
   #sub status {
   #now states:
-  #listening  connecting   connected   reconnecting transfer  disconnecting disconnected destroy
+  #listening  connecting_tcp connecting   connected   reconnecting transfer  disconnecting disconnected destroy
   #need checks:
   #\ connected?/             \-----/
   #\-----------------------active?-------------------------/
@@ -1817,13 +1912,10 @@ look at examples for handlers
 
 =head1 SEE ALSO
 
- http://pro.setun.net/dcppp/
- http://sourceforge.net/projects/dcppp
-
- http://svn.setun.net/dcppp/timeline/browser/trunk
-
  latest snapshot
  svn co svn://svn.setun.net/dcppp/trunk/ dcppp
+
+ http://svn.setun.net/dcppp/timeline/browser/trunk
 
  usage example:
  used in [and created for] http://sourceforge.net/projects/pro-search http://pro.setun.net/search/
@@ -1851,7 +1943,7 @@ Oleg Alexeenkov, E<lt>pro@cpan.orgE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2005-2010 Oleg Alexeenkov
+Copyright (C) 2005-2011 Oleg Alexeenkov
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.10.0 or,

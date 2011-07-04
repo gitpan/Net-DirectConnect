@@ -18,6 +18,7 @@ examples/stat/stat.pl
 examples/stat/statlib.pm
 examples/stat/style.css
 examples/watch.pl
+IO-Socket-INET.pm.sctp.diff
 lib/Net/DirectConnect.pm
 lib/Net/DirectConnect/adc.pm
 lib/Net/DirectConnect/clicli.pm
