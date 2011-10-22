@@ -1,4 +1,4 @@
-#$Id: http.pm 742 2011-01-14 00:14:31Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/http.pm $
+#$Id: http.pm 919 2011-10-21 21:57:00Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/http.pm $
 package    #hide from cpan
   Net::DirectConnect::http;
 use Data::Dumper;    #dev only
@@ -8,7 +8,7 @@ use Net::DirectConnect;
 #use Net::DirectConnect::hubcli;
 use strict;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 742 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 919 $' ) )[1];
 #our @ISA = ('Net::DirectConnect');
 use base 'Net::DirectConnect';
 
@@ -19,7 +19,11 @@ sub init {
   local %_ = (
     #
     #'incomingclass' => 'Net:DirectConnect::httpcli',
-    'auto_connect' => 0, 'auto_listen' => 0, 'protocol' => 'http',
+    'auto_connect' => 0,
+    'auto_listen'  => 0,
+    'protocol'     => 'http',
+    #);  $self->{$_} = $_{$_} for keys %_;
+    # local %_ = (
     #'myport'        => 80,
     #'myport_base'   => 8000,
     #'myport_random' => 99,
@@ -89,7 +93,7 @@ sub init {
         $c .= "try dl [$1]";
       }
       $c .= "<hr/><pre>" . Dumper( $self->{http_headers} );
-      $self->send( Encode::encode 'utf8', $c );
+      $self->send( Encode::encode 'utf8', $c, Encode::FB_WARN );
       $self->destroy();
     },
   };

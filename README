@@ -28,6 +28,7 @@ DESCRIPTION
 INSTALLATION
      To install this module type the following:
 
+       cpan DBD::SQLite IO::Socket::INET6 IO::Socket::SSL
        perl Makefile.PL && make install clean
 
 SEE ALSO
@@ -69,6 +70,18 @@ POD ERRORS
     Hey! The above document had some coding errors, which are explained
     below:
 
-    Around line 1172:
+    Around line 883:
+        Unknown directive: =hm
+
+    Around line 920:
+        Unknown directive: =no
+
+    Around line 1319:
+        Unknown directive: =no
+
+    Around line 1822:
+        Unknown directive: =no
+
+    Around line 1854:
         Unknown directive: =no
 

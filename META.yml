@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Net-DirectConnect
-version:            0.10
+version:            0.11
 abstract:           ~
 author:  []
 license:            unknown
@@ -13,15 +13,18 @@ requires:
     DBD::SQLite:          0
     DBI:                  0
     IO::Compress::Bzip2:  0
+    IO::Socket::INET6:    0
+    IO::Socket::SSL:      0
     lib::abs:             0
     MIME::Base32:         0
     Net::DirectConnect::TigerHash:  0
+    Socket6:              0
     Time::HiRes:          0
 no_index:
     directory:
         - t
         - inc
-generated_by:       ExtUtils::MakeMaker version 6.55_02
+generated_by:       ExtUtils::MakeMaker version 6.57_05
 meta-spec:
     url:      http://module-build.sourceforge.net/META-spec-v1.4.html
     version:  1.4

@@ -1,4 +1,4 @@
-#$Id: clihub.pm 787 2011-05-25 21:41:28Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clihub.pm $
+#$Id: clihub.pm 919 2011-10-21 21:57:00Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clihub.pm $
 package    #hide from cpan
   Net::DirectConnect::clihub;
 use strict;
@@ -10,7 +10,7 @@ use Net::DirectConnect;
 use Net::DirectConnect::clicli;
 #use Net::DirectConnect::http;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 787 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 919 $' ) )[1];
 use base 'Net::DirectConnect';
 
 sub name_to_ip($) {
@@ -50,7 +50,7 @@ sub init {
     'search_every_min'     => 10,
     'auto_connect'         => 1,
     'auto_bug'             => 1,
-    'reconnects'           => 5,
+    'reconnects'           => 99999,
     'NoGetINFO'            => 1,                              #test
     'NoHello'              => 1,
     'UserIP2'              => 1,
@@ -62,7 +62,10 @@ sub init {
     'disconnect_recursive' => 1,
   );
   $self->{$_} //= $_{$_} for keys %_;
-  $self->{'periodic'}{ __FILE__ . __LINE__ } = sub { $self->cmd( 'search_buffer', ) if $self->{'socket'}; };
+  $self->{'periodic'}{ __FILE__ . __LINE__ } = sub {
+    my $self = shift if ref $_[0];
+    $self->search_buffer() if $self->{'socket'};
+  };
   #$self->log($self, 'inited',"MT:$self->{'message_type'}", ' with', Dumper  \@_);
   #$self->baseinit();
   #share_full share_tth want
@@ -73,14 +76,14 @@ sub init {
          #$self->log( $self, 'inited3', "MT:$self->{'message_type'}", ' with' );
          #You are already in the hub.
          #  $self->{'parse'} ||= {
+  $self->module_load('filelist');
   local %_ = (
     'chatline' => sub {
       my $self = shift if ref $_[0];
       #$self->log( 'dev', Dumper \@_);
       my ( $nick, $text ) = $_[0] =~ /^(?:<|\* )(.+?)>? (.+)$/s;
       #$self->log('dcdev', 'chatline parse', Dumper(\@_,$nick, $text));
-      $self->log( 'warn', "[$nick] oper: already in the hub [$self->{'Nick'}]" ), $self->cmd('nick_generate'),
-        $self->reconnect(),
+      $self->log( 'warn', "[$nick] oper: already in the hub [$self->{'Nick'}]" ), $self->nick_generate(), $self->reconnect(),
         if ( ( !keys %{ $self->{'NickList'} } or $self->{'NickList'}{$nick}{'oper'} )
         and $text eq 'You are already in the hub.' );
       if ( $self->{'NickList'}{$nick}{'oper'} or $self->{'NickList'}{$nick}{'hubbot'} or $nick eq 'Hub-Security' ) {
@@ -258,7 +261,7 @@ sub init {
     'Search' => sub {
       my $self = shift if ref $_[0];
       my $search = $_[0];
-      $self->cmd('make_hub');
+      $self->make_hub();
       my $params = { 'time' => int( time() ), 'hub' => $self->{'hub_name'}, };
       ( $params->{'who'}, $params->{'cmds'} ) = split /\s+/, $search;
       $params->{'cmd'} = [ split /\?/, $params->{'cmds'} ];
@@ -296,7 +299,8 @@ sub init {
           $path =~ s{^\w:}{};
           $path =~ s{^\W+}{};
           $path =~ tr{/}{\\};
-          $path = Encode::encode $self->{charset_protocol}, Encode::decode $self->{charset_fs}, $path
+          $path = Encode::encode $self->{charset_protocol}, Encode::decode( $self->{charset_fs}, $path, Encode::FB_WARN ),
+            Encode::FB_WARN
             if $self->{charset_fs} ne $self->{charset_protocol};
         }
         local @_ = (
@@ -347,7 +351,7 @@ sub init {
     'SR' => sub {
       my $self = shift if ref $_[0];
 #$self->log( 'dev', "SR", @_ , 'parent=>', $self->{parent}, 'h=', $self->{handler}, Dumper($self->{handler}), 'ph=', $self->{parent}{handler}, Dumper($self->{parent}{handler}), ) if $self;
-      $self->cmd('make_hub');
+      $self->make_hub();
       my $params = { 'time' => int( time() ), 'hub' => $self->{'hub_name'}, };
       ( $params->{'nick'}, $params->{'str'} ) = split / /, $_[0], 2;
       $params->{'str'} = [ split /\x05/, $params->{'str'} ];
@@ -503,34 +507,23 @@ sub init {
       $_[3] ||= ( $_[4] =~ s/^(TTH:)?([A-Z0-9]{39})$/TTH:$2/ ? '9' : '1' ) unless defined $_[3];
       #
       #$self->cmd( 'search_buffer', 'F', 'T', '0', '1', @_ );
-      $self->cmd( 'search_buffer', @_ );
+      $self->search_buffer(@_);
     },
     'search_tth' => sub {
       my $self = shift if ref $_[0];
       $self->{'search_last_string'} = undef;
-      $self->cmd(
-        'search_nmdc',
-        #'F', 'T', '0', '9',
-        #'TTH:' .
-        #$_[0],
-        @_
-      );
+      $self->search_nmdc(@_);
     },
     'search_string' => sub {
       my $self = shift if ref $_[0];
       #my $string = $_[0];
       $self->{'search_last_string'} = $_[0];    #$string;
                                                 #$string =~ tr/ /$/;
-      $self->cmd(
-        'search_nmdc',
-        #'F', 'T', '0', '1',
-        #$string,
-        @_
-      );
-      #}
+      $self->search_nmdc(@_);
     },
     'search_send' => sub {
       my $self = shift if ref $_[0];
+      #$self->log( 'devsearchsend', "$self->{'M'} ne 'P' and $self->{'myip'} and $self->{'myport_udp'}" );
       $self->sendcmd(
         'Search', (
           ( $self->{'M'} ne 'P' and $self->{'myip'} and $self->{'myport_udp'} )

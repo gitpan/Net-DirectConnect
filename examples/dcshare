@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: dcshare 793 2011-06-17 16:51:17Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcshare $
+#$Id: dcshare 919 2011-10-21 21:57:00Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcshare $
 
 =head1 NAME
 
@@ -96,7 +96,7 @@ Net::DirectConnect::filelist->new( log => $log, %{ $config{dc} || {} } )->fileli
 my @dc;
 @dc = map {
   Net::DirectConnect->new(
-    modules            => ['filelist'],
+    #modules            => ['filelist'],
     share              => \@dirs,
     'filelist_builder' => ( join ' ', $^X, $0, 'filelist' ),
     'log'              => $log,
@@ -106,7 +106,8 @@ my @dc;
     worker   => sub {
       my $dc = shift;
     },
-    %{ $config{dc} || {} },
+    %{ $config{dc}      || {} },
+    %{ $config{dcshare} || {} },
     'host' => $_,
     )
   } (

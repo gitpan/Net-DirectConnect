@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: psmisc.pm 4629 2011-06-17 17:48:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+#$Id: psmisc.pm 4690 2011-10-21 10:56:26Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
 
 =copyright
 PRO-search shared library
@@ -36,7 +36,7 @@ use Time::HiRes qw(time);
 use Encode;
 use POSIX qw(strftime);
 use lib::abs;
-our $VERSION = ( split( ' ', '$Revision: 4629 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4690 $' ) )[1];
 our (%config);
 #my ( %config );
 #local *config = *main::config;
@@ -71,6 +71,7 @@ use Exporter 'import';
   encode_url_link
   decode_url
   printlog
+  dmp
   printprog
   openproc
   state
@@ -104,11 +105,12 @@ use Exporter 'import';
   http_get_code
   loadlist
   shelldata
+  printall
   %work %static $param
   %program
 );
 #  %config
-%EXPORT_TAGS = ( log => [qw(  printlog)], config => [qw(%config)], all => \@EXPORT_OK, );    #%human %out %processor  %stat
+%EXPORT_TAGS = ( log => [qw(printlog dmp)], config => [qw(%config)], all => \@EXPORT_OK, );    #%human %out %processor  %stat
 
 =no
   open_out_file
@@ -117,7 +119,7 @@ use Exporter 'import';
 
 #flush
 #our ( %config, %work, %stat, %static, $param, %program, $root_path,  );    #%human, %out, %processor,
-our ( %work, %static, $param, %program, $root_path, );                                       #%human, %out, %processor, %stat,
+our ( %work, %static, $param, %program, $root_path, );                                         #%human, %out, %processor, %stat,
 #my %human;
 #sub conf_once {
 sub config_init {
@@ -128,7 +130,7 @@ sub config_init {
   conf(
     sub {
       #print "  config_init:sub;";
-      $config{'stderr_redirect'} ||= '2>&1';                                                 #'2>/dev/null';
+      $config{'stderr_redirect'} ||= '2>&1';                                                   #'2>/dev/null';
 #A                                                              |                                                            YA  E   a                                                              |                                                            ya  e   |-ukr------------------|
       $config{'trans'}{'cp1251'} ||=
 "\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF\xA8\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF0\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\xFD\xFE\xFF\xB8\xB2\xB3\xAF\xBF\xAA\xBA";
@@ -138,7 +140,7 @@ sub config_init {
 "\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB\xBC\xBD\xBE\xBF\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF\xA1\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF1\xA6\xF6\xA7\xF7\xA4\xF4";
       $config{'trans'}{'cp866'} ||=
 "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xF0\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF1\xF6\xF7\xF8\xF9\xF4\xF5";
-      $config{'trans'}{'utf-8'} ||= "\xD0\xD1";                                              #JUST TRICK for autodetect
+      $config{'trans'}{'utf-8'} ||= "\xD0\xD1";                                                #JUST TRICK for autodetect
       #$config{'trans_up'}{$_} = (split//, $config{'trans'}{$_})[0..32] for keys %{$config{'trans'}};
       $config{'trans_up'}{$_}   = substr( $config{'trans'}{$_}, 0,  33 ),
         $config{'trans_lo'}{$_} = substr( $config{'trans'}{$_}, 33, 33 ),
@@ -325,7 +327,7 @@ sub config_init {
 sub get_params_one(@) {    # p=x,p=y,p=z => p=x,p1=y,p2=z ; p>=z => p=z, p_mode='>'; p => p; -p => -p=1;
   local %_ = %{ ref $_[0] eq 'HASH' ? shift : {} };
   for (@_) {               # PERL RULEZ # SORRY # 8-) #
-    #tr/+/ /, s/%([a-f\d]{2})/pack 'C', hex $1/gei for my ( $k, $v ) = /^([^=]+=?)=(.+)$/ ? ( $1, $2 ) : ( /^([^=]*)=?$/, /^-/ );
+   #tr/+/ /, s/%([a-f\d]{2})/pack 'C', hex $1/gei for my ( $k, $v ) = /^([^=]+=?)=(.+)$/ ? ( $1, $2 ) : ( /^([^=]*)=?$/, /^-/ );
     tr/+/ /, s/%([a-f\d]{2})/pack 'H*', $1/gei for my ( $k, $v ) = /^([^=]+=?)=(.+)$/ ? ( $1, $2 ) : ( /^([^=]*)=?$/, /^-/ );
     $_{"${1}_mode$2"} .= $3 if $k =~ s/^(.+?)(\d*)([=!><~@]+)$/$1$2/;
     $k =~ s/(\d*)$/($1 < 100 ? $1 + 1 : last)/e while defined $_{$k};
@@ -352,7 +354,6 @@ sub get_params_utf8(;$$) {
   utf8::decode $_ for %$_;
   wantarray ? %$_ : $_;
 }
-
 sub is_array ($) { UNIVERSAL::isa( $_[0], 'ARRAY' ) }
 sub is_array_size ($) { is_array( $_[0] ) and @{ $_[0] } }
 sub is_hash ($) { UNIVERSAL::isa( $_[0], 'HASH' ) }
@@ -602,6 +603,18 @@ sub startme(;$@) {
     return start( $^X, $work{'$0'} || $0, $start, @_ );
   }
 }
+our $indent = 1;
+our $join   = ', ';
+our $prefix = 'dmp';    # 'dmp '
+
+sub dmp (@) {
+  printlog $prefix, ( caller(1) )[3], ':', ( caller(0) )[2], ' ', (
+    join $join, (
+      map { ref $_ ? Data::Dumper->new( [$_] )->Indent($indent)->Pair( $indent ? ' => ' : '=>' )->Terse(1)->Dump() : "'$_'" } @_
+    )
+    ),
+    wantarray ? @_ : $_[0];
+}
 
 sub state {
   $work{'$0'} ||= $0;
@@ -681,7 +694,7 @@ sub normalize_ip_noc($) {    #v2
         )
       );
   return $ip if $err;
-  my ( $tmp );
+  my ($tmp);
   return $ip unless $tmp = inet_aton($ip);
   return $ip unless $host = ( gethostbyaddr( $tmp, AF_INET ) )[0];
   for my $repl ( @{ $config{'ip_normalize_pre'} || [] } ) {
@@ -808,7 +821,7 @@ sub encode_safe ($$) {
   #Encode::_utf8_off($string);
   #printlog('ensafeB',$cto, Dumper $string,  utf8::is_utf8 $string);
   #local $_ = Encode::encode $cto, Encode::decode  'utf-8',  $string;
-  local $_ = Encode::encode $cto, $string;
+  local $_ = Encode::encode $cto, $string, Encode::FB_WARN;
   # Encode::_utf8_off($_);
   #utf8::downgrade($_),
   #utf8::decode($_),
@@ -1134,22 +1147,22 @@ sub caller_trace(;$) {
 
 sub lib_init() {
   $SIG{__WARN__} = sub {
-    printlog( 'warn', $!, $@, @_ );
+    printlog( 'warn', $@, $!,  @_ );
     #printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
     #caller_trace(15);
     }, $SIG{__DIE__} = sub {
-    printlog( 'die', $!, $@, @_ );
+    printlog( 'die', $@, $!,  @_ );
     #printlog( 'die', 'caller', $_, caller($_) || last ) for ( 0 .. 15 );
     caller_trace(15);
     }
-    unless $static{'no_sig_log'};    #die $!;
+    if !$static{'no_sig_log'} and !$ENV{'SERVER_PORT'};    #die $!;
   unless ( $static{'port2prot'} ) {
     @{ $static{'port2prot'} }{ ( $config{'scanner'}{$_}{'port'}, $_ ) } = ( $_, $_ ) for keys %{ $config{'scanner'} };
   }
 }
 
 sub mysleep($) {
-  if ( $_[0] > 1 and $config{'system'} eq 'win' ) {    #activeperl only?
+  if ( $_[0] > 1 and $config{'system'} eq 'win' ) {        #activeperl only?
     sleep(1) for ( 0 .. $_[0] );
   } else {
     sleep( $_[0] );
@@ -1402,10 +1415,10 @@ sub http_get {    # REWRITE easier
     #my $resp =( $method eq 'HEAD' ? $ua->head($what) :
     my $resp = (
       $ua->request(
-        new HTTP::Request(
+        HTTP::Request->new(
           $method,
-          new URI::URL($what),
-          new HTTP::Headers(
+          URI::URL->new($what),
+          HTTP::Headers->new(
             #'User-Agent' => ($config{'useragent'} || $config{'crawler_name'}),
             %{ $headers_in || {} }
           ),
@@ -1451,10 +1464,9 @@ sub http_get_code ($;$$) {
     #$ua->proxy('http', 'http://proxy.ru:3128');
     my $resp = (
       ( LWP::UserAgent->new( 'timeout' => hconfig('timeout'), %{ $config{'lwp'} or {} }, %{ $lwpopt or {} } ) )->request(
-        new HTTP::Request(
+        HTTP::Request->new(
           ( $method or 'GET' ),
-          new URI::URL($what),
-          new HTTP::Headers( 'User-Agent' => $config{'useragent'} || $config{'crawler_name'} )
+          URI::URL->new($what), HTTP::Headers->new( 'User-Agent' => $config{'useragent'} || $config{'crawler_name'} )
         )
       )
     );
@@ -1511,7 +1523,7 @@ sub save_list {
 }
 =cut
 
-sub schedule($$;@) {    #$Id: psmisc.pm 4629 2011-06-17 17:48:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+sub schedule($$;@) {    #$Id: psmisc.pm 4690 2011-10-21 10:56:26Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   our %schedule;
   my ( $every, $func ) = ( shift, shift );
   my $p;
@@ -1519,15 +1531,19 @@ sub schedule($$;@) {    #$Id: psmisc.pm 4629 2011-06-17 17:48:29Z pro $ $URL: sv
   $p = $every if ref $every eq 'HASH';
   $p->{'every'} ||= $every if !ref $every;
   $p->{'id'} ||= join ';', caller;
+  #dmp $p, \%schedule;
+  #dmp $schedule{ $p->{'id'} }{'runs'}, $p->{'runs'}, $p, $schedule{ $p->{'id'} } if $p->{'runs'};
   $schedule{ $p->{'id'} }{'func'} = $func if !$schedule{ $p->{'id'} }{'func'} or $p->{'update'};
   $schedule{ $p->{'id'} }{'last'} = time - $p->{'every'} + $p->{'wait'} if $p->{'wait'} and !$schedule{ $p->{'id'} }{'last'};
-  $schedule{ $p->{'id'} }{'func'}->(@_), $schedule{ $p->{'id'} }{'last'} = time
+  #dmp("RUN", $p->{'id'}), 
+  ++$schedule{ $p->{'id'} }{'runs'}, 
+  $schedule{ $p->{'id'} }{'last'} = time, $schedule{ $p->{'id'} }{'func'}->(@_),
     if ( $schedule{ $p->{'id'} }{'last'} + $p->{'every'} < time )
-    and ( !$p->{'runs'} or $schedule{ $p->{'id'} }{'runs'}++ < $p->{'runs'} )
+    and ( !$p->{'runs'} or $schedule{ $p->{'id'} }{'runs'} < $p->{'runs'} )
     and ( !( ref $p->{'cond'} eq 'CODE' ) or $p->{'cond'}->( $p, $schedule{ $p->{'id'} }, @_ ) )
     and ref $schedule{ $p->{'id'} }{'func'} eq 'CODE';
 }
-{    #$Id: psmisc.pm 4629 2011-06-17 17:48:29Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+{    #$Id: psmisc.pm 4690 2011-10-21 10:56:26Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   my (@locks);
   sub lockfile($) {
     return ( $config{'lock_dir'} || './' ) . ( length $_[0] ? $_[0] : 'lock' ) . ( $config{'lock_ext'} || '.lock' );
@@ -1611,6 +1627,17 @@ sub schedule($$;@) {    #$Id: psmisc.pm 4629 2011-06-17 17:48:29Z pro $ $URL: sv
 sub use_try ($;@) {
   ( my $path = ( my $module = shift ) . '.pm' ) =~ s{::}{/}g;
   $INC{$path} or eval 'use ' . $module . ' qw(' . ( join ' ', @_ ) . ');1;' and $INC{$path};
+}
+
+sub printall {
+  local $_ = shift;
+  return unless length $_;
+  $_ = $$_ while ref $_ eq 'REF';
+  return $_->(@_) if ref $_ eq 'CODE';
+  #local
+  @_ = () if ref $_[0];
+  print( $$_, @_ ), return if ref $_ eq 'SCALAR';
+  print $_, @_;
 }
 program('params');
 $program{ program() }{'force'} = 1;
@@ -1708,10 +1735,10 @@ sub program_run(;$) {
 }
 #BEGIN { config_init(); }
 config_init();
-
-package psconn;
+package    #hide from cpan
+  psconn;
 use strict;
-our $VERSION = ( split( ' ', '$Revision: 4629 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4690 $' ) )[1];
 #use psmisc;
 #sub connection {
 sub new {

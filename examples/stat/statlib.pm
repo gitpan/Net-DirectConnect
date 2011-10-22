@@ -1,6 +1,7 @@
 #!/usr/bin/perl
-#$Id: statlib.pm 790 2011-05-27 10:20:14Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
-package statlib;
+#$Id: statlib.pm 914 2011-10-18 19:13:56Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
+package    #hide from cpan
+  statlib;
 use strict;
 use Time::HiRes qw(time sleep);
 use utf8;
@@ -16,6 +17,8 @@ $Data::Dumper::Sortkeys = 1;
 #warn $1 . 'DirectConnect/pslib';
 #use lib $1 . 'DirectConnect/pslib/';
 use Net::DirectConnect::pslib::pssql;
+#use lib::abs qw(pslib);
+#use pssql;
 #psmisc->import qw(:log);
 #use Net::DirectConnect::pslib::pssql;
 #eval q{
@@ -54,9 +57,11 @@ $config{'browser_ie'} = 1 if $ENV{'HTTP_USER_AGENT'} =~ /MSIE/ and $ENV{'HTTP_US
 #$config{'client'} = $_,
 $config{ 'browser_' . $_ } = 1 for grep { $ENV{'HTTP_USER_AGENT'} =~ /$_/i } @{ $config{'browsers'} };
 $config{'use_graph'} ||= 1;    #  if grep {$config{'browser_'. $_}} qw(firefox safari chrome opera);
-$config{'graph_inner'} ||= 1 if grep { $config{ 'browser_' . $_ } } qw(firefox safari chrome);
-$config{'title'}       ||= 'dcstat';
-$config{'sql'}         ||= {
+$config{'graph_inner'}        ||= 1 if grep { $config{ 'browser_' . $_ } } qw(firefox safari chrome);
+$config{'title'}              ||= 'dcstat';
+$config{'web_max_query_time'} ||= 10;
+#warn 'pre',Dumper $config{'sql'};
+$config{'sql'}                ||= {
   #'driver'              => 'mysql',
   'driver' => 'sqlite', 'dbname' => 'dcstat', 'auto_connect' => 1, 'log' => sub { shift; psmisc::printlog(@_) },
   #'cp_in'               => 'cp1251',
@@ -157,9 +162,9 @@ $config{'queries'}{'queries top tth'} ||= {
   'main'    => 1,
   'periods' => 1,
   ( !$config{'use_graph'} ? ( 'class' => 'half' ) : ( 'graph' => 1 ) ),
-  'desc'      => { 'ru' => 'Чаще всего скачивают', 'en' => 'Most downloaded' },
-  'show'      => [qw(n cnt string filename size tth time )],
-  'SELECT'    => '*, COUNT(*) as cnt',
+  'desc'   => { 'ru' => 'Чаще всего скачивают', 'en' => 'Most downloaded' },
+  'show'   => [qw(n cnt string filename size tth time )],
+  'SELECT' => '*, COUNT(*) as cnt',
   #'SELECT'    => 'queries.*,results.*, COUNT(*) as cnt',
   'FROM'      => 'queries',
   'LEFT JOIN' => 'results USING (tth)',
@@ -436,7 +441,7 @@ sub is_slow {
 sub make_query {
   my ( $q, $query, $period ) = @_;
   my $sql;
-  #warn Dumper caller(0);
+  #warn Dumper caller(0), $q, $query, $period;
   #(caller(0))[1] eq 'statcgi'
   #return ;
   if ( is_slow($query) and ( caller(0) )[0] eq 'statcgi' and $config{'use_slow'} ) {
@@ -447,7 +452,7 @@ sub make_query {
       . ( ( $config{'queries'}{$query}{'periods'} ? ' AND period=' . $db->quote($period) : '' )
       . " ORDER BY n"
         . " LIMIT $config{'query_default'}{'LIMIT'}" );
-    my $res = $db->query($sql);
+    my $res = $db->query($sql);    
     #print Dumper $res if $param->{'debug'};
     my @ret;
     for my $row (@$res) { push @ret, eval $row->{'result'}; }
@@ -458,62 +463,63 @@ sub make_query {
   #return;
   $q->{'WHERE'} = join ' AND ', grep { $_ } @{ $q->{'WHERE'}, } if ref $q->{'WHERE'} eq 'ARRAY';
   $q->{'WHERE'} = join ' AND ', grep { $_ } $q->{'WHERE'},
-    map { $_ . '=' . $db->quote( $param->{$_} ) } grep { length $param->{$_} } keys %{ $config{'queries'} };    #qw(string tth);
+    map { $_ . ($param->{$_} =~ /%/? ' LIKE ' : '=' ). $db->quote( $param->{$_} ) } grep { length $param->{$_} } keys %{ $config{'queries'} };    #qw(string tth);
   $sql = join ' ', $q->{'sql'},
     map { my $key = ( $q->{$_} || $config{query_default}{$_} ); length $key ? ( $_ . ' ' . $key ) : '' } 'SELECT', 'FROM',
     'LEFT JOIN', 'USING', 'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT', 'UNION';
+  #print "sql[$sql]";
   return $db->query($sql);
 }
 $db ||= pssql->new( %{ $config{'sql'} || {} }, );
 ( $tq, $rq, $vq ) = $db->quotes();
-
 #=todo
 {
- my $self = $db;
-
-
+  my $self = $db;
   $self->{'array_hash_repl'} = sub {
     my $self = shift;
-    my $r = shift;
-    return {} if  !$self->{'sth'} or !$r;
-      my $i = -1;
-      my %uniq;
-      $r = { map {++$i; $_=>($r->[$i] ? $uniq{$_} = $r->[$i] : $uniq{$_})  } @{$self->{'sth'}{'NAME'}} };
+    my $r    = shift;
+    return {} if !$self->{'sth'} or !$r;
+    my $i = -1;
+    my %uniq;
+    $r = { map { ++$i; $_ => ( $r->[$i] ? $uniq{$_} = $r->[$i] : $uniq{$_} ) } @{ $self->{'sth'}{'NAME'} } };
     return $r;
   };
   $self->{'array_hash_add'} = sub {
     my $self = shift;
-    my $r = shift;
-    return {} if  !$self->{'sth'} or !$r;
-      my $i = -1;
-      my %uniq;
-      $r = { map {++$i; $_=>($uniq{$_} ||= $r->[$i])  } @{$self->{'sth'}{'NAME'}} };
+    my $r    = shift;
+    return {} if !$self->{'sth'} or !$r;
+    my $i = -1;
+    my %uniq;
+    $r = { map { ++$i; $_ => ( $uniq{$_} ||= $r->[$i] ) } @{ $self->{'sth'}{'NAME'} } };
     return $r;
   };
   $self->{'fetch_hash'} = sub {
     my $self = shift;
     #return $self->{'sth'}->fetchrow_hashref();
+    #return {} unless int $self->{'executed'};
     local $_ = $self->{'sth'}->fetchrow_arrayref() || return;
-#print 'A:',Dumper $self->{'sth'}{'NAME'},$_;
+    #print 'A:',Dumper $self->{'sth'}{'NAME'},$_;
     #return $self->array_hash_add( $_ );
-    return $self->array_hash_repl( $_ );
+    return $self->array_hash_repl($_);
   };
-
   $self->{'array_to_hash'} = sub {
     my $self = shift;
   };
-
   $self->{'line'} = sub {
     my $self = shift;
     return {} if @_ and $self->prepare(@_);
     return {} if !$self->{'sth'} or $self->{'sth'}->err;
     my $tim = psmisc::timer();
-    local $_ =
-      scalar( psmisc::cp_trans_hash( $self->{'codepage'}, $self->{'cp_out'}, ( 
-      #$self->array_to_hash( $self->{'sth'}->fetchrow_arrayref() )
-      $self->fetch_hash()
-      #$self->{'sth'}->fetchrow_hashref() || {} 
-      ) ) );
+    local $_ = scalar(
+      psmisc::cp_trans_hash(
+        $self->{'codepage'},
+        $self->{'cp_out'}, (
+          #$self->array_to_hash( $self->{'sth'}->fetchrow_arrayref() )
+          $self->fetch_hash()
+            #$self->{'sth'}->fetchrow_hashref() || {}
+        )
+      )
+    );
     $self->{'queries_time'} += $tim->();
     $self->log(
       'dmp', 'line:[', @_, '] = ', scalar keys %$_,
@@ -521,9 +527,8 @@ $db ||= pssql->new( %{ $config{'sql'} || {} }, );
       'err=', $self->err(),
     ) if ( caller(2) )[0] ne 'pssql';
     return $_;
-  }if $self->{'driver'} =~ /mysql/;
-
-
+    }
+    if $self->{'driver'} =~ /mysql/;
   $db->{'query'} = sub {
     my $self = shift;
     my $tim  = psmisc::timer();
@@ -533,25 +538,23 @@ $db ||= pssql->new( %{ $config{'sql'} || {} }, );
       local $self->{'explain'} = 0, $self->query_log( $self->{'EXPLAIN'} . ' ' . $query )
         if $self->{'explain'} and $self->{'EXPLAIN'};
       local $_ = $self->line($query);
-      next unless keys %{$_};
+      next unless keys %$_;
       push( @hash, $_ );
-      next unless $self->{'sth'} and keys %{$_};
+      next unless $self->{'sth'} and keys %$_;
       my $tim = psmisc::timer();
       #$self->log("Db[",%$_,"]($self->{'codepage'}, $self->{'cp_out'})"),
       #print 'name', Dumper $self->{sth}{'NAME'};
       #while ( my $r = $self->{'sth'}->fetchrow_arrayref()  ) {
       while ( my $r = $self->fetch_hash() ) {
-#print 'H:',Dumper $r;
-            
-
-      #$r = $self->array_to_hash($r);
-#print "r[$r]", Dumper $r;
-      push( @hash, scalar psmisc::cp_trans_hash( $self->{'codepage'}, $self->{'cp_out'}, $r ) );
-      #print Dumper \%uniq;
+        #print 'H:',Dumper $r;
+        #$r = $self->array_to_hash($r);
+        #print "r[$r]", Dumper $r;
+        push( @hash, scalar psmisc::cp_trans_hash( $self->{'codepage'}, $self->{'cp_out'}, $r ) );
+        #print Dumper \%uniq;
       }
-        #$self->log("Da[",%$_,"]"),
-        #while ( $_ = $self->{'sth'}->fetchrow_hashref() );
-#print 'name', Dumper $self->{sth}{'NAME'}, $self->{sth}{'NAME_hash'} ,Dumper @hash;
+      #$self->log("Da[",%$_,"]"),
+      #while ( $_ = $self->{'sth'}->fetchrow_hashref() );
+      #print 'name', Dumper $self->{sth}{'NAME'}, $self->{sth}{'NAME_hash'} ,Dumper @hash;
       $self->{'queries_time'} += $tim->();
     }
     $self->log(
@@ -566,9 +569,8 @@ $db ||= pssql->new( %{ $config{'sql'} || {} }, );
       for (@hash) { utf8::decode $_ for %$_; }
     }
     return wantarray ? @hash : \@hash;
-  } if $self->{'driver'} =~ /mysql/;
+    }
+    if $self->{'driver'} =~ /mysql/;
 }
 #=cut
-
-
 1;

@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#my $Id = '$Id: ddltest.pl 787 2011-05-25 21:41:28Z pro $';
+#my $Id = '$Id: ddltest.pl 919 2011-10-21 21:57:00Z pro $';
 
 =copyright
 test direct downloading (without hub)
