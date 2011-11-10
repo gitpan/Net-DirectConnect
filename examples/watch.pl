@@ -1,11 +1,12 @@
 #!/usr/bin/perl
-#$Id: watch.pl 919 2011-10-21 21:57:00Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/watch.pl $
+#$Id: watch.pl 933 2011-11-03 22:53:27Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/watch.pl $
 
 =readme
 
 chat watch 
 
 =cut
+
 use strict;
 eval { use Time::HiRes qw(time sleep); };
 use lib::abs '../lib';

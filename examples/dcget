@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: dcget 920 2011-10-21 23:19:48Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcget $
+#$Id: dcget 935 2011-11-07 20:38:10Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcget $
 
 =head1 NAME
 
@@ -233,14 +233,17 @@ my @dc;
               $self->log( 'warn', 'removing already downloaded partial', $_, $tth ), unlink($file), next
                 if $self->{'share_full'}{$tth};
               $self->log( 'warn', 'removing already downloading partial', $_, $tth ), unlink($file), next
-                if $partial{$tth} > -s $file;
+                if $partial{$tth}{size} > -s $file;
+				$self->log( 'warn', 'removing already downloading partial2', $_, $tth , $partial{$tth}{size}),
+			  unlink($partial{$tth}{file}) if $partial{$tth}{size} and $partial{$tth}{size} < -s $file;
               $self->log( 'dev', 'adding to queue', $_, $tth, -s $file, $partial{$tth} );
               #$self->{'want_download'}{$tth} //= {};
               push @todl, $tth unless $partial{$tth};
-              $partial{$tth} = -s $file;
+              $partial{$tth}{size} = -s $file;
+              $partial{$tth}{file} = $file;
               $self->{'want_download_filename'}{$tth} = { $_ => 100 };
             }
-            $self->dumper();
+            #$self->dumper();
           }
         },
         $dc
@@ -271,7 +274,9 @@ my @dc;
   );
 $_->{__work} ||= \%work for    #for dumper
   grep { $_->{dev_auto_dump} } @dc;
-while ( @dc = grep { $_ and $_->active() } @dc ) {
-  $_->work() for @dc;
+while ( @_ = grep { $_ and $_->active() } @dc ) {
+  $_->work() for @_;
   #Time::HiRes::sleep 0.1;
 }
+
+#psmisc::printlog 'dev', 'endst', join ', ', map {$_->status }@dc

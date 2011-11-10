@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: pssql.pm 4688 2011-10-16 19:10:21Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/pssql.pm $
+#$Id: pssql.pm 4691 2011-10-25 15:10:57Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/pssql.pm $
 
 =copyright
 PRO-search sql library
@@ -56,7 +56,7 @@ package    #no cpan
 use strict;
 use utf8;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 4688 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4691 $' ) )[1];
 #use locale;
 use DBI;
 use Time::HiRes qw(time);
@@ -77,7 +77,7 @@ use psmisc;
 #our ( %config, %work, %stat, %static, $param, );
 use base 'psconn';
 our $AUTOLOAD;
-#our $VERSION = ( split( ' ', '$Revision: 4688 $' ) )[1];
+#our $VERSION = ( split( ' ', '$Revision: 4691 $' ) )[1];
 my ( $tq, $rq, $vq );
 my ( $roworder, $tableorder, );
 our ( %row, %default );
@@ -134,7 +134,7 @@ BEGIN {
       'dbi'                 => 'SQLite',
       'params'              => [qw(dbname)],
       'dbname'              => $config{'root_path'} . 'sqlite.db',
-      'no_update_limit'  => 1,                                   #pg sux
+      'no_update_limit'     => 1,                                    #pg sux
       'table quote'         => '"',
       'row quote'           => '"',
       'value quote'         => "'",
@@ -152,14 +152,19 @@ BEGIN {
         return 'install' if $errstr =~ /no such table:|unable to open database file/i;
         return 'syntax'  if $errstr =~ /syntax|unrecognized token/i or $errstr =~ /misuse of aggregate/;
         return 'retry'   if $errstr =~ /database is locked/i;
-        return 'upgrade'   if $errstr =~ /no such column/i;
+        return 'upgrade' if $errstr =~ /no such column/i;
         #return 'connection' if $errstr =~ /connect/i;
         return undef;
       },
-      'pragma' => {map {$_=>$_} 'synchronous = OFF', 'auto_vacuum = FULL'},
+      'pragma' => {
+        map {
+          $_ => $_
+          } 'synchronous = OFF',
+        'auto_vacuum = FULL'
+      },
       'on_connect' => sub {
         my $self = shift;
-        $self->do("PRAGMA $_;") for keys %{$self->{'pragma'}||{}};
+        $self->do("PRAGMA $_;") for keys %{ $self->{'pragma'} || {} };
         #$self->log( 'sql', 'on_connect!' );
       },
       'no_dbirows' => 1,
@@ -236,7 +241,7 @@ BEGIN {
       'err_retry'   => [qw( 1317 )],
       'err_install' => [qw( 1146 )],
       'err_install_db' => [qw( 1049 )],
-      'err_upgrade' => [qw( 1054 )],
+      'err_upgrade'    => [qw( 1054 )],
       'err_ignore '    => [qw( 2 1264 )],
       'error_type'     => sub {
         my $self = shift, my ( $err, $errstr ) = @_;
@@ -704,7 +709,7 @@ sub functions {
     $self->{'dbirows'} = 0 if ( $self->{'dbirows'} = $DBI::rows ) == 4294967294;
     $self->{'dbirows'} = $self->{'limit'} if $self->{'no_dbirows'};
     #$self->log('dbg', "prepare", __LINE__, ':',$ret, $DBI::rows,'=',(($self->{'no_dbirows'} && $ret) ? '0E0' : !int $ret));
-    return (($self->{'no_dbirows'} && $ret) ? undef : !int $ret);
+    return ( ( $self->{'no_dbirows'} && $ret ) ? undef : !int $ret );
   };
   $self->{'line'} ||= sub {
     my $self = shift;
@@ -718,11 +723,9 @@ sub functions {
       scalar( psmisc::cp_trans_hash( $self->{'codepage'}, $self->{'cp_out'}, ( $self->{'sth'}->fetchrow_hashref() || {} ) ) );
     $self->{'queries_time'} += $tim->();
     $self->log(
-      'dmp', 'line(' . $self->{database} . '):[',
-      @_, '] = ', scalar keys %$_,
-      ' per', psmisc::human( 'time_period', $tim->() ),
+      'dmp', 'line(' . $self->{database} . '):[', @_, '] = ', scalar keys %$_, ' per', psmisc::human( 'time_period', $tim->() ),
       'err=', $self->err(),
-    #( caller(2) )[0]);
+      #( caller(2) )[0]);
     ) if ( caller(2) )[0] ne 'pssql';
     return $_;
   };

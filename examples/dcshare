@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: dcshare 919 2011-10-21 21:57:00Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcshare $
+#$Id: dcshare 935 2011-11-07 20:38:10Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcshare $
 
 =head1 NAME
 
@@ -12,7 +12,7 @@ run dc client with file sharing
  unix adc:
  dcshare adc://dc.hub.com:412 /share
  win nmdc:
- dcshare dc.hub.com c:/pub c:/distr
+ dcshare dchub://dc.hub.com c:/pub c:/distr
 
  manual build filelist:
  dcshare /share /sharemore
@@ -115,6 +115,6 @@ my @dc;
     $_
     } @hosts ? @hosts : psmisc::array( $config{dc}{host} ),
   );
-while ( @dc = grep { $_ and $_->active() } @dc ) {
-  $_->work() for @dc;
+while ( @_ = grep { $_ and $_->active() } @dc ) {
+  $_->work() for @_;
 }

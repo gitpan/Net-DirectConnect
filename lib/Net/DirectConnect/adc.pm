@@ -1,4 +1,4 @@
-#$Id: adc.pm 919 2011-10-21 21:57:00Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/adc.pm $
+#$Id: adc.pm 936 2011-11-09 21:58:57Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/adc.pm $
 package    #hide from cpan
   Net::DirectConnect::adc;
 use strict;
@@ -15,7 +15,7 @@ use Net::DirectConnect::http;
 use lib::abs('pslib');
 use psmisc;          # REMOVE
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 919 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 936 $' ) )[1];
 use base 'Net::DirectConnect';
 our %codesSTA = (
   '00' => 'Generic, show description',
@@ -73,7 +73,6 @@ sub tiger ($) {
 }
 sub hash ($) { base32( tiger( $_[0] ) ); }
 =cut
-
 #sub init {  my $self = shift;
 
 =cu
@@ -90,6 +89,7 @@ return $self;
 
 }
 =cut
+
 sub func {
   my $self = shift if ref $_[0];
   #warn 'func call';
@@ -137,7 +137,7 @@ sub func {
     if ( -s $self->{'ID_file'} ) { $self->{'ID'} ||= psmisc::file_read( $self->{'ID_file'} ); }
     unless ( $self->{'ID'} ) {
       $self->{'ID'} ||= join ' ', 'perl', $self->{'myip'}, $VERSION, $0, $self->{'INF'}{'NI'}, time,
-        '$Id: adc.pm 919 2011-10-21 21:57:00Z pro $';
+        '$Id: adc.pm 936 2011-11-09 21:58:57Z pro $';
       psmisc::file_rewrite( $self->{'ID_file'}, $self->{'ID'} );
     }
     $self->{'PID'}       ||= $self->hash( $self->{'ID'} );
@@ -167,7 +167,7 @@ sub func {
     $self->{'INF'}{'VE'} ||= $self->{'client'} . $self->{'V'}
       || 'perl'
       . $Net::DirectConnect::VERSION . '_'
-      . $VERSION;    #. '_' . ( split( ' ', '$Revision: 919 $' ) )[1];    #'++\s0.706';
+      . $VERSION;    #. '_' . ( split( ' ', '$Revision: 936 $' ) )[1];    #'++\s0.706';
     $self->{'INF'}{'US'} ||= 10000;
     my $domain    = '4';
     my $domaindel = '4';
@@ -311,7 +311,6 @@ sub init {
         $self->{'peers'}{$peerid}{'SUP'}{ $params->{$_} } = 1 if $_ eq 'AD';
       }
 =cut      
-
       #$self->log('adcdev', 'SUPans:', $peerid, $self->{'peers'}{$peerid}{'INF'}{I4}, $self->{'peers'}{$peerid}{'INF'}{U4});
       #local $self->{'host'} = $self->{'peers'}{$peerid}{'INF'}{I4}; #can answer direct
       #local $self->{'port'} = $self->{'peers'}{$peerid}{'INF'}{U4};
@@ -561,7 +560,6 @@ sub init {
         'auto_connect' => 1,
       );
 =cut
-
     },
     'CTM' => sub {
       my $self = shift if ref $_[0];
@@ -624,7 +622,6 @@ sub init {
         $self->log( 'dcerr', 'SND', "unknown type", @_ );
       }
 =cut
-
     },
   };
 
@@ -638,7 +635,6 @@ sub init {
 
 
 =cut  
-
   $self->{'cmd'} = {
     #move to main
     'search_send' => sub {
@@ -810,7 +806,6 @@ sub init {
       $self->cmd_adc( $dst, 'SND', @_ );
     },
 =cut    
-
   #$self->log( 'dev', "0making listeners [$self->{'M'}]:$self->{'no_listen'}; auto=$self->{'auto_listen'}" );
   if ( !$self->{'no_listen'} ) {
 #$self->log( 'dev', 'nyportgen',"$self->{'M'} eq 'A' or !$self->{'M'} ) and !$self->{'auto_listen'} and !$self->{'incoming'}" );
@@ -897,7 +892,6 @@ $self->log( 'info', 'listening broadcast ', $self->{'dev_broadcast'} || $self->{
       $self->log( 'err', "cant listen broadcast (hubless)" ) unless $self->{'clients'}{'listener_udp_broadcast'}{'myport'};
     }
 =cut
-
     if ( $self->{'dev_http'} ) {
       $self->log( 'dev', "making listeners: http" );
       #$self->{'clients'}{'listener_http'} = Net::DirectConnect::http->new(
@@ -919,8 +913,8 @@ $self->log( 'info', 'listening broadcast ', $self->{'dev_broadcast'} || $self->{
         #'auto_listen' => 1,
         #'HubName'       => 'Net::DirectConnect test hub',
         #'myport'        => 80,
-        'myport'        => 8000,
-        'myport_base'   => 8000,
+        'myport'        => Net::DirectConnect::notone($self->{'dev_http'})||8000,
+        'myport_base'   => Net::DirectConnect::notone($self->{'dev_http'})||8000,
         'myport_random' => 99,
         'myport_tries'  => 5,
         'parent'        => $self,
@@ -954,10 +948,10 @@ $self->log( 'info', 'listening broadcast ', $self->{'dev_broadcast'} || $self->{
     delete $self->{'peers'}{$peerid};
     $self->cmd_all( 'I', 'QUI', $self->{'peerid'}, ) if $self->{'parent'}{'hub'};
     delete $self->{'INF'}{'SID'} unless $self->{'parent'};
-    $self->log(
-      'dev',  'disconnect int',           #psmisc::caller_trace(30)
-      'hub=', $self->{'parent'}{'hub'},
-    );                                    #if $self and $self->{'log'};
+    #$self->log(
+    #  'dev',  'disconnect int',           #psmisc::caller_trace(30)
+    #  'hub=', $self->{'parent'}{'hub'},
+    #);                                    #if $self and $self->{'log'};
                                           #psmisc::caller_trace 15;
   };
   $self->get_peer_addr() if $self->{'socket'};
