@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: stat.pl 908 2011-10-18 15:50:01Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.pl $
+#$Id: stat.pl 966 2012-05-25 18:29:30Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.pl $
 package statpl;
 use strict;
 no warnings qw(uninitialized);
@@ -21,6 +21,7 @@ use statlib;
 #warn Dumper \%config, \%psmisc::config, \%statlib::config, \%statpl::config, \%main::config, \%pssql::config,;
 #warn Dumper \%INC, \@INC;
 $config{'queue_recalc_every'} ||= 60;
+$config{'lock_old'}           ||= 86400;
 $static{'no_sig_log'} = 1;    #test
 print(
   "usage:
@@ -54,10 +55,11 @@ for my $arg (@ARGV) {
     eval( '$config' . join( '', map { '{$_[' . $_ . ']}' } ( 0 .. $#_ ) ) . ' = $v;' );
   } elsif ( $arg =~ /^calc(\w)?$/i ) {
     my $tim = $1;
-    $ARGV[$n] = undef;
     local $db->{'cp_in'} = 'utf-8';
     #local $config{'log_dmp'}=1;
     my $nowtime = int time();
+    psmisc::printlog( 'warn', 'locked', $arg ), next if !psmisc::lock( $arg, old => $config{'lock_old'}, timeout => 60 );
+    $ARGV[$n] = undef;
     for my $query ( sort keys %{ $config{'queries'} } ) {
       next if $config{'queries'}{$query}{'disabled'};
       next unless statlib::is_slow($query);
@@ -80,7 +82,8 @@ for my $arg (@ARGV) {
         for my $row (@$res) {
           ++$n;
           delete $row->{$_} for grep { !defined $row->{$_} } keys %$row;
-          my $dmp = Data::Dumper->new( [$row] )->Indent(0)->Pair('=>')->Terse(1)->Purity(1)->Dump();
+          #my $dmp = Data::Dumper->new( [$row] )->Indent(0)->Pair('=>')->Terse(1)->Purity(1)->Dump();
+          my $dmp = JSON->new->encode($row);
           #warn "SLOWi:[$config{'use_slow'}][$dmp]";
           $db->insert_hash( 'slow', { 'name' => $query, 'n' => $n, 'result' => $dmp, 'period' => $time, 'time' => $nowtime } )
             if $config{'use_slow'};
@@ -141,6 +144,7 @@ for my $arg (@ARGV) {
     local $db->{'error_sleep'}  = 0;
     #my ( $tq, $rq, $vq ) = $db->quotes();
     $db->upgrade();
+
 =old 
     $db->do( "DROP TABLE ${_}d")    for qw(queries_top_string_ queries_top_tth_ results_top_);
     $db->do("ALTER TABLE queries_top_string_daily RENAME TO queries_top_string_d");
@@ -224,7 +228,7 @@ for ( grep { length $_ } @ARGV ? @hosts : psmisc::array( $config{dc}{host} ) ) {
     ++$work{'hubs'}{$hub};
     my $dc = Net::DirectConnect->new(
       #modules     => { 'filelist' => 1 },
-      db => $db, #for filelist
+      db          => $db,                                           #for filelist
       'Nick'      => 'dcstat',
       'sharesize' => 40_000_000_000 + int( rand 10_000_000_000 ),
       #'log'		=>	sub {},	# no logging
@@ -515,14 +519,14 @@ while ( my @dca = grep { $_ and $_->active() } @dc ) {
   psmisc::schedule(
     [ 300, 60 * 19 ],
     our $hubrunhour_ ||= sub {
-      psmisc::printlog( 'err', 'cant lock h' ), return if !psmisc::lock( 'calch', old => 86400 );
+      #psmisc::printlog( 'err', 'cant lock h' ), return if !psmisc::lock( 'calch', old => 86400 );
       psmisc::startme('calch');
     }
     ),
     psmisc::schedule(
     [ 600, 60 * 60 * 6 ],
     our $hubrunrare_ ||= sub {
-      psmisc::printlog( 'err', 'cant lock r' ), return if !psmisc::lock( 'calcr', old => 86400 );
+      #psmisc::printlog( 'err', 'cant lock r' ), return if !psmisc::lock( 'calcr', old => 86400 );
       psmisc::startme('calcr');
     }
     ) if $config{'use_slow'};

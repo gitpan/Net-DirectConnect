@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: psmisc.pm 4690 2011-10-21 10:56:26Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+#$Id: psmisc.pm 4798 2012-05-22 23:34:05Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
 
 =copyright
 PRO-search shared library
@@ -30,13 +30,16 @@ package    #not ready for cpan
 use strict;
 no warnings qw(uninitialized);
 use utf8;
+#use open qw(:utf8 :std);
+#use encoding "utf8", STDOUT => "utf8", STDIN => "utf8", STDERR => "utf8";
+#use open ':utf8';
 use Socket;
 use Time::HiRes qw(time);
 #use locale;
 use Encode;
 use POSIX qw(strftime);
 use lib::abs;
-our $VERSION = ( split( ' ', '$Revision: 4690 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4798 $' ) )[1];
 our (%config);
 #my ( %config );
 #local *config = *main::config;
@@ -45,6 +48,8 @@ our (%config);
 *config = *main::config;
 *stat   = *main::stat;
 *work   = *main::work;
+*param  = *main::param;
+*static = *main::static;
 #*psmisc::program = *main::program;
 use Data::Dumper;    #dev only
 $Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = 1;
@@ -263,7 +268,7 @@ sub config_init {
       };
       $config{'human'}{'size'} ||= sub {
         my ( $size, $sp, $kilo ) = @_;
-        $sp ||= ( $ENV{'SERVER_PORT'} ? '&nbsp;' : ' ' );
+        $sp ||= ( $ENV{'SERVER_PORT'} ? ' ' : ' ' );
         $kilo ||= $config{'kilo'} || 8;
         return int( $size / 1099511627776 ) . $sp . 'TB' if ( $size >= $kilo * 1099511627776 );
         return int( $size / 1073741824 ) . $sp . 'GB'    if ( $size >= $kilo * 1073741824 );
@@ -346,13 +351,20 @@ sub get_params(;$$) {      #v7
     get_params_one(@ARGV), map { get_params_one split $delim, $_ } split( /;\s*/, $ENV{'HTTP_COOKIE'} ),
     $ENV{'QUERY_STRING'}, $_
     );
+  #dmp (\%_);
   wantarray ? %_ : \%_;
 }
 
 sub get_params_utf8(;$$) {
   local $_ = &get_params;
   utf8::decode $_ for %$_;
+  #dmp (\%_);
   wantarray ? %$_ : $_;
+}
+
+sub use_try ($;@) {
+  ( my $path = ( my $module = shift ) . '.pm' ) =~ s{::}{/}g;
+  $INC{$path} or eval 'use ' . $module . ' qw(' . ( join ' ', @_ ) . ');1;' and $INC{$path};
 }
 sub is_array ($) { UNIVERSAL::isa( $_[0], 'ARRAY' ) }
 sub is_array_size ($) { is_array( $_[0] ) and @{ $_[0] } }
@@ -362,7 +374,8 @@ sub is_code ($) { UNIVERSAL::isa( $_[0], 'CODE' ) }
 sub code_run ($;@) { my $f = shift; return $f->(@_) if is_code $f }
 
 sub array (@) {
-  local @_ = map { is_array $_ ? @$_ : $_ } @_;
+  local @_ = map { is_array $_ ? @$_ : $_ } (@_ == 1 and !defined$_[0]) ? () : @_;
+  #local@_ = map { ref $_ eq 'ARRAY' ? @$_ : $_ } (@_ == 1 and !defined$_[0]) ? () : @_;
   wantarray ? @_ : \@_;
 }
 
@@ -409,7 +422,7 @@ sub encode_url_link($;$) {
   return $str if $str =~ /^(magnet|file):/i;
   #fixed?
   #return $str if $config{'client_ie'};
-  #printlog(Dumper $str);
+  #printlog('Eb',Dumper $str);
   # eval {utf8::downgrade($str, 'FAIL_OK')# if utf8::is_utf8($str);
   #};
   #utf8::encode($str);
@@ -420,6 +433,7 @@ sub encode_url_link($;$) {
   #utf8::encode($_{$_}),
   #utf8::downgrade($_{$_}, 'FAIL_OK'),
   $_{$_} =~ s/$mask/sprintf'%%%2X',ord$&/ge for keys %_;
+  #printlog('Ea',Dumper \%_);
   return join_url( \%_ );
 }
 
@@ -548,7 +562,7 @@ sub printprog($;$$) {    #v1
   printlog( 'dbg', "Starting [$proc]:" );
   system($proc), return if $nologbody and !$handler;
   my $h = openproc( '-|' . $layer, "$proc $config{'stderr_redirect'}" ) or return 1;
-  while (<$h>) {
+  while ( defined( local $_ = <$h> ) ) {
     s/\s*[\x0A\x0D]*$//;
     next unless length $_;
     printlog( 'dbg', $_ ) unless $nologbody;
@@ -610,10 +624,10 @@ our $prefix = 'dmp';    # 'dmp '
 sub dmp (@) {
   printlog $prefix, ( caller(1) )[3], ':', ( caller(0) )[2], ' ', (
     join $join, (
-      map { ref $_ ? Data::Dumper->new( [$_] )->Indent($indent)->Pair( $indent ? ' => ' : '=>' )->Terse(1)->Dump() : "'$_'" } @_
+      map { ref $_ ? Data::Dumper->new( [$_] )->Indent($indent)->Pair( $indent ? ' => ' : '=>' )->Terse(1)->Sortkeys(1)->Dump() : "'$_'" } @_
     )
-    ),
-    wantarray ? @_ : $_[0];
+    );
+  wantarray ? @_ : $_[0];
 }
 
 sub state {
@@ -639,7 +653,7 @@ sub html_chars($) {
   $$_ =~ s/\&/\&amp\;/g;
   $$_ =~ s/\</\&lt\;/g;
   $$_ =~ s/\>/\&gt\;/g;
-  $$_ =~ s/"/\&quot\;/g;
+  $$_ =~ s/"/\&quot\;/g;    #"
   return $$_;
 }
 
@@ -773,14 +787,15 @@ sub split_url($;$) {    #v3
   delete $_{'port'}
     unless ( $_{'port'} and ( !$static{'port2prot'}{ $_{'port'} } or ( $static{'port2prot'}{ $_{'port'} } ne $_{'prot'} ) ) );
   if ( $_{'prot'} eq 'dchub' ) {
-    #printlog   ('split_url', 1, join ':', %_);
+    #printlog   ('split_url', 1, Dumper \%_);
     my $dcuser;
-    ( $_{'path'} =~ s|^(/[^/]+)|| and $dcuser = $1 )
+    ( $_{'path'} =~ s|^/([^/]+)|| and $dcuser = $1 )
       or ($_{'path'} =~ s|^/?$||
       and $_{'name'} =~ s|(.+)||
       and $dcuser = $1
       and $_{'ext'} =~ s|(.*)||
       and $dcuser .= ( $1 ? ".$1" : '' ) );
+    #printlog('dcu', $dcuser);
     #printlog   ('split_url', 2, join ':', %_);
     if ( %{ $config{'sql'}{'table'}{$table}{'dcuser'} or {} } ) { $_{'dcuser'} = $dcuser; }
     else {
@@ -814,6 +829,7 @@ sub cp_normalize($) { return $config{'trans_name'}{ lc $_[0] } || lc $_[0]; }
 
 sub encode_safe ($$) {
   my ( $cto, $string ) = @_;
+  #printlog('es', $string);
   $cto = cp_normalize($cto);
   return $string if !$cto or $cto eq 'utf-8';
   #return
@@ -826,6 +842,7 @@ sub encode_safe ($$) {
   #utf8::downgrade($_),
   #utf8::decode($_),
   #printlog('ensafeA',$cto, Dumper  $_, utf8::is_utf8 $_);
+  #printlog('esR', $_);
   return $_;
 }
 
@@ -842,7 +859,7 @@ sub cp_trans($$$) {    #v1
   #use Encode;
   #$string = encode($cto, decode($cfrom, $string));
   #return eval {Encode::encode $cto, Encode::decode $cfrom, $string} or $string;
-  Encode::from_to $string, $cfrom, $cto;
+  Encode::from_to $string, $cfrom, $cto, Encode::FB_WARN;
   return $string;
 }
 
@@ -1001,7 +1018,7 @@ printlog(Dumper $decoder);
   {
     #( $$string, $cnt ) = cp_trans_count( $data->{'cp'}, $cp_to, $$string );
     return $data->{'cp'} if $data->{'cp'} eq $cp_to;
-    $$string = Encode::decode $data->{'cp'}, $$string;
+    $$string = Encode::decode $data->{'cp'}, $$string, Encode::FB_WARN;
     #return $cnt ? $data->{'cp'} : undef;
     #printlog( 'dbg', "charset decoded [$data->{'cp'}]:", $$string);
     return $data->{'cp'};
@@ -1009,7 +1026,7 @@ printlog(Dumper $decoder);
   if ( $cp_default and $cp_default ne $cp_to ) {
     #( $$string, $cnt ) = cp_trans_count( $cp_default, $cp_to, $$string );
     #return $cnt ? $cp_default : undef;
-    $$string = Encode::decode $cp_default, $$string;
+    $$string = Encode::decode $cp_default, $$string, Encode::FB_WARN;
     #printlog( 'dbg', "charset decoded def [$cp_default]:", $$string);
     return $cp_default;
   }
@@ -1059,6 +1076,27 @@ sub lang($;$$$) {
     shift();
 }
 
+sub printu (@) {
+  for (@_) {
+    print($_), next unless utf8::is_utf8($_);
+    my $s = $_;
+    utf8::encode($s);
+    print($s);
+  }
+}
+
+sub json_encode($) {
+  if ( use_try 'JSON::XS' ) { return \( JSON::XS->new->encode(@_) ) }
+  if ( use_try('JSON') )    { return \( JSON->new->encode(@_) ); }
+  {
+    local *Data::Dumper::qquote = sub {
+      $_[0] =~ s/\\/\\\\/g, s/"/\\"/g for $_[0];
+      return ( '"' . $_[0] . '"' );
+    };
+    return \( Data::Dumper->new( \@_ )->Pair(':')->Terse(1)->Indent(0)->Useqq(1)->Useperl(1)->Dump() );
+  }
+}
+
 sub min (@) {
   ( sort { $a <=> $b || $a cmp $b } @_ )[0];
 }
@@ -1092,7 +1130,9 @@ sub alarmed {
 sub mkdir_rec(;$$) {
   local $_ = shift // $_;
   $_ .= '/' unless m{/$};
-  while (m{/}g) { @_ ? mkdir $`, $_[0] : mkdir $` if length $` }
+  my @ret;
+  while (m{/}g) { ( push @ret, $` ), ( @_ ? mkdir $`, $_[0] : mkdir $` ) if length $` }
+  @ret;
 }
 
 sub check_int($;$$$) {
@@ -1147,11 +1187,11 @@ sub caller_trace(;$) {
 
 sub lib_init() {
   $SIG{__WARN__} = sub {
-    printlog( 'warn', $@, $!,  @_ );
+    printlog( 'warn', $@, $!, @_ );
     #printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
     #caller_trace(15);
     }, $SIG{__DIE__} = sub {
-    printlog( 'die', $@, $!,  @_ );
+    printlog( 'die', $@, $!, @_ );
     #printlog( 'die', 'caller', $_, caller($_) || last ) for ( 0 .. 15 );
     caller_trace(15);
     }
@@ -1523,7 +1563,15 @@ sub save_list {
 }
 =cut
 
-sub schedule($$;@) {    #$Id: psmisc.pm 4690 2011-10-21 10:56:26Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+=schedule
+
+schedule(everysec, our $___mysub ||= sub{});
+schedule([firstafter, everysec], our $___mysub ||= sub{});
+schedule({wait=>10, every=>5}, our $___mysub ||= sub{});
+
+=cut
+
+sub schedule($$;@) {    #$Id: psmisc.pm 4798 2012-05-22 23:34:05Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   our %schedule;
   my ( $every, $func ) = ( shift, shift );
   my $p;
@@ -1535,15 +1583,14 @@ sub schedule($$;@) {    #$Id: psmisc.pm 4690 2011-10-21 10:56:26Z pro $ $URL: sv
   #dmp $schedule{ $p->{'id'} }{'runs'}, $p->{'runs'}, $p, $schedule{ $p->{'id'} } if $p->{'runs'};
   $schedule{ $p->{'id'} }{'func'} = $func if !$schedule{ $p->{'id'} }{'func'} or $p->{'update'};
   $schedule{ $p->{'id'} }{'last'} = time - $p->{'every'} + $p->{'wait'} if $p->{'wait'} and !$schedule{ $p->{'id'} }{'last'};
-  #dmp("RUN", $p->{'id'}), 
-  ++$schedule{ $p->{'id'} }{'runs'}, 
-  $schedule{ $p->{'id'} }{'last'} = time, $schedule{ $p->{'id'} }{'func'}->(@_),
-    if ( $schedule{ $p->{'id'} }{'last'} + $p->{'every'} < time )
+  #dmp("RUN", $p->{'id'}),
+  ++$schedule{ $p->{'id'} }{'runs'}, $schedule{ $p->{'id'} }{'last'} = time, $schedule{ $p->{'id'} }{'func'}->(@_),
+        if ( $schedule{ $p->{'id'} }{'last'} + $p->{'every'} < time )
     and ( !$p->{'runs'} or $schedule{ $p->{'id'} }{'runs'} < $p->{'runs'} )
     and ( !( ref $p->{'cond'} eq 'CODE' ) or $p->{'cond'}->( $p, $schedule{ $p->{'id'} }, @_ ) )
     and ref $schedule{ $p->{'id'} }{'func'} eq 'CODE';
 }
-{    #$Id: psmisc.pm 4690 2011-10-21 10:56:26Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+{    #$Id: psmisc.pm 4798 2012-05-22 23:34:05Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   my (@locks);
   sub lockfile($) {
     return ( $config{'lock_dir'} || './' ) . ( length $_[0] ? $_[0] : 'lock' ) . ( $config{'lock_ext'} || '.lock' );
@@ -1622,11 +1669,6 @@ sub schedule($$;@) {    #$Id: psmisc.pm 4690 2011-10-21 10:56:26Z pro $ $URL: sv
     #print "newprog($current, $program{$current}{'order'});" ;
     return $current;
   }                                #v2
-}
-
-sub use_try ($;@) {
-  ( my $path = ( my $module = shift ) . '.pm' ) =~ s{::}{/}g;
-  $INC{$path} or eval 'use ' . $module . ' qw(' . ( join ' ', @_ ) . ');1;' and $INC{$path};
 }
 
 sub printall {
@@ -1735,10 +1777,15 @@ sub program_run(;$) {
 }
 #BEGIN { config_init(); }
 config_init();
+#
+#
+#
+#
+#
 package    #hide from cpan
   psconn;
 use strict;
-our $VERSION = ( split( ' ', '$Revision: 4690 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4798 $' ) )[1];
 #use psmisc;
 #sub connection {
 sub new {

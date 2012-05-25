@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: flood.pl 933 2011-11-03 22:53:27Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/flood.pl $
+#$Id: flood.pl 966 2012-05-25 18:29:30Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/flood.pl $
 
 =copyright
 

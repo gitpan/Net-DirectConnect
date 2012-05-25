@@ -1,13 +1,16 @@
 Changes
+examples/config.pl
 examples/config.pl.dist
 examples/countub.pl
 examples/dcget
 examples/dchub
+examples/dchub.log
 examples/dcshare
 examples/ddltest.pl
 examples/demo.pl
 examples/flood.pl
 examples/flooddef.pl
+examples/ID
 examples/pinger.pl
 examples/stat/.htaccess
 examples/stat/config.pl.dist
@@ -32,9 +35,11 @@ lib/Net/DirectConnect/ipv6.pm
 lib/Net/DirectConnect/nmdc.pm
 lib/Net/DirectConnect/pslib/psmisc.pm
 lib/Net/DirectConnect/pslib/pssql.pm
+lib/Net/DirectConnect/pslib/psweb.pm
 lib/Net/DirectConnect/sctp.pm
 Makefile.PL
 MANIFEST			This list of files
 t/Net-DirectConnect.t
 TODO
-META.yml                                 Module meta-data (added by MakeMaker)
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

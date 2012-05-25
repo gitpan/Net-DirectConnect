@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: statlib.pm 914 2011-10-18 19:13:56Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
+#$Id: statlib.pm 966 2012-05-25 18:29:30Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/statlib.pm $
 package    #hide from cpan
   statlib;
 use strict;
@@ -7,6 +7,7 @@ use Time::HiRes qw(time sleep);
 use utf8;
 our $root_path;
 use Data::Dumper;
+use JSON;
 $Data::Dumper::Sortkeys = 1;
 #use lib $root_path. './pslib';
 #use Net::DirectConnect::pslib::psmisc;
@@ -17,6 +18,7 @@ $Data::Dumper::Sortkeys = 1;
 #warn $1 . 'DirectConnect/pslib';
 #use lib $1 . 'DirectConnect/pslib/';
 use Net::DirectConnect::pslib::pssql;
+use Net::DirectConnect::pslib::psweb;
 #use lib::abs qw(pslib);
 #use pssql;
 #psmisc->import qw(:log);
@@ -33,7 +35,9 @@ use Exporter 'import';
 our @EXPORT = qw(%config  $param   $db );
 our ( %config, $param, $db, );
 *statlib::config = *main::config;
+*statlib::param  = *main::param;
 our ( $tq, $rq, $vq );
+$param = psmisc::get_params_utf8();
 $config{'log_trace'}  ||= 0;
 $config{'log_dmpbef'} ||= 0;
 $config{'log_dmp'}    ||= 0;
@@ -61,9 +65,10 @@ $config{'graph_inner'}        ||= 1 if grep { $config{ 'browser_' . $_ } } qw(fi
 $config{'title'}              ||= 'dcstat';
 $config{'web_max_query_time'} ||= 10;
 #warn 'pre',Dumper $config{'sql'};
-$config{'sql'}                ||= {
+$config{'sql'} ||= {
   #'driver'              => 'mysql',
   'driver' => 'sqlite', 'dbname' => 'dcstat', 'auto_connect' => 1, 'log' => sub { shift; psmisc::printlog(@_) },
+  #'table options'    => 'ENGINE = INNODB DELAY_KEY_WRITE=1',
   #'cp_in'               => 'cp1251',
   'connect_tries'       => 0,
   'connect_chain_tries' => 0,
@@ -153,7 +158,7 @@ $config{'sql'}{'table'}{ 'queries_top_string_' . $_ } = {
   },
   for sort keys %{ $config{'periods'} };
 unless ( $ENV{'SERVER_PORT'} ) {
-  $config{'sql'}{'auto_repair'}  = 1;
+  #$config{'sql'}{'auto_repair'}  = 1;
   $config{'sql'}{'force_repair'} = 1;
 }
 $config{'query_default'}{'LIMIT'} ||= 100;
@@ -367,6 +372,8 @@ $config{'queries'}{'results ext'} ||= {
   'ORDER BY' => 'cnt DESC',
   'order'    => ++$order,
 };
+
+=no innodb
 $config{'queries'}{'counts'} ||= {
   'main'      => 1,
   'show'      => [qw(n tbl cnt)],
@@ -379,6 +386,7 @@ $config{'queries'}{'counts'} ||= {
   ),
   'order' => ++$order,
 };
+=cut
 $config{'queries'}{'chat top'} ||= {
   'main'     => 1,
   'periods'  => 1,
@@ -425,8 +433,11 @@ $config{'queries'}{'filename'} ||= {
   'show'     => [qw(n cnt string filename size tth)],
   'GROUP BY' => 'tth',
 };
+#warn "configuring", Dumper $param;
+#psweb::config_init($param) if $ENV{'SERVER_PORT'};
 psmisc::configure( 0, 0, 0, 1 );
-
+#psmisc::conf();
+#warn "configured";
 sub is_slow {
   my ($query) = @_;
   return ( (
@@ -452,10 +463,21 @@ sub make_query {
       . ( ( $config{'queries'}{$query}{'periods'} ? ' AND period=' . $db->quote($period) : '' )
       . " ORDER BY n"
         . " LIMIT $config{'query_default'}{'LIMIT'}" );
-    my $res = $db->query($sql);    
+    my $res = $db->query($sql);
     #print Dumper $res if $param->{'debug'};
     my @ret;
-    for my $row (@$res) { push @ret, eval $row->{'result'}; }
+    #print Dumper $res if $param->{'debug'};
+    for my $row (@$res) {
+      my $unpacked;
+      eval { $unpacked = JSON->new->decode( $row->{'result'} ); };
+      #print "json:[$@][$row->{'result'}]"  if $param->{'debug'}  and $@;
+      unless ($unpacked) {
+        local $SIG{__WARN__} = sub () { };
+        $unpacked = eval $row->{'result'};
+      }
+      push @ret, $unpacked;
+      #print "eval:[$row->{'result'}] : $@"  if $param->{'debug'};
+    }
     #print Dumper @ret if $param->{'debug'};
     return \@ret;
   }
@@ -463,7 +485,8 @@ sub make_query {
   #return;
   $q->{'WHERE'} = join ' AND ', grep { $_ } @{ $q->{'WHERE'}, } if ref $q->{'WHERE'} eq 'ARRAY';
   $q->{'WHERE'} = join ' AND ', grep { $_ } $q->{'WHERE'},
-    map { $_ . ($param->{$_} =~ /%/? ' LIKE ' : '=' ). $db->quote( $param->{$_} ) } grep { length $param->{$_} } keys %{ $config{'queries'} };    #qw(string tth);
+    map { $_ . ( $param->{$_} =~ /^\S{4,}\s*%/ ? ' LIKE ' : '=' ) . $db->quote( $param->{$_} ) }
+    grep { length $param->{$_} } keys %{ $config{'queries'} };    #qw(string tth);
   $sql = join ' ', $q->{'sql'},
     map { my $key = ( $q->{$_} || $config{query_default}{$_} ); length $key ? ( $_ . ' ' . $key ) : '' } 'SELECT', 'FROM',
     'LEFT JOIN', 'USING', 'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT', 'UNION';

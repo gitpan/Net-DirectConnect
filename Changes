@@ -1,4 +1,7 @@
-# $Id: Changes 871 2011-10-13 22:04:01Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/Changes $
+# $Id: Changes 937 2011-11-10 09:14:16Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/Changes $
+0.12: 
+small speed fixes
+
 0.11: 
 lot of fixes, better select (cpu usage)
 unfinished adc ipv6 support

@@ -1,4 +1,4 @@
-#$Id: clihub.pm 933 2011-11-03 22:53:27Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clihub.pm $
+#$Id: clihub.pm 966 2012-05-25 18:29:30Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/clihub.pm $
 package    #hide from cpan
   Net::DirectConnect::clihub;
 use strict;
@@ -10,7 +10,7 @@ use Net::DirectConnect;
 use Net::DirectConnect::clicli;
 #use Net::DirectConnect::http;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 933 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 966 $' ) )[1];
 use base 'Net::DirectConnect';
 
 sub name_to_ip($) {
@@ -92,6 +92,8 @@ sub init {
 /Минимальный интервал поиска составляет: \(Minimum search interval is:\) (\d+)секунд \(seconds\)/
           or $text =~ /^(?:Minimum search interval is|Минимальный интервал поиска):(\d+)s/
           or $text =~ /Search ignored\.  Please leave at least (\d+) seconds between search attempts\./  #Hub-Security opendchub
+          or $text =~
+/Минимальный интервал между поисковыми запросами:(\d+)сек., попробуйте чуть позже/
           )
         {
           $self->{'search_every'} = int( rand(5) + $1 || $self->{'search_every_min'} );
@@ -102,7 +104,8 @@ sub init {
              /(?:Пожалуйста )?подождите (\d+) секунд перед следующим поиском\./i
           or $text =~ /(?:Please )?wait (\d+) seconds before next search\./i
           or $text eq 'Пожалуйста не используйте поиск так часто!'
-          or $text eq "Please don't flood with searches!" )
+          or $text eq "Please don't flood with searches!"
+          or $text eq 'Sorry Hub is busy now, no search, try later..' )
         {
           $self->{'search_every'} += int( rand(5) + $1 || $self->{'search_every_min'} );
           $self->log( 'warn', "[$nick] oper: increase min interval => $self->{'search_every'}" );
@@ -213,10 +216,11 @@ sub init {
     },
     'ForceMove' => sub {
       my $self = shift if ref $_[0];
-      $self->log( 'warn', "ForceMove to $_[0]" );
+      my ($to) = grep { length $_ } split /;/, $_[0];
+      $self->log( 'warn', "ForceMove to $to :: ", @_ );
       $self->disconnect();
       sleep(1);
-      $self->connect(@_) if $self->{'follow_forcemove'} and @_;
+      $self->connect($to) if $self->{'follow_forcemove'} and $to;
     },
     'Quit' => sub {
       my $self = shift if ref $_[0];
@@ -227,6 +231,9 @@ sub init {
       my ( $nick, $host, $port ) = $_[0] =~ /\s*(\S+)\s+(\S+)\:(\S+)/;
       $self->{'IpList'}{$host}{'port'} = $self->{'PortList'}->{$host} = $port;
       #$self->log('dev', "portlist: $host = $self->{'PortList'}->{$host} :=$port");
+      $self->log("ignore flooding attempt to [$host:$port ] ($self->{flood}{$host})"), $self->{flood}{$host} = time + 30, return
+        if $self->{flood}{$host} > time;
+      $self->{flood}{$host} = time + 60;
       return if $self->{'clients'}{ $host . ':' . $port }->{'socket'};
       $self->{'clients'}{ $host . ':' . $port } = Net::DirectConnect::clicli->new(
         #!        %$self, $self->clear(),

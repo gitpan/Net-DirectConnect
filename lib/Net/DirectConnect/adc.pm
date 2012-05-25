@@ -1,4 +1,4 @@
-#$Id: adc.pm 936 2011-11-09 21:58:57Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/adc.pm $
+#$Id: adc.pm 966 2012-05-25 18:29:30Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/adc.pm $
 package    #hide from cpan
   Net::DirectConnect::adc;
 use strict;
@@ -15,7 +15,7 @@ use Net::DirectConnect::http;
 use lib::abs('pslib');
 use psmisc;          # REMOVE
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 936 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 966 $' ) )[1];
 use base 'Net::DirectConnect';
 our %codesSTA = (
   '00' => 'Generic, show description',
@@ -137,7 +137,7 @@ sub func {
     if ( -s $self->{'ID_file'} ) { $self->{'ID'} ||= psmisc::file_read( $self->{'ID_file'} ); }
     unless ( $self->{'ID'} ) {
       $self->{'ID'} ||= join ' ', 'perl', $self->{'myip'}, $VERSION, $0, $self->{'INF'}{'NI'}, time,
-        '$Id: adc.pm 936 2011-11-09 21:58:57Z pro $';
+        '$Id: adc.pm 966 2012-05-25 18:29:30Z pro $';
       psmisc::file_rewrite( $self->{'ID_file'}, $self->{'ID'} );
     }
     $self->{'PID'}       ||= $self->hash( $self->{'ID'} );
@@ -167,7 +167,7 @@ sub func {
     $self->{'INF'}{'VE'} ||= $self->{'client'} . $self->{'V'}
       || 'perl'
       . $Net::DirectConnect::VERSION . '_'
-      . $VERSION;    #. '_' . ( split( ' ', '$Revision: 936 $' ) )[1];    #'++\s0.706';
+      . $VERSION;    #. '_' . ( split( ' ', '$Revision: 966 $' ) )[1];    #'++\s0.706';
     $self->{'INF'}{'US'} ||= 10000;
     my $domain    = '4';
     my $domaindel = '4';
@@ -913,8 +913,8 @@ $self->log( 'info', 'listening broadcast ', $self->{'dev_broadcast'} || $self->{
         #'auto_listen' => 1,
         #'HubName'       => 'Net::DirectConnect test hub',
         #'myport'        => 80,
-        'myport'        => Net::DirectConnect::notone($self->{'dev_http'})||8000,
-        'myport_base'   => Net::DirectConnect::notone($self->{'dev_http'})||8000,
+        'myport'      => Net::DirectConnect::notone( $self->{'dev_http'} ) || 8000,
+        'myport_base' => Net::DirectConnect::notone( $self->{'dev_http'} ) || 8000,
         'myport_random' => 99,
         'myport_tries'  => 5,
         'parent'        => $self,
@@ -952,7 +952,7 @@ $self->log( 'info', 'listening broadcast ', $self->{'dev_broadcast'} || $self->{
     #  'dev',  'disconnect int',           #psmisc::caller_trace(30)
     #  'hub=', $self->{'parent'}{'hub'},
     #);                                    #if $self and $self->{'log'};
-                                          #psmisc::caller_trace 15;
+    #psmisc::caller_trace 15;
   };
   $self->get_peer_addr() if $self->{'socket'};
   $self->log( 'err', 'cant load TigerHash module' ) unless $INC{'Net/DirectConnect/TigerHash.pm'};

@@ -1,7 +1,7 @@
-#$Id: DirectConnect.pm 936 2011-11-09 21:58:57Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect.pm $
+#$Id: DirectConnect.pm 966 2012-05-25 18:29:30Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect.pm $
 package Net::DirectConnect;
 use strict;
-our $VERSION = '0.12'; # . '_' . ( split ' ', '$Revision: 936 $' )[1];
+our $VERSION = '0.13';    # . '_' . ( split ' ', '$Revision: 966 $' )[1];
 no warnings qw(uninitialized);
 use utf8;
 use Encode;
@@ -78,7 +78,7 @@ sub socket_addr ($) {
 }
 
 sub schedule($$;@)
-{    #$Id: DirectConnect.pm 936 2011-11-09 21:58:57Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect.pm $
+{    #$Id: DirectConnect.pm 966 2012-05-25 18:29:30Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect.pm $
   our %schedule;
   my ( $every, $func ) = ( shift, shift );
   my $p;
@@ -98,7 +98,10 @@ sub schedule($$;@)
     and ref $schedule{ $p->{'id'} }{'func'} eq 'CODE';
 }
 
-sub notone (@) { @_ = grep {$_ and $_ != 1} @_; wantarray ? @_ : $_[0]}
+sub notone (@) {
+  @_ = grep { $_ and $_ != 1 } @_;
+  wantarray ? @_ : $_[0];
+}
 
 sub use_try ($;@) {
   my $self = shift if ref $_[0];
@@ -422,10 +425,10 @@ sub init_main {    #$self->{'init_main'} ||= sub {
     #'wait_connect_tries' => 600,
     'clients_max' => 50,
     #'wait_clients_tries' => 200,
-    'wait_finish_tries' => 300,    #5 min
-    'wait_clients'      => 300,    #5 min
-                                   #del    'wait_clients_by'    => 0.01,
-                                   #'work_sleep'        => 0.01,
+    'wait_finish_tries' => 300,     #5 min
+    'wait_clients'      => 300,     #5 min
+                                    #del    'wait_clients_by'    => 0.01,
+                                    #'work_sleep'        => 0.01,
     'work_sleep'        => 0.005,
     'select_timeout'    => 1,
     'cmd_recurse_sleep' => 0,
@@ -542,16 +545,17 @@ sub connect {    #$self->{'connect'} ||= sub {
     $self->module_load('adcs') if $p eq 'adcs';
     #$self->protocol_init($p) if $p =~ /^adc/;
     $self->{'host'} =~ s{/.*}{}g;
-    #$self->{'port'} = $1 if $self->{'host'} =~ s{:(\d+)}{};
+    ( $self->{'host'}, $self->{'port'} ) = ( $1, $2 ) if $self->{'host'} =~ m{^\[(\S+)\]:(\d+)};     # [::1]:411
+    ( $self->{'host'}, $self->{'port'} ) = ( $1, $2 ) if $self->{'host'} =~ s{^([^:]+):(\d+)$}{};    # 1.2.3.4:411
   }
-  #$self->log( 'H:', scalar(@{[$self->{'host'} =~ /(:)/g]}) );
+  #$self->log('dev', 'host, port =', $self->{'host'}, $self->{'port'} );
   #$self->log( 'H:', ((),$self->{'host'} =~ /(:)/g)>1 );
   $self->module_load('ipv6') if ( @{ [ $self->{'host'} =~ /(:)/g ] } > 1 );
   #$self->{'port'} = $_[1] if $_[1];
   #print "Hhohohhhh" ,$self->{'protocol'},$self->{'host'};
   return 0
     if ( $self->{'socket'} and $self->{'socket'}->connected() )
-    or grep { $self->{'status'} eq $_ } qw(destroy);    #connected
+    or grep { $self->{'status'} eq $_ } qw(destroy);                                                 #connected
   $self->log(
     'info',
     "connecting to $self->{'protocol'}://[$self->{'host'}]:$self->{'port'} via $self->{'Proto'} class $self->{'socket_class'}",
@@ -803,9 +807,10 @@ sub recv {                # $self->{'recv'} ||= sub {
     or !length( $self->{'databuf'} ) )
   {
     #TODO not here
-    if (  $self->active()
+    if (
+      $self->active()
       and !$self->{'incoming'}
-      #and $self->{'reconnect_tries'}++ < $self->{'reconnects'} 
+      #and $self->{'reconnect_tries'}++ < $self->{'reconnects'}
       )
     {
       $self->log( 'dcdbg',
@@ -1195,7 +1200,7 @@ sub work {    #$self->{'work'} ||= sub {
   ) if $self->{dev_auto_dump};
   #return
   $self->select( 1 || $self->{'work_sleep'} );    # if @{$self->{send_buffer_raw}|| []};    # maybe send
-                                             #$self->log( 'dev', "work -> sleep", @params ),
+                                                  #$self->log( 'dev', "work -> sleep", @params ),
   return $self->wait(@params) if @params;
   return $self->select() || $self->select( $self->{'work_sleep'}, 1 );    # unless @{$self->{send_buffer_raw}|| []};
                                                                           #return $self->select( $self->{'work_sleep'} );
@@ -1861,7 +1866,8 @@ sub get_my_addr {           #$self->{'get_my_addr'} ||= sub {
   return unless $self->{'socket'};
   #$self->log('dev', 'saddr', $self->{'socket'}->sockhost(),$self->{'socket'}->sockport() );
   $self->{'myport'} ||= $self->{'socket'}->sockport();
-  return $self->{'myip'} = $self->{'socket'}->sockhost();
+  #$self->log('dev', 'myip was:', $self->{'myip'}, '->', $self->{'socket'}->sockhost());
+  return $self->{'myip'} ||= $self->{'socket'}->sockhost();
 
 =no  
   eval { @_ = unpack_sockaddr_in( getsockname( $self->{'socket'} ) || return ); };
@@ -2029,7 +2035,7 @@ sub say {    #$self->{'say'} = sub (@) {
   my $self = shift;
   @_ = $_[2] if $_[0] eq 'MSG';
   #local $_ = Encode::encode $self->{charset_console} , join ' ', @_;print $_, "\n";
-  print Encode::encode( $self->{charset_console}, join( ' ', @_ ), Encode::FB_WARN ), "\n";
+  print Encode::encode( $self->{charset_console}, join( ' ', @_ ), Encode::FB_DEFAULT ), "\n";
 }
 #local %_ = (
 sub search {    #'search' => sub {

@@ -17,6 +17,8 @@ use ExtUtils::MakeMaker;
     'IO::Socket::INET6'             => 0,
     'Socket6'                       => 0,
     'IO::Socket::SSL'               => 0,
+    'JSON'                          => 0,
+    'JSON::XS'                      => 0,
   },
   NORECURS  => 1,
   EXE_FILES => [qw(examples/dcshare examples/dcget examples/dchub)],
@@ -46,7 +48,9 @@ sub MY::postamble {
 
 fullclean: distclean veryclean
 	rm -f \$(DISTNAME)-*.tar.gz *.bak *.old *.core MANIFEST README
-	rm -Rf p5-Net-DirectConnect TigerHash lib/Net/DirectConnect/pslib/*.js lib/Net/DirectConnect/pslib/*.css lib/Net/DirectConnect/pslib/psweb.pm
+	rm -fr p5-Net-DirectConnect TigerHash lib/Net/DirectConnect/pslib/*.js lib/Net/DirectConnect/pslib/*.css
+
+# lib/Net/DirectConnect/pslib/psweb.pm
 
 prerelease:
 

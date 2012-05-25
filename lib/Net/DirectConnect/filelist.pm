@@ -1,4 +1,4 @@
-#$Id: filelist.pm 933 2011-11-03 22:53:27Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/filelist.pm $
+#$Id: filelist.pm 966 2012-05-25 18:29:30Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/filelist.pm $
 
 =head1 SYNOPSIS
 
@@ -19,7 +19,7 @@ use Data::Dumper;    #dev only
 $Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = 1;
 #use Net::DirectConnect;
 use Net::DirectConnect::adc;
-our $VERSION = ( split( ' ', '$Revision: 933 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 966 $' ) )[1];
 
 =tofix
 $0 =~ m|^(.+)[/\\].+?$|;                #v0
@@ -167,6 +167,7 @@ sub new {
     $self->{db} ||= pssql->new( %{ $self->{'sql'} || {} }, );
     ( $tq, $rq, $vq ) = $self->{db}->quotes();
     #$self->log('db', Dumper $self->{db});
+    #$self->log('db', 'flist', $self->{db});
   }
   $self->{filelist_make} //= sub {
     my $self = shift if ref $_[0];
@@ -207,13 +208,14 @@ sub new {
     my $filelist_line = sub($) {
       for my $f (@_) {
         next if !length $f->{file} or !length $f->{'tth'};
+        #$f = {%$f};
         $sharesize += $f->{size};
         ++$sharefiles if $f->{size};
         #$f->{file} = Encode::encode( 'utf8', Encode::decode( $self->{charset_fs}, $f->{file} ) ) if $self->{charset_fs};
         psmisc::file_append $self->{files}, "\t" x $level,
           #qq{<File Name="$f->{file}" Size="$f->{size}" TTH="$f->{tth}" TS="$f->{time}"/>\n};
           qq{<File}, (
-          map { qq{ $table2filelist{$_}="} . psmisc::html_chars( $f->{$_} ) . qq{"} }
+          map { qq{ $table2filelist{$_}="} . psmisc::html_chars( $a = $f->{$_} ) . qq{"} }
           sort { $o{$a} <=> $o{$b} } grep { $table2filelist{$_} and $f->{$_} } keys %$f
           ),
           qq{/>\n};
@@ -513,11 +515,14 @@ sub new {
     my $self = shift if ref $_[0];
     my $tth = shift or return;
     my $field = shift || 'hit';
-    my $updated =
-      $self->{db}->do( "UPDATE ${tq}filelist${tq} SET ${rq}$field${rq}=${rq}$field${rq}+1 WHERE "
-        . "${rq}tth${rq}="
-        . $self->{db}->quote($tth)
-        . ( $self->{db}{no_update_limit} ? () : " LIMIT 1" ) );
+    my $updated = $self->{db}->do(
+      "UPDATE ${tq}filelist${tq} SET ${rq}$field${rq}=${rq}$field${rq}+${vq}1${vq} WHERE "
+        #$self->{db}->do( "UPDATE ${tq}filelist${tq} SET ${rq}$field${rq}=${rq}$field${rq}+1 WHERE "
+        #$self->{db}->do( "UPDATE ${tq}filelist${tq} SET $field=$field+1 WHERE "
+        . "${rq}tth${rq}=" . $self->{db}->quote($tth)
+        #. ( $self->{db}{no_update_limit} ? () : " LIMIT ${vq}2${vq}" ) );
+        . ( $self->{db}{no_update_limit} ? () : " LIMIT 1" )
+    );
     $self->log( 'dev', "counter $field increased[$updated] on [$tth]" ) if $updated;
   };
   $self->{handler_int}{Search} //= sub {
