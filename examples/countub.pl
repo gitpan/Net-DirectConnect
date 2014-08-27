@@ -1,10 +1,9 @@
 #!/usr/bin/perl
-#my $Id = '$Id: countub.pl 966 2012-05-25 18:29:30Z pro $';
+#my $Id = '$Id: countub.pl 990 2012-12-28 20:35:04Z pro $';
 
 =copyright
 counting users-bytes from dchub for mrtg or cacti (snmpd)
 =cut
-
 use strict;
 use lib::abs '../lib';
 use Net::DirectConnect;

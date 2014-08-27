@@ -1,8 +1,9 @@
 #!/usr/bin/perl
-#$Id: stat.pl 966 2012-05-25 18:29:30Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.pl $
+#$Id: stat.pl 998 2013-08-14 12:21:20Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.pl $
 package statpl;
 use strict;
 no warnings qw(uninitialized);
+no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 our ( %config, %static, $param, $db, );
 use Data::Dumper;
 $Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = 1;
@@ -137,6 +138,11 @@ for my $arg (@ARGV) {
     local $db->{error_sleep} = 0;
     $db->install();
     $db->create_indexes();
+  } elsif ( $arg eq 'drop' ) {
+    $ARGV[$n] = undef;
+    local $db->{error_sleep} = 0;
+    $db->drop_tables();
+    $db->drop_database();
   } elsif ( $arg eq 'upgrade' ) {
     $ARGV[$n] = undef;
     #$db->do( "DROP TABLE $_")       for qw(queries_top_string_daily queries_top_tth_daily results_top_daily);
@@ -240,7 +246,7 @@ for ( grep { length $_ } @ARGV ? @hosts : psmisc::array( $config{dc}{host} ) ) {
         #psmisc::caller_trace(5)
       },
       'myport'      => 41111,
-      'description' => 'http://dc.proisk.ru/dcstat/',
+      'description' => 'http://dcstat.proisk.com/',
       #'auto_connect' => 0,
       'reconnects' => 500,
       'handler'    => {

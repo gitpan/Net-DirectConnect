@@ -2,9 +2,11 @@
 package    #hide from cpan
   Net::DirectConnect::sctp;
 use strict;
+no strict qw(refs);
+use warnings "NONFATAL" => "all";
+no warnings qw(uninitialized);
+no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 use Socket;
-#use Socket6;
-#use IO::Socket::INET6;
 use Data::Dumper;    #dev only
 #$Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = 1;
 sub init {
@@ -12,4 +14,4 @@ sub init {
   $self->{'Proto'} = 'sctp';
   $self->{'socket_options'}{Type} = Socket::SOCK_STREAM;
 }
-6;
+64;

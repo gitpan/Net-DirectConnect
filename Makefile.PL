@@ -1,3 +1,4 @@
+#!/usr/bin/perl
 use ExtUtils::MakeMaker;
 #See lib/ExtUtils/MakeMaker.pm for details of how to influence
 #the contents of the Makefile that is written.
@@ -13,12 +14,14 @@ use ExtUtils::MakeMaker;
     'IO::Compress::Bzip2'           => 0,    #preparing filelists
     'DBI'                           => 0,
     'DBD::SQLite'                   => 0,
-    'Net::DirectConnect::TigerHash' => 0,
-    'IO::Socket::INET6'             => 0,
-    'Socket6'                       => 0,
-    'IO::Socket::SSL'               => 0,
-    'JSON'                          => 0,
-    'JSON::XS'                      => 0,
+    #'Net::DirectConnect::TigerHash' => 0,
+    'Crypt::RHash'                  => 0,
+    'IO::Socket::IP'                => 0,
+    #'IO::Socket::INET6'             => 0,
+    #'Socket6'                       => 0,
+    'IO::Socket::SSL' => 0,
+    'JSON'            => 0,
+    'JSON::XS'        => 0,
   },
   NORECURS  => 1,
   EXE_FILES => [qw(examples/dcshare examples/dcget examples/dchub)],

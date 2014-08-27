@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: pssql.pm 4786 2012-04-08 12:04:34Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/pssql.pm $
+#$Id: pssql.pm 4848 2014-08-07 21:22:41Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/pssql.pm $
 
 =copyright
 PRO-search sql library
@@ -56,7 +56,8 @@ package    #no cpan
 use strict;
 use utf8;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 4786 $' ) )[1];
+no if $] >= 5.017011, warnings => 'experimental::smartmatch';
+our $VERSION = ( split( ' ', '$Revision: 4848 $' ) )[1];
 #use locale;
 use DBI;
 use Time::HiRes qw(time);
@@ -77,7 +78,7 @@ use psmisc;
 #our ( %config, %work, %stat, %static, $param, );
 use base 'psconn';
 our $AUTOLOAD;
-#our $VERSION = ( split( ' ', '$Revision: 4786 $' ) )[1];
+#our $VERSION = ( split( ' ', '$Revision: 4848 $' ) )[1];
 my ( $tq, $rq, $vq );
 my ( $roworder, $tableorder, );
 our ( %row, %default );
@@ -169,14 +170,17 @@ BEGIN {
       },
       'no_dbirows' => 1,
     },
-    'pgpp' => {
-      'dbi'  => 'PgPP',
-      'user' => ( $^O =~ /^(?:(ms)?(dos|win(32|nt)?))/i ? 'postgres' : 'pgsql' ),
+    'pg' => {
+      'dbi'  => 'Pg',
+      'user' => ( $^O =~ /^(?:(ms)?(dos|win(32|nt)?)|linux)/i ? 'postgres' : 'pgsql' ),
       #'port' => 5432,
-      'IF EXISTS' => 'IF EXISTS', 'CREATE TABLE' => 'CREATE TABLE', 'OFFSET' => 'OFFSET',
+      'IF EXISTS'     => 'IF EXISTS',
+      'CREATE TABLE'  => 'CREATE TABLE',
+      'OFFSET'        => 'OFFSET',
+      'IF NOT EXISTS' => 'IF NOT EXISTS',    #9.2 ok
       #'unsigned'     => 0,
-      'UNSIGNED'         => '',                                  #pg sux
-      'no_delete_limit'  => 1,                                   #pg sux
+      'UNSIGNED'         => '',                         #pg sux
+      'no_delete_limit'  => 1,                          #pg sux
       'table quote'      => '"',
       'row quote'        => '"',
       'value quote'      => "'",
@@ -186,27 +190,36 @@ BEGIN {
       'CASCADE'          => 'CASCADE',
       'SET NAMES'        => 'SET client_encoding = ',
       'fulltext_config'  => 'pg_catalog.simple',
-      'params'           => [qw(dbname host port path debug)],
-      'err_ignore'       => [qw( 1 7)],
-      'error_type'       => sub {
+      'params'           => [
+        qw(host hostaddr port options dbname database db user username password service sslmode), qw(
+          )
+      ],
+      'err_ignore' => [qw( 1 7)],
+      'error_type' => sub {
         my $self = shift, my ( $err, $errstr ) = @_;
         #$self->log('dev',"ERRDETECT($err, [$errstr])");
+        return 'connection' if $errstr eq $err; # 7, [7] # wtf
         return 'install_db' if $errstr =~ /FATAL:\s*database ".*?" does not exist/i;
+        return 'connection' if $errstr =~ /FATAL:\s*terminating connection/i; #7
         return 'fatal'      if $errstr =~ /fatal/i;
         return 'syntax'     if $errstr =~ /syntax/i;
-        return 'connection' if $errstr =~ /connect|Unknown message type: ''/i;
+        return 'connection' if $errstr =~ /ERROR:\s*prepared statement ".*?" does not exist/i;
+        return 'connection' if $errstr =~ /connect|Unknown message type: ''/i and $errstr !~ /(?:column|relation) "/; #"mc
         return 'install'    if $errstr =~ /ERROR:\s*(?:relation \S+ does not exist)/i;
         #return 'retry'    if $errstr =~       /ERROR:\s*cannot drop the currently open database/i;
         return 'retry' if $errstr =~ /ERROR:  database ".*?" is being accessed by other users/i;
         return 'ignore'
           if $errstr =~
-/(?:duplicate key violates unique constraint)|(?:duplicate key value violates unique constraint)|(?:ERROR:\s*(?:database ".*?" already exists)|(?:relation ".*?" already exists)|(?:invalid byte sequence for encoding)|(?:function .*? does not exist)|(?:null value in column .*? violates not-null constraint))/i;
+/(?:duplicate key violates unique constraint)|(?:duplicate key value violates unique constraint)|(?:ERROR:\s*(?:database ".*?" already exists)|(?:relation ".*?" already exists)|(?:invalid byte sequence for encoding)|(?:function .*? does not exist)|(?:null value in column .*? violates not-null constraint)|(?:Can't create database '.*?'; database exists))/i;
         return undef;
       },
+      'set'        => { 'lc_messages' => 'C' },
       'on_connect' => sub {
         my $self = shift;
+        $self->{dbh}->{pg_utf8_strings} = $self->{dbh}->{pg_enable_utf8} = 1;
         $self->set_names();
         $self->do("select set_curcfg('default');") if $self->{'use_fulltext'} and $self->{'old_fulltext'};
+        $self->do("SET $_=$vq$self->{'set'}{$_}$vq;") for grep {!$self->{'no_set_'.$_}} sort keys %{ $self->{'set'} || {} };
       },
       'no_dbirows'         => 1,
       'cp1251'             => 'win1251',
@@ -216,14 +229,14 @@ BEGIN {
       'dbi'                     => 'mysql',
       'user'                    => 'root',
       'port'                    => 9306,
-      'params'                  => [qw(host port )],                                  # perldoc DBD::mysql
+      'params'                  => [qw(host port )],                                                        # perldoc DBD::mysql
       'sphinx'                  => 1,
       'value quote'             => "'",
       'no_dbirows'              => 1,
       'no_column_prepend_table' => 1,
       'no_join'                 => 1,
       'OPTION'                  => 'OPTION',
-      'option'                  => { 'max_query_time' => 20000, 'cutoff' => 1000 },
+      'option'                  => { 'max_query_time' => 20000, 'cutoff' => 1000, 'ranker' => 'sph04', },
     },
     'mysql5' => {
       'dbi'               => 'mysql',
@@ -234,15 +247,16 @@ BEGIN {
       'unique_max'        => 1000,
       'primary_max'       => 999,
       'fulltext_max'      => 1000,
+      'key_length'        => 1000, # maybe 3072 for mariadb
       'err_connection'    => [qw( 1 1040 1053 1129 1213 1226 2002 2003 2006 2013 )],
       'err_fatal'         => [qw( 1016 1046 1251 )],                                   # 1045,
       'err_syntax'  => [qw( 1060 1064 1065 1067 1071 1096 1103 1118 1148 1191 1364 1366 1406 1439)], #1054 #maybe all 1045..1075
       'err_repair'  => [qw( 126 130 144 145 1034 1062 1194 1582 )],
       'err_retry'   => [qw( 1317 )],
-      'err_install' => [qw( 1146 )],
+      'err_install' => [qw( 1146)], # 1017 repair?
       'err_install_db' => [qw( 1049 )],
       'err_upgrade'    => [qw( 1054 )],
-      'err_ignore '    => [qw( 2 1264 )],
+      'err_ignore '    => [qw( 2 1264 1061 )],
       'error_type'     => sub {
         my $self = shift, my ( $err, $errstr ) = @_;
         #$self->log('dev',"MYERRDETECT($err, $errstr)");
@@ -367,7 +381,7 @@ sub cmd {
     : (
     exists $self->{$cmd}
     ? ( ( defined( $_[0] ) ? ( $self->{$cmd} = $_[0] ) : ( $self->{$cmd} ) ) )
-    : (!$self->{'dbh'} ? ()
+    : ((!ref $self->{'dbh'}) ? ()
       : $self->{'dbh'}->can($cmd) ? $self->{'dbh'}->$cmd(@_)
       : exists $self->{'dbh'}{$cmd} ? ( ( defined( $_[0] ) ? ( $self->{'dbh'}->{$cmd} = $_[0] ) : ( $self->{'dbh'}->{$cmd} ) ) )
       :                               undef )
@@ -417,6 +431,10 @@ sub init {
       shift;
       psmisc::printlog(@_);
     },
+    'trace'=>sub(@) {
+      shift;
+      psmisc::trace(@_);
+    },
     'driver'   => 'mysql5',
     'host'     => ( $^O eq 'cygwin' ? '127.0.0.1' : 'localhost' ),
     'database' => 'pssqldef',
@@ -435,9 +453,10 @@ sub init {
       'PrintError'  => 0,
       'PrintWarn'   => 0,
       'HandleError' => sub {
-        $self->log( 'dev', 'HandleError', @_, $DBI::err, $DBI::errstr );
-        #$self->{'err'} = "$DBI::err, $DBI::errstr";
-        #psmisc::caller_trace(15)
+        $self->trace( 'dev', 'HandleError', @_, $DBI::err, $DBI::errstr );
+        $self->err(join ', ', grep {$_} $DBI::err, $DBI::errstr);
+        push @{$self->{error_log}||=[]},$self->err() if $self->{'error_collect'};
+	#psmisc::caller_trace(15)
       },
     },
     #'connect_check' => 1, #check connection on every keep()
@@ -489,7 +508,7 @@ sub init {
 sub calc {
   my $self = shift;
   $self->{'default'} ||= \%default;
-  $self->{'default'}{'pgpp'}{'match'} = sub {
+  $self->{'default'}{'pg'}{'match'} = sub {
     my $self = shift;
     return undef unless $self->{'use_fulltext'};
     my ( $param, $param_num, $table, $search_str, $search_str_stem ) = @_;
@@ -524,10 +543,10 @@ sub calc {
   $self->{'default'}{'mysql3'}{'no_boolean'}    = 1;
   #%{ $self->{'default'}{'sqlite2'} } = %{ $self->{'default'}{'sqlite'} };
   #$self->{'default'}{'sqlite2'}{'IF NOT EXISTS'} = $self->{'default'}{'sqlite2'}{'IF EXISTS'} = '';
-  $self->{'default'}{'pgpp'}{'fulltext_config'} = 'default' if $self->{'old_fulltext'};
-  %{ $self->{'default'}{'pg'} } = %{ $self->{'default'}{'pgpp'} };
-  $self->{'default'}{'pg'}{'dbi'}    = 'Pg';
-  $self->{'default'}{'pg'}{'params'} = [qw(host port options tty dbname user password)];
+  $self->{'default'}{'pg'}{'fulltext_config'} = 'default' if $self->{'old_fulltext'};
+  %{ $self->{'default'}{'pgpp'} } = %{ $self->{'default'}{'pg'} };
+  $self->{'default'}{'pgpp'}{'dbi'}    = 'PgPP';
+  $self->{'default'}{'pgpp'}{'params'} = [qw(dbname host port path debug)];
   %{ $self->{'default'}{'mysqlpp'} } = %{ $self->{'default'}{'mysql5'} };
   $self->{'default'}{'mysqlpp'}{'dbi'}  = 'mysqlPP';
   $self->{'default'}{'sphinx'}{'match'} = $self->{'default'}{'mysql5'}{'match'};
@@ -546,6 +565,7 @@ sub calc {
   $self->{'cp_set_names'} ||= $_;
   #$self->{'cp_int'} ||= 'cp1251';    # internal
   $self->{'cp_int'} ||= 'utf-8';    # internal
+  $self->{'cp_out'} ||= 'utf-8';    # internal
   $self->cp_client( $self->{'codepage'} );
 }
 
@@ -719,8 +739,8 @@ sub functions {
     return {} if !$self->{'sth'} or $self->{'sth'}->err;
     my $tim = psmisc::timer();
     #$self->log('dev', "line fetch");
-    local $_ =
-      scalar( psmisc::cp_trans_hash( $self->{'codepage'}, $self->{'cp_out'}, ( $self->{'sth'}->fetchrow_hashref() || {} ) ) );
+    local $_ = $self->{'sth'}->fetchrow_hashref() || {};
+    $_ = scalar( psmisc::cp_trans_hash( $self->{'codepage'}, $self->{'cp_out'}, $_ ) ) if $self->{'codepage'} ne $self->{'cp_out'};
     $self->{'queries_time'} += $tim->();
     $self->log(
       'dmp', 'line(' . $self->{database} . '):[', @_, '] = ', scalar keys %$_, ' per', psmisc::human( 'time_period', $tim->() ),
@@ -744,9 +764,14 @@ sub functions {
       next unless $self->{'sth'} and keys %$_;
       my $tim = psmisc::timer();
       #$self->log("Db[",%$_,"]($self->{'codepage'}, $self->{'cp_out'})"),
-      push( @hash, scalar psmisc::cp_trans_hash( $self->{'codepage'}, $self->{'cp_out'}, $_ ) ),
+      while ( $_ = $self->{'sth'}->fetchrow_hashref() ) {
+        if ($self->{'codepage'} ne $self->{'cp_out'}) {
+          push @hash, scalar psmisc::cp_trans_hash( $self->{'codepage'}, $self->{'cp_out'}, $_ );
+        } else {
+          push @hash, $_;
+        }
+      }
         #$self->log("Da[",%$_,"]"),
-        while ( $_ = $self->{'sth'}->fetchrow_hashref() );
       $self->{'queries_time'} += $tim->();
     }
     $self->log(
@@ -760,7 +785,7 @@ sub functions {
     #$self->query_print($_) for @hash;
     #$self->log('qcp', $self->{'codepage'}, Dumper \@hash);
     if ( $self->{'codepage'} eq 'utf-8' ) {
-      for (@hash) { utf8::decode $_ for %$_; }
+      for (@hash) { utf8::decode $_ for grep {!ref} %$_; }
     }
     return wantarray ? @hash : \@hash;
   };
@@ -918,7 +943,7 @@ tries
     my $ret;
     local $_;
     local @_ = ( $self->{'database'} ) unless @_;
-    $self->drh_init() if ( $self->{'use_drh'} );
+    $self->drh_init() if $self->{'use_drh'};
     for my $db (@_) {
       if ( $self->{'use_drh'} ) {
         $ret += $_ = $self->{'drh'}->func( 'createdb', $db, $self->{'host'}, $self->{'user'}, $self->{'pass'}, 'admin' );
@@ -926,6 +951,7 @@ tries
         {
           my $db = $self->{'dbname'};
           local $self->{'dbname'}     = 'postgres';
+	  local $self->{'database'}   = undef;
           local $self->{'in_connect'} = undef;
           $self->do("CREATE DATABASE $rq$db$rq WITH ENCODING $vq$self->{'cp'}$vq");
         }
@@ -1067,11 +1093,12 @@ tries
           }
           push @maxs, $table->{$row}{'length_max'} if $table->{$row}{'length_max'};
           push @maxs, $self->{'varchar_max'} if $table->{$row}{'type'} =~ /^varchar$/i;
-          push @maxs, 1000 / 3
+         #push @maxs, 1000 / 3
+         push @maxs, $self->{'key_length'} / 3
             if $table->{$row}{'type'} =~ /^varchar$/i
               and $table->{$row}{'primary'}
               and $self->{'codepage'} eq 'utf-8';
-          #$self->log( 'dev', 'maxs:', @maxs , Dumper $table->{$row});
+          #$self->log( 'dev', $row, "key=$self->{'key_length'}", 'maxs:', @maxs , Dumper $table->{$row});
           #print "mx:",@maxs;
           $length = psmisc::min( grep { $_ > 0 } @maxs );
           #$table->{$row}{'length'} ||= $length if $table->{$row}{'type'} eq 'varchar';
@@ -1102,8 +1129,8 @@ tries
       #$self->log('dev', "$row NN= $table->{$row}{'not null'}");
       push(
         @subq,
-        $rq 
-          . $row 
+        $rq
+          . $row
           . $rq
           . " $table->{$row}{'type'} "
           #. ( $table->{$row}{'length'} ? "($table->{$row}{'length'}) " : '' )
@@ -1144,13 +1171,13 @@ tries
     for my $row ( sort { $table->{$b}{'order'} <=> $table->{$a}{'order'} } keys %$table ) {
       push(
         @subq,
-        "INDEX " 
-          . $rq 
-          . $row 
-          . $self->{'index_postfix'} 
-          . $rq . " (" 
-          . $rq 
-          . $row 
+        "INDEX "
+          . $rq
+          . $row
+          . $self->{'index_postfix'}
+          . $rq . " ("
+          . $rq
+          . $row
           . $rq
           . (
           ( $table->{$row}{'index'} > 1 and $table->{$row}{'index'} < $table->{$row}{'length'} )
@@ -1344,7 +1371,7 @@ tries
                   ),
                   ')'
                   )
-                } @{ $self->{'insert_buffer'}{$table} }
+              } @{ $self->{'insert_buffer'}{$table} }
             ), (
               !$self->{'ON DUPLICATE KEY UPDATE'} ? '' : " \n" . $self->{'ON DUPLICATE KEY UPDATE'} . ' ' . join(
                 ',',
@@ -1458,7 +1485,7 @@ tries
             and ( $self->{'table'}{$table}{$_}{'primary'} or $self->{'table'}{$table}{$_}{'unique'} )
             and $self->{'table'}{$table}{$_}{'type'} ne 'serial'
             and !$self->{'table'}{$table}{$_}{'auto_increment'}    #todo mysql
-          } @$by )
+        } @$by )
     );
     $set ||= join(
       ', ', (
@@ -1473,7 +1500,7 @@ tries
             keys %$values ), (
             @_ ? () : grep {
               $_ and %{ $self->{'table'}{$table}{$_} or {} } and defined( $values->{$_} )
-              } keys %$values
+            } keys %$values
           )
           )
       )
@@ -1946,7 +1973,7 @@ tries
 #
 #);
     return
-        $ask 
+        $ask
       . ( $ask and $close ? ' ) ' x $close : '' )
       . $self->where_body( $param, $param_num + ( defined($param_num) ? 1 : ( $param->{'search_prev'} ? 0 : 1 ) ),
       $table, ( $ask ? 1 : 0 ) );
@@ -2384,7 +2411,7 @@ next if scalar @$ret < $_->{'n'};
             . $rq
             . $_
             . $rq
-          } @_
+        } @_
         )
         . ')'
         if @_;
@@ -2415,7 +2442,7 @@ next if scalar @$ret < $_->{'n'};
 #push @join, "$tq$self->{'table_prefix'}$table$tq LEFT JOIN " .$tq. $self->{'table_prefix'} . $jt . $tq.' USING ' . '(' . join( ', ', map { $rq . $_ . $rq } @_ ) . ')'
 #$self->log('dev', "JO1 $table -> $jt,@_ [".join(':',@_)."]::", keys %{ $self->{'table_join'}{$table}{$jt}{'on'} });
         push @join,
-            " LEFT JOIN " 
+            " LEFT JOIN "
           . $tq
           . $self->{'table_prefix'}
           . $jt
@@ -2489,9 +2516,9 @@ next if scalar @$ret < $_->{'n'};
           my ($intable) = grep { keys %{ $self->{'table'}{$_}{$join} } } $table, keys %{ $config{'sql'}{'table_join'}{$table} };
           #print "INTABLE[$intable]";
           #$order{ $tq . $table . $tq . '.' . $rq . $_ . $rq
-          $order{ ( $self->{'no_column_prepend_table'} ? '' : $tq . $intable . $tq . '.' ) 
-              . $rq 
-              . $join 
+          $order{ ( $self->{'no_column_prepend_table'} ? '' : $tq . $intable . $tq . '.' )
+              . $rq
+              . $join
               . $rq
               . ( ( $param->{ $by . '_mode' . $ordern } ) ? ' DESC ' : ' ASC' ) }
             =    #$param->{ 'order_rev' . $ordern } eq 'on' or
@@ -2687,11 +2714,14 @@ next if scalar @$ret < $_->{'n'};
   $self->{'next_user_prepare'} ||= sub {
     my $self = shift;
     #$self->{'queries'} = $self->{''} = $self->{''} = $self->{''} = $self->{''} = 0;
-    $self->{$_} = 0 for qw(founded queries queries_time errors_chain errors connect_tried);
+    #delete $self->{error_log} if $self->{'error_collect'};
+
+    delete $self->{$_} for qw(founded queries queries_time errors_chain errors connect_tried error_log);
     $self->{'stat'}{'found'} = {};
     $self->{ 'on_user' . $_ }->($self) for grep { ref $self->{ 'on_user' . $_ } eq 'CODE' } ( '', 1 .. 5 );
     #$self->{ 'on_user' }->($self) for grep { ref $self->{ 'on_user' } eq 'CODE'}('');
     #$self->log('dev', 'nup');
+
   };
   $self->{'next_user'} ||= sub {
     my $self = shift;
@@ -2814,7 +2844,7 @@ http://linguist.nm.ru/stemka/stemka.html
     $self->log( 'dev', map { "$_ = $self->{$_}; " } qw(codepage cp cp_in cp_out cp_int cp_set_names) );
   };
   $self->{'cp_client'} ||= sub {
-    shift;
+    my $self = shift;
     $self->{'cp_in'} = $_[0] if $_[0];
     $self->{'cp_out'} = $_[1] || $self->{'cp_in'} if $_[1] or $_[0];
     return ( $self->{'cp_in'}, $self->{'cp_out'} );

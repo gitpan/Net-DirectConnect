@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: flood.pl 966 2012-05-25 18:29:30Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/flood.pl $
+#$Id: flood.pl 990 2012-12-28 20:35:04Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/flood.pl $
 
 =copyright
 
@@ -16,7 +16,6 @@ run flood.pl dchub://1.4.5.6:4111
 
 
 =cut
-
 use strict;
 eval { use Time::HiRes qw(time sleep); };
 use Socket;

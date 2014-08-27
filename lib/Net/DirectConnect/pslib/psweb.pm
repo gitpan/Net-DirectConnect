@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: psweb.pm 4797 2012-05-20 19:06:33Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
+#$Id: psweb.pm 4843 2013-08-14 12:17:58Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
 
 =copyright
 PRO-search web shared library
@@ -23,7 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package    #no cpan
   psweb;
 use strict;
-our $VERSION = ( split( ' ', '$Revision: 4797 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4843 $' ) )[1];
 #use locale;
 use Encode;
 use utf8;
@@ -60,6 +60,7 @@ require Exporter;
 use Socket;
 #use Time::HiRes qw(time);
 no warnings qw(uninitialized);
+no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 our ( %config, %work, %stat, %static, $param, );
 #*config=\%::config;
 #*psweb::stat = *main::stat;
@@ -179,7 +180,7 @@ sub config_init {
     sub {
       #warn Dumper __FILE__, __LINE__, $param;
       $config{'internet_bots'} //=
-        join( '|', qw(bot crawler spider worm ping heritrix perl  yandex rambler NG/ Yahoo mail\.ru facebook) )
+        join( '|', qw(bot crawler spider checker worm ping heritrix perl  yandex rambler NG/ Yahoo mail\.ru facebook) )
         ;    #Gigabot googlebot msnbot Gokubot
       $config{'client_bot'} //= 1
         if ( $ENV{'HTTP_USER_AGENT'} =~ /$config{'internet_bots'}/i )
@@ -544,7 +545,7 @@ setup_event(obj[i], 'change', function(e){var el=gid('page');if(el.value>1)el.va
         print $config{'sel_sep_head'}, lang('in found'), ' <input type="checkbox" id="search_prev" name="search_prev" ',
           ( $config{'client_ie'} ? 'onclick' : 'onchange' ), '="',    # IE SUKA MUST DIE
           'toggleview(\'tr_hidden_prev\');',
-          map( 'if (checked &amp;&amp; gid(\'' 
+          map( 'if (checked &amp;&amp; gid(\''
             . $_
             . '\').value== \''
             . destroy_quotes( $param->{$_} )
@@ -556,7 +557,7 @@ setup_event(obj[i], 'change', function(e){var el=gid('page');if(el.value>1)el.va
           map( 'if (!checked &amp;&amp; (gid(\''
             . $_
             #map( 'if (!checked && (gid(\'' . $_
-            . '\').value== \'\' || gid(\'' 
+            . '\').value== \'\' || gid(\''
             . $_
             . '\').className==\'input-help\')) gid(\''
             . $_
@@ -752,7 +753,7 @@ qq{" onclick="var w = this.offsetWidth;hide_id(this);show_id('$_$work{'paramnum'
           print $config{'sel_sep'}, '<select id="distinct" name="distinct" dir="ltr" ><option value="">', lang('distinct'),
             '</option>',
             map( {
-                  '<option value="' 
+                  '<option value="'
                 . $_ . '" '
                 . ( $param->{'distinct'} eq $_ ? 'selected="selected"' : '' ) . '>'
                 . lang($_)
@@ -1609,8 +1610,7 @@ qq{" onclick="var w = this.offsetWidth;hide_id(this);show_id('$_$work{'paramnum'
       $config{'out'}{'json'}{'http-header'} = "Content-type: application/json\n\n";
       $config{'out'}{'json'}{'footer'} ||= sub {
         my ( $param, ) = @_;
-        my $json = $param->{__result} || {};
-        return print ${ psmisc::json_encode($json) };
+        return print +($param->{'callback'} ? $param->{'callback'} . '(':'') ,${ psmisc::json_encode($param->{__result} || {}) }, ($param->{'callback'} ? ');' : '');
       };
       $config{'out'}{'json'}{'result_string'} ||= sub {
         my ( $param, $table, $row ) = @_;
@@ -1872,7 +1872,7 @@ sub part {
 #onpage limit -> size
 #dbirows -> actual
 #maxpage -> last
-sub gotopage {    # $Id: psweb.pm 4797 2012-05-20 19:06:33Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
+sub gotopage {    # $Id: psweb.pm 4843 2013-08-14 12:17:58Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psweb.pm $
   my ($fparam) = @_;    #$param,
   my (%ret);
   #$fparam->{'total'} : total results, usually COUNT(*) as total

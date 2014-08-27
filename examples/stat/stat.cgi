@@ -1,8 +1,9 @@
 #!/usr/bin/perl
-#$Id: stat.cgi 965 2012-05-20 19:12:55Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.cgi $
+#$Id: stat.cgi 998 2013-08-14 12:21:20Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/stat/stat.cgi $
 package statcgi;
 use strict;
 use utf8;
+no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 use MIME::Base64;
 use Time::HiRes qw(time sleep);
 use Data::Dumper;    #dev only
@@ -70,7 +71,9 @@ $config{'out'}{'json'}{'footer'} = sub {
   #if ( psmisc::use_try 'JSON::XS' ) { return print JSON::XS->new->encode($json) }
   #print 'string',Dumper $json;
   #print 'stringTR',$json;
-  print ${ psmisc::json_encode($json) };
+  #print ${ psmisc::json_encode($json) };
+  print +($param->{'callback'} ? $param->{'callback'} . '(':'') ,${ psmisc::json_encode($json || {}) }, ($param->{'callback'} ? ');' : '');
+
   #print ${psmisc::json_encode($json)};
 };
 $config{'out'}{'json'}{'table-row'} ||= sub {
@@ -110,7 +113,7 @@ $config{'human'}{'magnet-dl'} = sub {
   return
       ' <a class="magnet-darr" href="magnet:?' 
     . $_
-    . '">[↓]</a> <a href="http://dc.proisk.ru/?'
+    . '">[↓]</a> <a href="http://dc.proisk.com/?'
     . ( $row->{'string'} ? "q=" . $row->{'string'} : "tiger=$row->{'tth'}" )
     . '">P</a>'
     if $_;
@@ -145,7 +148,13 @@ qq{<html xmlns="http://www.w3.org/1999/xhtml" xmlns:svg="http://www.w3.org/2000/
 <link rel="alternate" type="application/rss+xml" title="RSS version" href="}, psmisc::html_chars( $rss_link . '&view=rss' ),
     qq{"/>
 
-<style></style></head><body><script type="text/javascript" src="pslib/lib.js"></script>};
+<style></style></head><body><script><![CDATA[
+function gid(a) {
+  if (a && typeof a == 'object') return a;
+  return document.getElementById(a) || {};
+}
+]]></script>};
+qq{<script type="text/javascript" src="pslib/lib.js"></script>};
 #print '    <svg:svg version="1.1" baseProfile="full" width="300px" height="200px">      <svg:circle cx="150px" cy="100px" r="50px" fill="#ff0000" stroke="#000000" stroke-width="5px"/>    </svg:svg>';
 };
 part 'head';
@@ -331,17 +340,17 @@ for my $query (@queries) {
       psmisc::html_chars( \$unique );
       $row->{'guid'} ||= $unique;
       #print "UNIQ[$unique]";#, join',',%$row;
-      $row->{'description'} ||= '<![CDATA['
-        . (
-        join ' ', map { $row->{ $_ . '_rss' } || $row->{ $_ . '_html' } || $row->{$_} } grep { $_ ne $title } @{ $q->{'show'} }
-        ) . ']]>';
+      $row->{'description'} ||= 
+         (
+        join ' ', map { $row->{ $_ . '_rss' } || $row->{ $_ . '_html' } || $row->{$_} } grep { $_ ne $title  and !$param->{'no_'.$_}} @{ $q->{'show'} }
+        ) ;
       #$row->{'description'} ||= 'desc';
       #warn "time[$row->{'time'}]";
       $row->{'pubDate'} ||= psmisc::human( 'rfc822_date_time', $row->{'time'} );
       #$row->{'link'} ||= get_param_url_str( $param, ['view'] ), '#n', ( ++$work{'rssn'} );
-      $row->{'link'} ||= "?$key=" . psmisc::encode_url($unique);
+      $row->{'link'} ||= 'http://'.$ENV{SERVER_NAME}."/?$key=" . psmisc::encode_url($unique);
       $row->{'author'} ||= $row->{'nick'} || 'dcstat';
-      print '<', $_, '>', $row->{$_}, '</', $_, ">\n"
+      print '<', $_, '>', '<![CDATA[' , $row->{$_}, ']]>', '</', $_, ">\n"
         for grep { $row->{$_} } qw(title description author category comments guid pubDate link);
       #'<pubDate>', , '</pubDate>',
       #"<guid></guid>"
@@ -382,7 +391,7 @@ $config{'out'}{'html'}{'graph'} = sub {
     {
       #for my $row ( $db->query("SELECT * FROM $table  " ) ) {
       #psmisc::printlog 'dev', Dumper $row;
-      next if $row->{tth} eq 'LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ';
+      next if $row->{tth} ~~ [qw(LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)];
       my $by = $makegraph{$query}{ $row->{tth} } || $makegraph{$query}{ $row->{string} };
 #print " $row->{date}, $row->{n}, $row->{cnt} <br/>" if $makegraph{$query}{$row->{tth}} eq 'tth' or $makegraph{$query}{$row->{string}} eq 'string';
 #$row->{date} .= '-'. (localtime $row->{time})[2];
@@ -461,7 +470,7 @@ $config{'out'}{'html'}{'graph'} = sub {
         #       }
         #      ).
       }
-      $img .= qq{" />};
+      $img .= qq{" />}; #"mcedit
       #++$color;
     }
     my $n;
@@ -482,7 +491,7 @@ $config{'out'}{'html'}{'graph'} = sub {
 #print  qq{<script type="text/javascript" language="JavaScript"><![CDATA[},qq{gid('$query').src='data:image/svg+xml;}, psmisc::encode_url($img),
 #print  qq{<script type="text/javascript" language="JavaScript"><![CDATA[},qq{gid('$query').src='data:image/svg;}, psmisc::encode_url($img),
 #print qq{<script type="text/javascript" language="JavaScript"><![CDATA[},qq{gid('$query').innerHTML='}, $img,
-        qq{"/>},
+        qq{"/>}, #"mcedit
       )
       ),
       qq{';}, qq{]]></script>};
@@ -501,10 +510,12 @@ $config{'out'}{'html'}{'footer'} = sub {
     '<div>graph per ', psmisc::human( 'time_period', time - $graphtime ), '</div>' if $config{'use_graph'} and %makegraph;
   print
 qq{<div class="version"><a href="http://svn.setun.net/dcppp/trac.cgi/browser/trunk/examples/stat">dcstat</a> from <a href="http://search.cpan.org/dist/Net-DirectConnect/">Net::DirectConnect</a> vr}
-    . ( split( ' ', '$Revision: 965 $' ) )[1]
+    . ( split( ' ', '$Revision: 998 $' ) )[1]
     . qq{</div>};
-  print '<script type="text/javascript" src="http://iekill.proisk.ru/iekill.js"></script>';
+  print '<script type="text/javascript" src="http://iekill.proisk.net/iekill.js"></script>';
   part 'footer_aft';
+
+
   print '</body></html>';
 };
 part 'footer_bef';
@@ -512,3 +523,5 @@ part 'footer';
 #print "<pre>";
 #print Dumper $param;
 #print Dumper \%ENV;
+#print Dumper \%config;
+

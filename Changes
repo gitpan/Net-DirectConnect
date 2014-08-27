@@ -1,4 +1,9 @@
-# $Id: Changes 937 2011-11-10 09:14:16Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/Changes $
+# $Id: Changes 989 2012-12-28 20:32:32Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/Changes $
+0.14:
+adcs hub works
+
+0.13:
+
 0.12: 
 small speed fixes
 

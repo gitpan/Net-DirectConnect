@@ -1,4 +1,4 @@
-#$Id: http.pm 965 2012-05-20 19:12:55Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/http.pm $
+#$Id: http.pm 998 2013-08-14 12:21:20Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/lib/Net/DirectConnect/http.pm $
 package    #hide from cpan
   Net::DirectConnect::http;
 use Data::Dumper;    #dev only
@@ -8,7 +8,8 @@ use Net::DirectConnect;
 #use Net::DirectConnect::hubcli;
 use strict;
 no warnings qw(uninitialized);
-our $VERSION = ( split( ' ', '$Revision: 965 $' ) )[1];
+no if $] >= 5.017011, warnings => 'experimental::smartmatch';
+our $VERSION = ( split( ' ', '$Revision: 998 $' ) )[1];
 #our @ISA = ('Net::DirectConnect');
 use base 'Net::DirectConnect';
 
@@ -17,7 +18,6 @@ sub init {
   #$self->log( 'dev', 'httpcli init' );
   #%$self = (    %$self,
   local %_ = (
-    #
     #'incomingclass' => 'Net:DirectConnect::httpcli',
     'auto_connect' => 0,
     'auto_listen'  => 0,
@@ -25,6 +25,8 @@ sub init {
     #);  $self->{$_} = $_{$_} for keys %_;
     # local %_ = (
     #'myport'        => 80,
+    #'myport'        => 443,
+    #modules => [],
     #'myport_base'   => 8000,
     #'myport_random' => 99,
     #'myport_tries'  => 5,
@@ -36,12 +38,14 @@ sub init {
   );
   $self->{$_} //= $_{$_} for keys %_;
   local %_ = @_;
+  #warn "$_=$_{$_}";
   $self->{$_} = $_{$_} for keys %_;
   #$self->{$_} ||= $self->{'parent'}{$_} ||= {} for qw(peers peers_sid peers_cid want share_full share_tth);
-  $self->{$_} ||= $self->{'parent'}{$_} for qw(http_download http_control);    #allow
-                                                                               #$self->baseinit();
-                                                                               #$self->{'parse'} ||= $self->{'parent'}{'parse'};
-                                                                               #$self->{'cmd'}   ||= $self->{'parent'}{'cmd'};
+  $self->{$_} ||= $self->{'parent'}{$_} for qw(http_download http_control http_allow);    #allow
+                                                                                          #$self->baseinit();
+        #$self->{'parse'} ||= $self->{'parent'}{'parse'};
+        #$self->{'cmd'}   ||= $self->{'parent'}{'cmd'};
+  $self->{'allow'} = $self->{http_allow} if defined $self->{http_allow};
   $self->{'handler_int'}{'unknown'} ||= sub {
     my $self = shift if ref $_[0];
     #$self->log( 'dev', "unknown1", Dumper \@_ );
@@ -76,7 +80,7 @@ sub init {
               . (
               !$self->{clients}{$_}{'filebytes'} ? () : ":$self->{clients}{$_}{'filebytes'}/$self->{clients}{$_}{'filetotal'}" )
               . ")"
-            } sort keys %{ $self->{clients} }
+          } sort keys %{ $self->{clients} }
           )
           . "<hr/>peers:<br/>"
           . (

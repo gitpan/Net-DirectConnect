@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: pinger.pl 966 2012-05-25 18:29:30Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/pinger.pl $
+#$Id: pinger.pl 990 2012-12-28 20:35:04Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/pinger.pl $
 
 =head1 NAME
 
@@ -17,7 +17,6 @@ get info about hubs
  $config{dc}{host} = 'myhub.net';
 
 =cut
-
 use 5.10.0;
 use strict;
 use Data::Dumper;

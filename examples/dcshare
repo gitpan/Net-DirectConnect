@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: dcshare 935 2011-11-07 20:38:10Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcshare $
+#$Id: dcshare 990 2012-12-28 20:35:04Z pro $ $URL: svn://svn.setun.net/dcppp/trunk/examples/dcshare $
 
 =head1 NAME
 
@@ -62,8 +62,12 @@ edit config.pl
 perl dcshare
 
 =cut
+
 use 5.10.0;
 use strict;
+no strict qw(refs);
+use warnings "NONFATAL" => "all";
+no warnings qw(uninitialized);
 use Data::Dumper;
 $Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = 1;
 use Time::HiRes qw(time sleep);
@@ -113,7 +117,7 @@ my @dc;
   } (
   grep {
     $_
-    } @hosts ? @hosts : psmisc::array( $config{dc}{host} ),
+  } @hosts ? @hosts : psmisc::array( $config{dc}{host} ),
   );
 while ( @_ = grep { $_ and $_->active() } @dc ) {
   $_->work() for @_;

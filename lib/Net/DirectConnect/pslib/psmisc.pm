@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#$Id: psmisc.pm 4798 2012-05-22 23:34:05Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+#$Id: psmisc.pm 4847 2014-06-30 23:41:45Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
 
 =copyright
 PRO-search shared library
@@ -29,6 +29,7 @@ package    #not ready for cpan
   psmisc;
 use strict;
 no warnings qw(uninitialized);
+no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 use utf8;
 #use open qw(:utf8 :std);
 #use encoding "utf8", STDOUT => "utf8", STDIN => "utf8", STDERR => "utf8";
@@ -39,7 +40,7 @@ use Time::HiRes qw(time);
 use Encode;
 use POSIX qw(strftime);
 use lib::abs;
-our $VERSION = ( split( ' ', '$Revision: 4798 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4847 $' ) )[1];
 our (%config);
 #my ( %config );
 #local *config = *main::config;
@@ -246,6 +247,7 @@ sub config_init {
         my $d = $_[1] || ':';
         return strftime "%H${d}%M${d}%S", localtime( $_[0] || time() );
       };
+      # strftime "%Y-%m-%dT%H:%M:%S", localtime( $_[0] || time() )
       $config{'human'}{'date_time'} ||=
         sub { return human( 'date', $_[0] || time(), $_[2] ) . ( $_[1] || '-' ) . human( 'time', $_[0] || time(), $_[3] ); };
       $config{'human'}{'float'} ||= sub {    #v1
@@ -267,14 +269,15 @@ sub config_init {
           . ' +0300';
       };
       $config{'human'}{'size'} ||= sub {
-        my ( $size, $sp, $kilo ) = @_;
-        $sp ||= ( $ENV{'SERVER_PORT'} ? ' ' : ' ' );
-        $kilo ||= $config{'kilo'} || 8;
-        return int( $size / 1099511627776 ) . $sp . 'TB' if ( $size >= $kilo * 1099511627776 );
-        return int( $size / 1073741824 ) . $sp . 'GB'    if ( $size >= $kilo * 1073741824 );
-        return int( $size / 1048576 ) . $sp . 'MB'       if ( $size >= $kilo * 1048576 );
-        return int( $size / 1024 ) . $sp . 'KB'          if ( $size >= $kilo * 1024 );
-        return human( 'float', $size ) . $sp . 'B' if ( $size > 0 );
+        my ( $size, $sp, $unit, $kilo ) = @_;
+        $sp   //= ( $ENV{'SERVER_PORT'} ? ' ' : ' ' );
+        $unit //= 'B';
+        $kilo //= $config{'kilo'} || 8;
+        return int( $size / 1099511627776 ) . $sp . 'T' . $unit if ( $size >= $kilo * 1099511627776 );
+        return int( $size / 1073741824 ) . $sp . 'G' . $unit    if ( $size >= $kilo * 1073741824 );
+        return int( $size / 1048576 ) . $sp . 'M' . $unit       if ( $size >= $kilo * 1048576 );
+        return int( $size / 1024 ) . $sp . 'K' . $unit          if ( $size >= $kilo * 1024 );
+        return human( 'float', $size ) . $sp . $unit if ( $size > 0 );
         return $size;
       };
       $config{'human'}{'number_k'} ||= sub {
@@ -366,15 +369,15 @@ sub use_try ($;@) {
   ( my $path = ( my $module = shift ) . '.pm' ) =~ s{::}{/}g;
   $INC{$path} or eval 'use ' . $module . ' qw(' . ( join ' ', @_ ) . ');1;' and $INC{$path};
 }
-sub is_array ($) { UNIVERSAL::isa( $_[0], 'ARRAY' ) }
-sub is_array_size ($) { is_array( $_[0] ) and @{ $_[0] } }
-sub is_hash ($) { UNIVERSAL::isa( $_[0], 'HASH' ) }
-sub is_hash_size ($) { is_hash( $_[0] ) and %{ $_[0] } }
-sub is_code ($) { UNIVERSAL::isa( $_[0], 'CODE' ) }
-sub code_run ($;@) { my $f = shift; return $f->(@_) if is_code $f }
+sub is_array ($)      { UNIVERSAL::isa( $_[0], 'ARRAY' ) }
+sub is_array_size ($) { UNIVERSAL::isa( $_[0], 'ARRAY' ) and @{ $_[0] } }
+sub is_hash ($)       { UNIVERSAL::isa( $_[0], 'HASH' ) }
+sub is_hash_size ($)  { UNIVERSAL::isa( $_[0], 'HASH' ) and %{ $_[0] } }
+sub is_code ($)       { UNIVERSAL::isa( $_[0], 'CODE' ) }
+sub code_run ($;@) { my $f = shift; return $f->(@_) if UNIVERSAL::isa( $f, 'CODE' ) }
 
 sub array (@) {
-  local @_ = map { is_array $_ ? @$_ : $_ } (@_ == 1 and !defined$_[0]) ? () : @_;
+  local @_ = map { is_array $_ ? @$_ : $_ } ( @_ == 1 and !defined $_[0] ) ? () : @_;
   #local@_ = map { ref $_ eq 'ARRAY' ? @$_ : $_ } (@_ == 1 and !defined$_[0]) ? () : @_;
   wantarray ? @_ : \@_;
 }
@@ -463,9 +466,11 @@ sub decode_url($;$) {    #v1
 }
 
 sub file_rewrite(;$@) {
-  unlink $_[0] if $_[0];    #|| return;
-  return &file_append, file_append();
+    local $_ = shift;
+    return unless open my $fh, '>', $_;
+    print $fh @_;
 }
+
 #all def fac =
 #u   u   u  0
 #u   1   u  1
@@ -620,14 +625,25 @@ sub startme(;$@) {
 our $indent = 1;
 our $join   = ', ';
 our $prefix = 'dmp';    # 'dmp '
+our $caller_shift = 0;
 
 sub dmp (@) {
-  printlog $prefix, ( caller(1) )[3], ':', ( caller(0) )[2], ' ', (
-    join $join, (
-      map { ref $_ ? Data::Dumper->new( [$_] )->Indent($indent)->Pair( $indent ? ' => ' : '=>' )->Terse(1)->Sortkeys(1)->Dump() : "'$_'" } @_
-    )
-    );
+  my $fname = (caller(1 + $caller_shift))[3];
+  $fname = (caller(0 + $caller_shift))[0] if $fname eq '(eval)';
+  printlog $prefix, $fname, ':', ( caller(0 + $caller_shift) )[2], ' ',
+    join $join, 
+      map { ref $_ ? Data::Dumper->new( [$_] )->Indent($indent)->Pair( $indent ? ' => ' : '=>' )->Terse(1)->Sortkeys(1)->Dump() : "'$_'" } @_ ? @_ : $_;
   wantarray ? @_ : $_[0];
+}
+
+# trace; # trace 5 calls
+# trace 10; # trace 10 calls
+# trace 'bzzzz', [42]; # trace 5 and dumpit
+sub trace (;@) {
+    local $caller_shift = 1;
+    for (1..($_[0] =~ /^\d+$/ ? shift : 10)) {
+        dmp $_, ((caller $_ + 1 )[3]||(caller $_ )[0]) . ':' . ((caller $_ )[2] || last), ($_ > 1 ? () : @_),;
+    }
 }
 
 sub state {
@@ -953,7 +969,7 @@ sub cp_trans_hash($$$) {
   my ( $from, $to, $hash ) = @_;
   #printlog('dev', 'cp_trans_hash:', $from, $to, Dumper $hash);
   return $hash if $from eq $to;
-  $hash->{$_} = cp_trans( $from, $to, $hash->{$_} ) for keys %$hash;
+  $hash->{$_} = cp_trans( $from, $to, $hash->{$_} ) for grep { !ref $hash->{$_} }keys %$hash;
   return wantarray ? %$hash : $hash;
 }
 
@@ -1191,9 +1207,9 @@ sub lib_init() {
     #printlog( 'die', 'caller', $_, caller($_) ) for ( 0 .. 15 );
     #caller_trace(15);
     }, $SIG{__DIE__} = sub {
-    printlog( 'die', $@, $!, @_ );
+    printlog( 'die', 'psm',$@, $!, @_ );
     #printlog( 'die', 'caller', $_, caller($_) || last ) for ( 0 .. 15 );
-    caller_trace(15);
+    trace(15);
     }
     if !$static{'no_sig_log'} and !$ENV{'SERVER_PORT'};    #die $!;
   unless ( $static{'port2prot'} ) {
@@ -1571,7 +1587,7 @@ schedule({wait=>10, every=>5}, our $___mysub ||= sub{});
 
 =cut
 
-sub schedule($$;@) {    #$Id: psmisc.pm 4798 2012-05-22 23:34:05Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+sub schedule($$;@) {    #$Id: psmisc.pm 4847 2014-06-30 23:41:45Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   our %schedule;
   my ( $every, $func ) = ( shift, shift );
   my $p;
@@ -1590,7 +1606,7 @@ sub schedule($$;@) {    #$Id: psmisc.pm 4798 2012-05-22 23:34:05Z pro $ $URL: sv
     and ( !( ref $p->{'cond'} eq 'CODE' ) or $p->{'cond'}->( $p, $schedule{ $p->{'id'} }, @_ ) )
     and ref $schedule{ $p->{'id'} }{'func'} eq 'CODE';
 }
-{    #$Id: psmisc.pm 4798 2012-05-22 23:34:05Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
+{    #$Id: psmisc.pm 4847 2014-06-30 23:41:45Z pro $ $URL: svn://svn.setun.net/search/trunk/lib/psmisc.pm $
   my (@locks);
   sub lockfile($) {
     return ( $config{'lock_dir'} || './' ) . ( length $_[0] ? $_[0] : 'lock' ) . ( $config{'lock_ext'} || '.lock' );
@@ -1785,7 +1801,7 @@ config_init();
 package    #hide from cpan
   psconn;
 use strict;
-our $VERSION = ( split( ' ', '$Revision: 4798 $' ) )[1];
+our $VERSION = ( split( ' ', '$Revision: 4847 $' ) )[1];
 #use psmisc;
 #sub connection {
 sub new {

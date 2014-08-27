@@ -1,9 +1,0 @@
-2012/03/08-20:48:11 err [1] cant use MIME::Base32
-2012/03/08-20:48:11 dcdbg [1] using encodings console:[koi8r] protocol:[utf8] fs:[koi8r]
-2012/03/08-20:48:11 info [1] listening 413  with IO::Socket::INET6
-2012/03/08-21:44:46 info [1] incoming [] to Net::DirectConnect::adc
-2012/03/08-21:44:47 err [2] cant use MIME::Base32
-2012/03/08-21:44:47 err [2] cant use MIME::Base32
-2012/03/08-21:44:47 err [2] cant use MIME::Base32
-2012/03/08-21:53:48 info [1] number=1 status=disconnected host=localhost clients: 1 ()2001:5c0:1517:9800:b92a:eb07:8bc8:e2b6:19793=
-2012/03/08-21:53:48 info [2] number=2 status=disconnected host=localhost port=19793 bytes_send=263 bytes_recv=287 clients: 1 ()2001:5c0:1517:9800:b92a:eb07:8bc8:e2b6:19793=
